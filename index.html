@@ -1,1 +1,212 @@
-<!DOCTYPE html><html lang="it"><meta charset="utf-8"><title>Il Ridotto</title><body style="background:#0b0705;color:#d6b062;font-family:Georgia,serif;text-align:center;padding-top:20vh"><h1>Il Ridotto</h1><p>Si stanno accendendo le candele. Torna tra poco.</p></body></html>
+<!DOCTYPE html>
+<html lang="it">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Il Ridotto</title>
+<link rel="icon" href="favicon.svg" type="image/svg+xml">
+<link rel="stylesheet" href="fonts.css">
+<style>
+/* Layout: scena 3D a tutto schermo; sopra, interfaccia di carta stampata e ottone */
+:root {
+  --paper: #efe3c6; --paper-dark: #d8c7a0; --ink: #2a1a10; --gold: #d6b062; --wine: #7c1d22; --night: #0b0705; --green: #3d6b3a;
+  --panel: rgba(18, 11, 7, .88); --line: rgba(214, 176, 98, .4);
+  --display: "IM Fell English SC", "Cormorant Garamond", Georgia, serif; --body: "Cormorant Garamond", Georgia, serif;
+  color-scheme: dark;
+}
+* { box-sizing: border-box; }
+html, body { margin: 0; height: 100%; background: var(--night); overflow: hidden; }
+body { font-family: var(--body); color: var(--paper); -webkit-font-smoothing: antialiased; font-variant-numeric: lining-nums; }
+canvas#gl { position: fixed; inset: 0; width: 100%; height: 100%; display: block; }
+button, input, select { font: inherit; color: inherit; }
+button { cursor: pointer; }
+:focus-visible { outline: 2px solid var(--gold); outline-offset: 3px; }
+[hidden] { display: none !important; }
+
+.hud { position: fixed; inset: 0; pointer-events: none; }
+.hud > * { pointer-events: auto; }
+.brand { position: absolute; left: 24px; top: 18px; pointer-events: none; max-width: 30vw; }
+.brand h1 { margin: 0; font: 400 32px/1 var(--display); color: var(--gold); letter-spacing: .06em; text-shadow: 0 2px 12px rgba(0,0,0,.8); }
+.brand p { margin: 6px 0 0; font: italic 600 16px var(--body); color: rgba(239,227,198,.8); text-shadow: 0 1px 6px #000; }
+.rules { display: flex; flex-wrap: wrap; gap: 5px; margin-top: 8px; }
+.rules span { font: 400 11px var(--display); letter-spacing: .1em; padding: 2px 8px; border: 1px solid var(--line); border-radius: 999px; background: rgba(0,0,0,.45); color: var(--gold); }
+.board { position: absolute; right: 20px; top: 16px; min-width: 210px; padding: 10px 14px; background: var(--panel); border: 1px solid var(--line); border-radius: 4px; pointer-events: none; }
+.board h4 { margin: 0 0 4px; font: 400 12px var(--display); letter-spacing: .16em; color: var(--gold); }
+.board .row { display: flex; justify-content: space-between; gap: 14px; font: 600 17px/1.5 var(--body); }
+.board .row b { color: var(--gold); font-weight: 700; font-variant-numeric: lining-nums tabular-nums; }
+.board .row.out { opacity: .45; text-decoration: line-through; }
+.board .row.turn span:first-child { color: var(--gold); }
+.board small { font: 400 10px var(--display); letter-spacing: .1em; color: var(--paper); border: 1px solid var(--line); border-radius: 3px; padding: 0 4px; margin-left: 6px; vertical-align: 2px; }
+.board small.bank { background: var(--gold); color: var(--ink); border-color: var(--gold); }
+.status { position: absolute; left: 50%; top: 20px; transform: translateX(-50%); max-width: min(560px, 38vw); text-align: center;
+  font: italic 600 22px/1.3 var(--body); color: var(--paper); text-shadow: 0 2px 10px #000, 0 0 24px rgba(0,0,0,.9); pointer-events: none; text-wrap: balance; }
+.bar { position: absolute; left: 50%; bottom: 20px; transform: translateX(-50%); display: flex; gap: 12px; align-items: end; flex-wrap: wrap; justify-content: center; width: max-content; max-width: calc(100vw - 32px); }
+.bar .who { flex-basis: 100%; text-align: center; font: italic 700 20px var(--body); text-shadow: 0 2px 8px #000; }
+.ticket { position: relative; min-width: 118px; padding: 11px 16px 9px; border: 0; text-align: center;
+  background: radial-gradient(ellipse at 50% 30%, #f6ecd2, var(--paper) 55%, var(--paper-dark)); color: var(--ink); border-radius: 4px;
+  box-shadow: 0 10px 24px rgba(0,0,0,.6), inset 0 0 0 1px rgba(42,26,16,.35), inset 0 0 0 5px var(--paper), inset 0 0 0 6px rgba(124,29,34,.55); transition: transform .15s ease; }
+.ticket:hover:not(:disabled) { transform: translateY(-4px) rotate(-1deg); }
+.ticket:disabled { opacity: .35; cursor: not-allowed; }
+.ticket .t { display: block; font: 400 21px/1 var(--display); letter-spacing: .04em; }
+.ticket .s { display: block; margin-top: 4px; font: italic 600 14px var(--body); color: #6b4a2c; }
+.ticket.hint { box-shadow: 0 0 0 3px var(--gold), 0 0 30px rgba(214,176,98,.7), 0 10px 24px rgba(0,0,0,.6), inset 0 0 0 5px var(--paper), inset 0 0 0 6px rgba(124,29,34,.55); }
+.ticket.main { background: radial-gradient(ellipse at 50% 30%, #e9c983, var(--gold) 60%, #a9843d); } .ticket.main .s { color: #4a3210; }
+.ticket.red { background: radial-gradient(ellipse at 50% 30%, #a8343a, var(--wine) 60%, #4d1014); color: var(--paper); } .ticket.red .s { color: #e7c2a0; }
+.ticket.small { min-width: 0; padding: 8px 12px 7px; } .ticket.small .t { font-size: 15px; } .ticket.small .s { font-size: 13px; margin-top: 2px; }
+.chipbtn { width: 58px; height: 58px; border-radius: 50%; border: 0; font: 700 16px var(--body); color: #fff;
+  background: conic-gradient(var(--c) 0 9%, #f4ead0 9% 14%, var(--c) 14% 34%, #f4ead0 34% 39%, var(--c) 39% 59%, #f4ead0 59% 64%, var(--c) 64% 84%, #f4ead0 84% 89%, var(--c) 89%);
+  box-shadow: 0 6px 0 rgba(0,0,0,.45), 0 10px 18px rgba(0,0,0,.5); position: relative; transition: transform .15s; }
+.chipbtn::before { content: ""; position: absolute; inset: 9px; border-radius: 50%; background: var(--c); border: 2px dashed rgba(244,234,208,.7); }
+.chipbtn span { position: relative; }
+.chipbtn:hover:not(:disabled) { transform: translateY(-5px); } .chipbtn:disabled { opacity: .3; cursor: not-allowed; }
+.betbox { min-width: 110px; text-align: center; padding: 4px 10px; pointer-events: none; }
+.betbox .k { font: 400 12px var(--display); letter-spacing: .14em; color: rgba(239,227,198,.75); }
+.betbox .v { font: 700 28px/1.1 var(--body); text-shadow: 0 2px 8px #000; }
+.extras { flex-basis: 100%; display: flex; gap: 8px; justify-content: center; flex-wrap: wrap; }
+.advice { position: absolute; left: 24px; bottom: 22px; width: min(310px, 26vw); padding: 12px 14px; border-radius: 4px; pointer-events: none; background: var(--panel); border: 1px solid var(--line); font: 500 17px/1.35 var(--body); }
+.advice .k { display: block; font: 400 12px var(--display); letter-spacing: .16em; color: var(--gold); margin-bottom: 4px; }
+.advice b { color: var(--gold); }
+.corner { position: absolute; right: 20px; bottom: 22px; display: grid; gap: 7px; justify-items: end; }
+.pill { background: rgba(20,12,8,.8); border: 1px solid var(--line); color: var(--paper); border-radius: 999px; padding: 5px 14px; font: 600 15px var(--body); }
+.pill[aria-pressed="true"], .pill.on { background: var(--gold); color: var(--ink); border-color: var(--gold); }
+.pill.red { background: var(--wine); border-color: #b9444a; }
+.tag { position: absolute; transform: translate(-50%, -50%); padding: 2px 10px 3px; border-radius: 3px; white-space: nowrap; pointer-events: none; background: var(--paper); color: var(--ink); font: 700 17px/1.2 var(--body); box-shadow: 0 4px 10px rgba(0,0,0,.6); }
+.tag.gold { background: var(--gold); } .tag.bust { background: var(--wine); color: var(--paper); } .tag.win { background: var(--green); color: #f2ecd8; }
+.tag.devil { background: #1a0606; color: #ff6a4a; box-shadow: 0 0 14px rgba(255,60,30,.8); }
+.tag small { font: 400 11px var(--display); letter-spacing: .08em; margin-left: 6px; opacity: .8; }
+.speech { position: absolute; transform: translate(-50%, -100%); padding: 6px 12px 7px; border-radius: 12px; pointer-events: none; white-space: nowrap; background: rgba(239,227,198,.96); color: var(--ink); font: italic 700 18px var(--body); box-shadow: 0 6px 16px rgba(0,0,0,.6); }
+.speech::after { content: ""; position: absolute; left: 50%; bottom: -7px; margin-left: -7px; border: 7px solid transparent; border-bottom: 0; border-top-color: rgba(239,227,198,.96); }
+.speech small { display: block; font: 400 11px var(--display); letter-spacing: .14em; color: #7c5a36; font-style: normal; }
+.speech.bad { background: rgba(124,29,34,.96); color: var(--paper); } .speech.bad::after { border-top-color: rgba(124,29,34,.96); } .speech.bad small { color: #e7c2a0; }
+.nameplate { position: absolute; transform: translate(-50%, -100%); pointer-events: none; text-align: center; white-space: nowrap; text-shadow: 0 2px 6px #000, 0 0 12px #000; }
+.nameplate .n { font: 400 16px var(--display); letter-spacing: .1em; } .nameplate .f { font: 700 15px var(--body); color: var(--gold); }
+.nameplate .b { display: inline-block; font: 400 10px var(--display); letter-spacing: .14em; background: var(--gold); color: var(--ink); padding: 0 6px; border-radius: 3px; text-shadow: none; }
+.nameplate.out { opacity: .5; }
+
+/* sala d'attesa */
+.lobby { position: fixed; inset: 0; display: grid; grid-template-columns: minmax(280px, 340px) 1fr minmax(320px, 400px); gap: 18px; padding: 18px; pointer-events: none; }
+.lobby > * { pointer-events: auto; }
+.pane { background: var(--panel); border: 1px solid var(--line); border-radius: 6px; padding: 16px 18px; overflow-y: auto; max-height: calc(100vh - 36px); display: grid; gap: 12px; align-content: start; }
+.pane h2 { margin: 0; font: 400 25px var(--display); color: var(--gold); letter-spacing: .05em; }
+.pane h3 { margin: 6px 0 0; font: 400 13px var(--display); letter-spacing: .16em; color: var(--gold); }
+.pane p { margin: 0; font: 500 16px/1.35 var(--body); color: rgba(239,227,198,.85); }
+.qr { background: var(--paper); padding: 10px; border-radius: 4px; justify-self: center; line-height: 0; }
+.qr svg { width: min(230px, 22vw); height: auto; display: block; }
+.code { text-align: center; font: 400 40px/1 var(--display); letter-spacing: .3em; color: var(--paper); padding-left: .3em; }
+.url { text-align: center; font: 600 14px var(--body); color: rgba(239,227,198,.7); overflow-wrap: anywhere; }
+.netstate { text-align: center; font: italic 600 15px var(--body); }
+.netstate.ok { color: #9fd49a; } .netstate.bad { color: #f0a090; }
+.mid { display: flex; flex-direction: column; justify-content: space-between; align-items: center; pointer-events: none; min-width: 0; }
+.mid h1 { margin: 6px 0 0; font: 400 56px/1 var(--display); color: var(--gold); letter-spacing: .08em; text-shadow: 0 4px 24px #000; text-align: center; }
+.mid h1 + p { margin: 6px 0 0; font: italic 600 20px var(--body); text-shadow: 0 2px 8px #000; text-align: center; }
+.mid .start { pointer-events: auto; display: grid; gap: 8px; justify-items: center; }
+.plist { display: grid; gap: 6px; }
+.prow { display: grid; grid-template-columns: 1fr auto auto; gap: 6px; align-items: center; padding: 5px 8px; border: 1px solid rgba(214,176,98,.2); border-radius: 4px; background: rgba(0,0,0,.25); }
+.prow input { background: transparent; border: 0; border-bottom: 1px dashed var(--line); font: 700 18px var(--body); width: 100%; min-width: 0; padding: 0; }
+.prow .nm { font: 700 18px var(--body); overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.prow .kind { font: 400 10px var(--display); letter-spacing: .12em; color: var(--gold); }
+.prow .off { color: #f0a090; }
+.mini { background: rgba(255,255,255,.07); border: 1px solid var(--line); border-radius: 4px; padding: 2px 9px; font: 600 14px var(--body); }
+.mini:hover { background: rgba(255,255,255,.15); }
+.seg { display: flex; flex-wrap: wrap; gap: 6px; }
+.seg button { flex: 1 1 auto; background: rgba(0,0,0,.3); border: 1px solid var(--line); border-radius: 4px; padding: 6px 10px; font: 700 16px var(--body); }
+.seg button[aria-pressed="true"] { background: var(--gold); color: var(--ink); border-color: var(--gold); }
+.opt { display: grid; grid-template-columns: auto 1fr; gap: 2px 10px; align-items: start; cursor: pointer; }
+.opt input { width: 18px; height: 18px; margin-top: 3px; accent-color: #d6b062; }
+.opt b { font: 700 17px var(--body); } .opt span { grid-column: 2; font: 500 14.5px/1.3 var(--body); color: rgba(239,227,198,.75); }
+.note { font: italic 500 14.5px/1.3 var(--body) !important; color: rgba(239,227,198,.7) !important; }
+
+.overlay { position: fixed; inset: 0; display: grid; place-items: center; background: radial-gradient(ellipse at 50% 40%, rgba(11,7,5,.35), rgba(11,7,5,.9)); }
+.sheet { background: var(--panel); border: 1px solid var(--line); border-radius: 6px; padding: 22px 28px; min-width: min(460px, 92vw); max-width: 92vw; max-height: 90vh; overflow-y: auto; display: grid; gap: 12px; text-align: center; }
+.sheet h2 { margin: 0; font: 400 40px var(--display); color: var(--gold); letter-spacing: .06em; }
+.sheet p { margin: 0; font: italic 600 19px var(--body); }
+.rank { display: grid; gap: 4px; text-align: left; }
+.rank .row { display: grid; grid-template-columns: 34px 1fr auto; gap: 10px; font: 700 20px var(--body); padding: 4px 8px; border-bottom: 1px solid rgba(214,176,98,.2); }
+.rank .row b { color: var(--gold); } .rank .row:first-child { font-size: 24px; color: var(--gold); }
+.sheet .row-btns { display: flex; gap: 10px; justify-content: center; flex-wrap: wrap; }
+.loader { position: fixed; inset: 0; display: grid; place-items: center; background: var(--night); z-index: 10; transition: opacity 1.2s ease; text-align: center; }
+.loader h2 { margin: 0; font: 400 46px var(--display); color: var(--gold); letter-spacing: .08em; } .loader p { font: italic 500 19px var(--body); color: rgba(239,227,198,.75); }
+.loader.gone { opacity: 0; pointer-events: none; }
+@media (max-width: 900px) { .lobby { grid-template-columns: 1fr; overflow-y: auto; pointer-events: auto; } .mid { order: -1; } .mid h1 { font-size: 36px; } .pane { max-height: none; } .advice, .brand p { display: none; } .board { min-width: 0; } }
+@media (prefers-reduced-motion: reduce) { .ticket, .chipbtn { transition: none; } }
+</style>
+<script type="importmap">{"imports":{"three":"./vendor/three.module.js","three/addons/":"./vendor/jsm/"}}</script>
+</head>
+<body>
+<canvas id="gl" aria-label="Tavolo da blackjack in 3D"></canvas>
+
+<div class="hud" id="hud" hidden>
+  <div class="brand"><h1>Il Ridotto</h1><p id="sub"></p><div class="rules" id="rulechips"></div></div>
+  <div class="status" id="status" aria-live="polite"></div>
+  <div class="board" id="board"></div>
+  <div id="labels"></div>
+  <div class="advice" id="advice" hidden><span class="k" id="adviceK">IL CONSIGLIO DEL DOTTORE</span><span id="adviceText"></span></div>
+  <div class="corner">
+    <button class="pill red" id="accuseBtn" hidden>Baro!</button>
+    <button class="pill" id="soundBtn" aria-pressed="true">Suoni: sì</button>
+    <button class="pill" id="speedBtn" aria-pressed="false">Velocità: normale</button>
+    <button class="pill" id="endBtn">Termina partita</button>
+  </div>
+  <div class="bar" id="bar"></div>
+</div>
+
+<div class="lobby" id="lobby" hidden>
+  <div class="pane">
+    <h2>Entra dal telefono</h2>
+    <p>Inquadra il codice con la fotocamera. Si apre una pagina: scrivi il nome e costruisci la tua maschera.</p>
+    <div class="qr" id="qr"></div>
+    <div class="code" id="code"></div>
+    <div class="url" id="url"></div>
+    <div class="netstate" id="netstate">Apro la sala…</div>
+    <h3>AL TAVOLO</h3>
+    <div class="plist" id="plist"></div>
+    <div class="seg">
+      <button class="mini" id="addLocal">+ Giocatore su questo schermo</button>
+      <button class="mini" id="addBot">+ Maschera del Ridotto</button>
+    </div>
+    <p class="note">Fino a 6 giocatori. Chi gioca su questo schermo usa i pulsanti in basso; le maschere del Ridotto giocano da sole.</p>
+    <p class="note">Non sai giocare? <a href="scuola.html" target="_blank" rel="noopener" style="color:var(--gold)">La scuola del Dottore</a>: regole, tabella della strategia perfetta e simulatore.</p>
+  </div>
+  <div class="mid">
+    <div><h1>Il Ridotto</h1><p>Blackjack mascherato · Venezia, 1758</p></div>
+    <div class="start">
+      <p class="note" id="startNote" style="text-shadow:0 2px 8px #000"></p>
+      <button class="ticket main" id="startBtn"><span class="t">Inizia la partita</span><span class="s" id="startSub">si accendono le candele</span></button>
+    </div>
+  </div>
+  <div class="pane">
+    <h2>Che serata facciamo?</h2>
+    <h3>FORMATO</h3>
+    <div class="seg" id="segFormat">
+      <button data-v="libera">Partita libera</button><button data-v="torneo">Torneo</button><button data-v="ultimo">Ultimo in piedi</button>
+    </div>
+    <p class="note" id="formatNote"></p>
+    <div id="torneoOpts" hidden style="display:grid; gap:8px">
+      <div class="seg" id="segHands"><button data-v="10">10 mani</button><button data-v="20">20 mani</button><button data-v="30">30 mani</button></div>
+      <label class="opt"><input type="checkbox" id="optElim"><b>Con eliminazioni</b><span>In tre momenti del torneo chi ha meno fiches esce.</span></label>
+    </div>
+    <h3>IL BANCO</h3>
+    <div class="seg" id="segBank"><button data-v="casa">Lo tiene la casa</button><button data-v="turno">A turno tra voi</button></div>
+    <p class="note" id="bankNote"></p>
+    <h3>REGOLE EXTRA</h3>
+    <label class="opt"><input type="checkbox" data-rule="baro"><b>Il baro</b><span>Un trucco ogni 10 mani: sbirci la carta del banco, cambi una carta o tiri fuori un asso dalla manica. Chi ti scopre grida "Baro!" e incassa la multa.</span></label>
+    <label class="opt"><input type="checkbox" data-rule="diavolo"><b>La carta del Diavolo</b><span>Ogni tanto esce dal sabot. A chi capita offre un patto: la mano vale il triplo, nel bene e nel male. Se capita al banco, la mano vale doppio per tutti.</span></label>
+    <label class="opt"><input type="checkbox" data-rule="segreta"><b>Puntata segreta</b><span>Una volta ogni 10 mani punti sotto la campana: nessuno vede quanto finché la mano non finisce.</span></label>
+    <label class="opt"><input type="checkbox" data-rule="freebet"><b>Free Bet</b><span>Raddoppi su 9, 10 e 11 e divisioni (tranne i 10) li paga il banco. In cambio, se il banco fa 22 è pari.</span></label>
+    <label class="opt"><input type="checkbox" data-rule="laterali"><b>Scommesse laterali</b><span>Coppia perfetta (fino a 30 a 1) e 21+3 (le tue due carte più quella del banco, come a poker).</span></label>
+    <label class="opt"><input type="checkbox" data-rule="gufata"><b>La gufata</b><span>Punti che un amico sballa. Se succede, incassi 3 a 1.</span></label>
+    <h3>AIUTI</h3>
+    <label class="opt"><input type="checkbox" id="optHints"><b>Consigli del Dottore</b><span>A ogni mossa mostra cosa farebbe il giocatore perfetto, anche sui telefoni.</span></label>
+  </div>
+</div>
+
+<div class="overlay" id="pick" hidden><div class="sheet" id="pickSheet"></div></div>
+<div class="overlay" id="end" hidden><div class="sheet" id="endSheet"></div></div>
+<div class="loader" id="loader"><div><h2>Il Ridotto</h2><p>Si accendono le candele…</p></div></div>
+
+<script src="vendor/qrcode.js"></script>
+<script src="vendor/peerjs.min.js"></script>
+<script src="engine.js"></script>
+<script type="module" src="table.js"></script>
+</body>
+</html>
