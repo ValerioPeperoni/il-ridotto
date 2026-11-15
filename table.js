@@ -625,7 +625,7 @@ function placeChar(p) {
   const cracks = S.phase !== 'lobby' && (CFG.game === 'dubito' ? !p.alive : CFG.format === 'ultimo' && p.lives === 1);
   const key = JSON.stringify(p.look) + cracks;
   if (!p.ch || p.chKey !== key) { if (p.ch) disposeCharacter(p.ch); p.ch = makeCharacter(p.look, { cracks }); p.chKey = key; scene.add(p.ch.group); }
-  const w = tablePt(2.62, p.a); p.ch.group.position.set(w.x, 0, w.z); p.ch.group.rotation.y = yawOf(p); p.ch.top = 0;
+  const w = tablePt(2.62, p.a); p.ch.group.position.set(w.x, 0, w.z); p.ch.group.rotation.order = 'YXZ'; p.ch.group.rotation.y = yawOf(p); p.ch.top = 0;
 }
 function layoutSeats() {
   const P = S.players, hs = humans();
@@ -660,6 +660,7 @@ function say(who, text, small = '', bad = false, ms = 1900) {
   if (key.speech) dropLabel(key.speech);
   const top = d ? 2.12 : charTop(who) + .36;
   const l = makeLabel('speech' + (bad ? ' bad' : ''), `${small ? `<small>${esc(small)}</small>` : ''}${esc(text)}`, () => ch.group.localToWorld(tmpV.set(0, top - (d ? .18 : 0), 0)));
+  if (!d) { S.speaker = who; S.spokeAt = performance.now(); for (const q of S.players) if (q.ch && q !== who) q.ch.gz = null; }
   key.speech = l; setTimeout(() => { if (key.speech === l) { dropLabel(l); key.speech = null; } }, ms * Math.max(SPEED, .5));
 }
 function setStatus(t) { S.status = t; $('#status').textContent = t; pushState(); }
@@ -852,6 +853,34 @@ function setDealerTag() {
   d.tag.el.innerHTML = (d.hole ? `${t === 11 ? 'A' : t}` : esc(totalText(d.cards, false))) + (S.roundMult > 1 ? '<small>MANO DOPPIA</small>' : '');
 }
 
+// ---------------------------------------------------------------- gesti e sguardi
+async function gesture(p, kind, target) {
+  const ch = p && p.ch; if (!ch || ch.busy) return; ch.busy = true;
+  const R = ch.arms[1], Lh = ch.arms[0], to = (arm, v, ms) => { const f = arm.hand.clone(); return tween(ms, e => arm.hand.lerpVectors(f, v, e)); };
+  if (kind === 'cheer') { await Promise.all([to(R, new THREE.Vector3(.4, 1.78, -.1), 320), to(Lh, new THREE.Vector3(-.4, 1.78, -.1), 320)]); await wait(750); await Promise.all([to(R, R.rest, 420), to(Lh, Lh.rest, 420)]); }
+  else if (kind === 'facepalm') { await to(R, new THREE.Vector3(.07, 1.44, -.22), 380); await wait(950); await to(R, R.rest, 450); }
+  else if (kind === 'think') { await to(R, new THREE.Vector3(.1, 1.28, -.2), 450); await wait(1000); await to(R, R.rest, 450); }
+  else if (kind === 'point' && target) { const v = ch.group.worldToLocal(target.clone()); v.y = 1.22; v.sub(R.shoulder).setLength(.6).add(R.shoulder); await to(R, v, 260); await wait(1300); await to(R, R.rest, 450); }
+  ch.busy = false;
+}
+const ownSpot = p => p.hands.length ? cardSpot(p, 0, 0) : p.hobjs && p.hobjs.length ? p.hobjs[0].position.clone() : tablePt(1.45, p.a);
+function gazeTarget(p, now, focusPt, dealerPt) {
+  const ch = p.ch;
+  if (!ch.gz || now > ch.gz.until) {
+    const r = Math.random(), others = S.players.filter(q => q !== p && q.ch && q.alive), turnP = S.turn && S.turn !== 'dealer' && S.turn !== p && S.turn.ch ? S.turn : null;
+    let v;
+    if (S.speaker && S.speaker !== p && S.speaker.ch && now - S.spokeAt < 2600 && r < .85) v = headWorld(S.speaker, 1.45);
+    else if (S.turn === p) v = r < .75 ? ownSpot(p) : dealerPt.clone();
+    else if (S.turn === 'dealer') v = r < .8 || !others.length ? dealerPt.clone() : headWorld(others[rnd(others.length)], 1.45);
+    else if (turnP && r < .5) v = headWorld(turnP, 1.45);
+    else if (focusPt && r < .78) v = focusPt.clone();
+    else if (others.length && r < .93) v = headWorld(others[rnd(others.length)], 1.45);
+    else v = ownSpot(p);
+    ch.gz = { v, until: now + 1100 + Math.random() * 2800 };
+  }
+  return ch.gz.v;
+}
+
 // ---------------------------------------------------------------- il Diavolo
 async function devilScene(dest) {
   S.devilAt = -1;
@@ -912,6 +941,7 @@ async function accusationScene({ by, target }) {
   const cam0 = S.cam; S.cam = target.ch ? { kind: 'seat', p: target } : cam0;
   SFX.gong(); setStatus(`${by.name} accusa ${target.name} di barare!`);
   if (by.ch) say(by, 'Baro!', 'accusa ' + target.name, true, 2600);
+  if (target.ch) gesture(by, 'point', headWorld(target, 1.3));
   await wait(2300);
   const kind = S.cheated.get(target.pid);
   if (kind && !S.caught.has(target.pid)) {
@@ -1031,12 +1061,12 @@ async function playSeat(p) {
     if (h.need) { await dealCardTo(p, hi); h.need = false; }
     if (h.aces) { S.focus = null; setHandTag(p, hi); continue; }
     if (BJ.isNatural(h.cards) && p.hands.length === 1) {
-      SFX.blackjack(); setStatus(`${p.name} fa blackjack!`); if (p.ch) say(p, 'Blackjack!', '', false, 2200); await wait(900); S.focus = null; setHandTag(p, hi); continue;
+      SFX.blackjack(); setStatus(`${p.name} fa blackjack!`); if (p.ch) say(p, 'Blackjack!', '', false, 2200); gesture(p, 'cheer'); await wait(900); S.focus = null; setHandTag(p, hi); continue;
     }
     for (;;) {
       await checkpoint(); if (h.forfeit) break;
       const info = BJ.handInfo(h.cards), total = info.total;
-      if (total >= 21) { if (total > 21) { SFX.bust(); setStatus(`${p.name} sballa con ${total}.`); if (p.ch) say(p, 'Sballato.', '', true); await wait(800); } break; }
+      if (total >= 21) { if (total > 21) { SFX.bust(); setStatus(`${p.name} sballa con ${total}.`); if (p.ch) say(p, 'Sballato.', '', true); gesture(p, 'facepalm'); await wait(800); } break; }
       const two = h.cards.length === 2, fb = CFG.rules.freebet, pair = two && BJ.isPair(h.cards);
       const freeD = fb && two && !info.soft && total >= 9 && total <= 11, freeP = fb && pair && BJ.valOf(h.cards[0]) !== 10;
       const canD = two && (freeD || p.chips >= h.base), canP = pair && p.hands.length < 4 && (freeP || p.chips >= h.base);
@@ -1047,6 +1077,7 @@ async function playSeat(p) {
       setStatus(p.hands.length > 1 ? `Tocca a ${p.name}: mano ${hi + 1} di ${p.hands.length}.` : `Tocca a ${p.name}.`);
       const data = { hi, cards: h.cards.slice(), up: S.dealer.cards[0], allowed, total, best, why, freeD, freeP, canCheat: CFG.rules.baro && p.cheatTok > 0 && !S.cheated.has(p.pid) };
       const pub = { allowed, freeD, freeP, hi, best: CFG.hints ? best : null, why: CFG.hints ? why : null };
+      if (Math.random() < .3) gesture(p, 'think');
       const a = await ask(p, 'act', data, pub, 30000, () => 'S');
       if (a === '_int') continue;
       if (a && a.cheat) { await doCheat(p, hi, a.cheat); continue; }
@@ -1147,6 +1178,7 @@ async function settle(players, dNat) {
     if (b.chips < 0) { b.chips = 0; bankMsg = ` Il banco di ${b.name} è saltato!`; }
     if (b.ch && S.bankNet) say(b, S.bankNet > 0 ? 'Grazie, signori.' : 'Che salasso…', (S.bankNet > 0 ? '+' : '−') + fmt.format(Math.abs(S.bankNet)), S.bankNet < 0, 2600);
   }
+  for (const p of players) { const d = p.chips - p.startChips; if (d > 0 && Math.random() < .8) gesture(p, 'cheer'); else if (d < 0 && Math.random() < .45) gesture(p, 'facepalm'); }
   const best = players.reduce((a, p) => Math.max(a, p.chips - p.startChips), -1e9);
   if (best > 0) SFX.win(); else SFX.lose();
   refreshPlates(); pushState();
@@ -1487,8 +1519,10 @@ function frame(now) {
   if (dealerCh) dealerCh.group.visible = !shared || CAM.pos.z > -.6;
   mouse.sx += (mouse.x - mouse.sx) * (1 - Math.exp(-dt * 3)); mouse.sy += (mouse.y - mouse.sy) * (1 - Math.exp(-dt * 3));
   const par = S.firstPerson && S.phase !== 'lobby' ? 1 : .25;
-  camera.position.set(CAM.pos.x + mouse.sx * .08 * par, CAM.pos.y + Math.sin(t * 1.1) * .004 - mouse.sy * .03 * par, CAM.pos.z);
-  camera.lookAt(CAM.look.x + mouse.sx * .6 * par, CAM.look.y - mouse.sy * .35 * par, CAM.look.z);
+  S.shake = (S.shake || 0) * Math.exp(-dt * 7);
+  camera.position.set(CAM.pos.x + mouse.sx * .08 * par + (Math.random() - .5) * .07 * S.shake, CAM.pos.y + Math.sin(t * 1.1) * .004 - mouse.sy * .03 * par + (Math.random() - .5) * .07 * S.shake, CAM.pos.z);
+  const fp = S.firstPerson && S.phase !== 'lobby';
+  camera.lookAt(CAM.look.x + mouse.sx * (fp ? 1.5 : .15), CAM.look.y - mouse.sy * (fp ? .6 : .09), CAM.look.z);
   for (const f of flames) {
     const n = Math.sin(t * 13 + f.seed) * .5 + Math.sin(t * 23.7 + f.seed * 2) * .3 + Math.sin(t * 5.3 + f.seed) * .2;
     f.flame.scale.set(1 + n * .08, 2.2 + n * .35, 1 + n * .08); if (f.light) f.light.intensity = f.base * (1 + n * .18);
@@ -1503,10 +1537,10 @@ function frame(now) {
     if (gz && now < gz.until) tgt = gz.at;
     else if (S.phase === 'lobby' || S.ended) tgt = camera.position;
     else if (!p.alive) tgt = null;
-    else if (S.turn === 'dealer') tgt = dealerPt;
-    else if (focusPt) tgt = focusPt;
-    else tgt = p.hands.length ? cardSpot(p, 0, 0) : dealerPt;
+    else tgt = gazeTarget(p, now, focusPt, dealerPt);
     aim(ch, tgt, dt, p.alive ? 0 : .55);
+    ch.head.rotation.z = Math.sin(ch.t * .9 + 1) * .035; ch.group.rotation.z = Math.sin(ch.t * .7) * .012;
+    ch.group.rotation.x += ((S.turn === p && p.alive ? -.055 : 0) - ch.group.rotation.x) * (1 - Math.exp(-dt * 3));
     updateArms(ch);
   }
   if (dealerCh) { aim(dealerCh, S.phase === 'lobby' ? camera.position : focusPt || tmpV.set(0, TH, TZ + 1.2), dt); updateArms(dealerCh); }
@@ -1528,7 +1562,7 @@ function frame(now) {
   camTargets(0); CAM.pos.copy(CAM.tp); CAM.look.copy(CAM.tl);
   requestAnimationFrame(frame);
   setTimeout(() => $('#loader').classList.add('gone'), 400);
-  if (TEST.debug) { window.__start = startGame; window.__add = addPlayer; window.__BOTS = BOTS; window.__accuse = accuse; window.__net = () => NET; window.__cam = (kind, i) => { S.cam = { kind, p: S.players[i] }; camTargets(0); CAM.pos.copy(CAM.tp); CAM.look.copy(CAM.tl); }; window.__ready = true; }
+  if (TEST.debug) { window.__start = startGame; window.__add = addPlayer; window.__BOTS = BOTS; window.__accuse = accuse; window.__net = () => NET; window.__pistol = i => dubPistol(S.players[i]); window.__cam = (kind, i) => { S.cam = { kind, p: S.players[i] }; camTargets(0); CAM.pos.copy(CAM.tp); CAM.look.copy(CAM.tl); }; window.__ready = true; }
 })();
 
 // ================================================================ DUBITO (il gioco dei bugiardi, con la pistola)
@@ -1550,13 +1584,22 @@ function makeDubCard(c) {
 }
 function getPistol() {
   if (pistol) return pistol;
-  const g = new THREE.Group(), steel = new THREE.MeshStandardMaterial({ color: 0x2b2d33, roughness: .35, metalness: .8 });
-  const barrel = new THREE.Mesh(new THREE.CylinderGeometry(.012, .015, .22, 10).rotateX(Math.PI / 2), steel); barrel.position.set(0, .03, -.13);
-  const body = new THREE.Mesh(new THREE.BoxGeometry(.03, .04, .11), M.darkwood); body.position.set(0, .024, -.04);
-  const grip = new THREE.Mesh(new THREE.BoxGeometry(.03, .1, .042), M.darkwood); grip.position.set(0, -.03, .02); grip.rotation.x = .45;
-  const guard = new THREE.Mesh(new THREE.TorusGeometry(.02, .004, 6, 14), M.gold); guard.position.set(0, -.004, -.04); guard.rotation.y = Math.PI / 2;
-  const cock = new THREE.Mesh(new THREE.BoxGeometry(.008, .035, .012), M.gold); cock.position.set(0, .06, .005); cock.rotation.x = -.5;
-  g.add(barrel, body, grip, guard, cock); g.visible = false; scene.add(g); return pistol = g;
+  const g = new THREE.Group(), steel = new THREE.MeshStandardMaterial({ color: 0x3a3d44, roughness: .3, metalness: .85, flatShading: true }), wood = new THREE.MeshStandardMaterial({ color: 0x4a2412, roughness: .42 }), brass = M.gold;
+  const add = (geo, m, x, y, z, rx = 0, ry = 0, rz = 0) => { const o = new THREE.Mesh(geo, m); o.position.set(x, y, z); o.rotation.set(rx, ry, rz); o.castShadow = true; g.add(o); return o; };
+  add(new THREE.CylinderGeometry(.0105, .013, .27, 8).rotateX(Math.PI / 2), steel, 0, .034, -.155);
+  add(new THREE.TorusGeometry(.0125, .003, 6, 12), brass, 0, .034, -.288);
+  for (const z of [-.07, -.2]) add(new THREE.CylinderGeometry(.0148, .0148, .012, 10).rotateX(Math.PI / 2), brass, 0, .034, z);
+  add(new THREE.BoxGeometry(.022, .02, .21), wood, 0, .017, -.1); add(new THREE.CylinderGeometry(.003, .003, .2, 6).rotateX(Math.PI / 2), wood, 0, .004, -.15);
+  add(new THREE.BoxGeometry(.004, .03, .075), brass, .0135, .03, -.02); add(new THREE.BoxGeometry(.012, .008, .022), steel, .017, .046, -.03);
+  add(new THREE.BoxGeometry(.007, .045, .012), steel, .017, .064, .0, -.55); add(new THREE.BoxGeometry(.008, .01, .014), new THREE.MeshStandardMaterial({ color: 0x1a1a1a, roughness: .5 }), .017, .082, -.016);
+  add(new THREE.TubeGeometry(new THREE.QuadraticBezierCurve3(new THREE.Vector3(0, .022, 0), new THREE.Vector3(0, .005, .065), new THREE.Vector3(0, -.075, .088)), 12, .0155, 8), wood, 0, 0, 0);
+  add(new THREE.SphereGeometry(.02, 12, 10), brass, 0, -.08, .09); add(new THREE.TorusGeometry(.018, .003, 6, 14, Math.PI), brass, 0, .006, -.028, 0, Math.PI / 2, Math.PI); add(new THREE.BoxGeometry(.004, .018, .005), steel, 0, 0, -.026, .3);
+  g.visible = false; scene.add(g); return pistol = g;
+}
+function muzzleFlash(g) {
+  const at = g.localToWorld(new THREE.Vector3(0, .034, -.3)), light = new THREE.PointLight(0xffc070, 60, 5, 2); light.position.copy(at); scene.add(light);
+  const puff = new THREE.Mesh(new THREE.SphereGeometry(.05, 12, 10), new THREE.MeshBasicMaterial({ color: 0xffe2b0, transparent: true, opacity: .9, depthWrite: false })); puff.position.copy(at); scene.add(puff);
+  S.shake = 1; tween(650, (e, k) => { light.intensity = 60 * Math.max(0, 1 - k * 4); puff.scale.setScalar(1 + k * 5); puff.material.opacity = .9 * (1 - k); puff.material.color.setRGB(1 - k * .6, .88 - k * .6, .7 - k * .5); puff.position.y = at.y + k * .12; }).then(() => { scene.remove(light); scene.remove(puff); });
 }
 const fanSpot = (p, i, n) => tablePt(isMe(p) ? 1.56 : 1.45, p.a).addScaledVector(seatRight(p), (i - (n - 1) / 2) * .052).setY(TH + .002 + i * .0009);
 const nextAlive = p => { const o = order(); let i = o.indexOf(p); for (let k = 0; k < o.length; k++) { i = (i + 1) % o.length; if (o[i].alive) return o[i]; } return p; };
@@ -1620,6 +1663,7 @@ async function dubRound(starter) {
 async function dubCall(caller) {
   const D = S.D, L = D.last; SFX.gong(); S.turn = null;
   setStatus(`${caller.name} dubita di ${L.p.name}!`); if (caller.ch) say(caller, 'Dubito!', '', true, 2400);
+  if (L.p.ch) gesture(caller, 'point', headWorld(L.p, 1.3)); else if (caller.ch) gesture(caller, 'point', new THREE.Vector3(0, 1.3, 1.5));
   S.cam = { kind: 'pile' }; await wait(1500);
   L.objs.forEach((o, j) => { SFX.flip(); flyTo(o, PILE.clone().add(new THREE.Vector3((j - (L.objs.length - 1) / 2) * .11, .05, -.12)), 500, { lift: .12, yaw: Math.PI, flip: 0 }); });
   await wait(1200);
@@ -1627,19 +1671,25 @@ async function dubCall(caller) {
   D.reveal = { cards: L.cards.slice(), lie, liar: L.p.name, caller: caller.name };
   setStatus(lie ? `${L.p.name} mentiva! Il grilletto tocca a lui.` : `${L.p.name} diceva la verità. Il grilletto tocca a ${caller.name}.`);
   if (L.p.ch) say(L.p, lie ? 'Accidenti…' : 'Visto? Onesto.', '', lie, 2400);
-  if (lie) SFX.lose(); else SFX.win();
+  if (lie) { SFX.lose(); gesture(L.p, 'facepalm'); } else { SFX.win(); gesture(L.p, 'cheer'); }
   pushState(); await wait(2800); return loser;
 }
 async function dubPistol(p) {
-  const g = getPistol(); S.cam = p.ch ? { kind: 'seat', p } : { kind: 'home' }; S.turn = p;
+  const g = getPistol(), ch = p.ch; S.cam = ch ? { kind: 'winner', p } : { kind: 'home' }; S.turn = p;
   setStatus(`${p.name} prende la pistola. Colpo ${p.pulls + 1} di 6…`);
-  let arm = null, from, to;
-  if (p.ch) { arm = p.ch.arms[1]; from = arm.hand.clone(); to = new THREE.Vector3(.21, 1.4, -.1); arm.glove.add(g); g.visible = true; g.position.set(-.02, .06, .0); g.rotation.set(.2, Math.PI / 2, 0); await tween(800, e => arm.hand.lerpVectors(from, to, e)); }
+  let arm = null, from, to; const off = new THREE.Vector3(-.03, .06, 0);
+  if (ch) {
+    while (ch.busy) await wait(120);
+    ch.busy = true; arm = ch.arms[1]; from = arm.hand.clone(); to = new THREE.Vector3(.47, 1.37, -.05);
+    ch.group.add(g); g.rotation.set(0, Math.PI / 2, 0); g.position.copy(from).add(off); g.visible = true;   // la canna punta verso la propria tempia
+    await tween(900, e => { arm.hand.lerpVectors(from, to, e); g.position.copy(arm.hand).add(off); });
+  } else { scene.add(g); g.position.set(.34, 1.2, 1.02); g.lookAt(2 * .34, 2 * 1.2 - 1.36, 2 * 1.02 - 1.5); g.visible = true; }
   for (let i = 0; i < 4; i++) { SFX.tick(); await wait(430); }
   const fired = p.pulls === p.bullet; p.pulls++;
-  if (fired) { SFX.bang(); S.red = 1; setTimeout(() => { S.red = 0; }, 600); } else SFX.click();
-  await wait(fired ? 350 : 800);
-  if (arm) { g.visible = false; scene.add(g); tween(500, e => arm.hand.lerpVectors(to, arm.rest, e)); }
+  if (fired) { SFX.bang(); muzzleFlash(g); S.red = 1; setTimeout(() => { S.red = 0; }, 600); } else SFX.click();
+  await wait(fired ? 450 : 900);
+  if (arm) { const back = arm.hand.clone(); await tween(fired ? 250 : 550, e => { arm.hand.lerpVectors(back, arm.rest, e); g.position.copy(arm.hand).add(off); }); ch.busy = false; }
+  g.visible = false; scene.add(g);
   if (fired) await eliminate(p, 'Il colpo parte:');
-  else { setStatus(`Clic. ${p.name} è salvo, per ora: ${p.pulls} ${p.pulls === 1 ? 'colpo tirato' : 'colpi tirati'} su 6.`); if (p.ch) say(p, 'Fiuu…', '', false, 2200); pushState(); await wait(2000); }
+  else { setStatus(`Clic. ${p.name} è salvo, per ora: ${p.pulls} ${p.pulls === 1 ? 'colpo tirato' : 'colpi tirati'} su 6.`); if (ch) { say(p, 'Fiuu…', '', false, 2200); gesture(p, 'cheer'); } pushState(); await wait(2000); }
 }

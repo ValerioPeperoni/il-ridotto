@@ -10,7 +10,8 @@ export const PARTS = {
   mask: [['bauta', 'Bauta'], ['volto', 'Volto'], ['medico', 'Medico della peste'], ['colombina', 'Colombina'], ['arlecchino', 'Arlecchino'], ['gatto', 'Gatto'], ['jolly', 'Jolly'], ['teschio', 'Teschio'], ['sole', 'Sole'], ['diavolo', 'Diavolo'], ['capitano', 'Nasone'], ['moretta', 'Moretta'], ['nessuna', 'Faccia nuda'], ['robot', 'Cyborg'], ['dino', 'Dinosauro'], ['alieno', 'Alieno'], ['zucca', 'Zucca']],
   hat: [['none', 'Niente'], ['tricorno', 'Tricorno'], ['cilindro', 'Cilindro'], ['piumato', 'Piumato'], ['corona', 'Corona'], ['giullare', 'Giullare'], ['cuoco', 'Cuoco'], ['pentola', 'Pentola'], ['candela', 'Candela'], ['piccione', 'Piccione'], ['paglietta', 'Gondoliere'], ['turbante', 'Turbante'], ['festa', 'Cono da festa'], ['aureola', 'Aureola'], ['pesce', 'Pesce'], ['vichingo', 'Elmo con le corna'], ['renna', 'Corna di renna'], ['antenne', 'Antenne'], ['elica', 'Cappellino a elica'], ['cowboy', 'Cowboy'], ['astronauta', 'Casco spaziale'], ['fungo', 'Fungo'], ['pinna', 'Pinna di squalo']],
   wig: [['none', 'Pelato'], ['parrucca', 'Parrucca'], ['alta', 'Parruccone'], ['ricci', 'Ricci'], ['codino', 'Codino'], ['cresta', 'Cresta']],
-  suit: [['abito', 'Abito'], ['dino', 'Dinosauro'], ['cyborg', 'Cyborg'], ['astronauta', 'Astronauta'], ['scheletro', 'Scheletro'], ['cavaliere', 'Cavaliere'], ['supereroe', 'Supereroe'], ['banana', 'Banana']],
+  suit: [['abito', 'Abito'], ['cyborg', 'Cyborg'], ['astronauta', 'Astronauta'], ['scheletro', 'Scheletro'], ['cavaliere', 'Cavaliere'], ['supereroe', 'Supereroe'], ['banana', 'Banana'], ['hotdog', 'Hot dog'], ['cactus', 'Cactus'], ['fantasma', 'Fantasma'], ['squalo', 'Squalo'], ['dino', 'Dinosauro'], ['pollo', 'Pollo'], ['rana', 'Rana']],
+  expr: [['felice', 'Felice'], ['arrabbiato', 'Arrabbiato'], ['sorpreso', 'Sorpreso'], ['furbo', 'Furbo']],
   pat: [['tinta', 'Tinta unita'], ['righe', 'Righe'], ['rombi', 'Rombi'], ['pois', 'Pois'], ['broccato', 'Broccato'], ['scacchi', 'Scacchi']],
   collar: [['gorgiera', 'Gorgiera'], ['gorgierona', 'Gorgiera gigante'], ['mantello', 'Mantello'], ['jabot', 'Pizzo'], ['farfallino', 'Farfallino'], ['none', 'Niente']],
   acc: [['none', 'Niente'], ['monocolo', 'Monocolo'], ['occhiali', 'Occhialini'], ['baffi', 'Baffi'], ['barba', 'Barba'], ['pipa', 'Pipa'], ['rosa', 'Rosa in bocca'], ['naso', 'Naso rosso'], ['benda', 'Benda'], ['ventaglio', 'Ventaglio'], ['calice', 'Calice'], ['ali', 'Ali'], ['pappagallo', 'Pappagallo'], ['cuffie', 'Cuffie']],
@@ -23,14 +24,14 @@ export function normalizeLook(l) {
   return {
     mask: pick(l.mask, ids('mask'), 'bauta'), mc: idx(l.mc, MASK_COLS.length), sk: idx(l.sk, SKINS.length, 1),
     hat: pick(l.hat, ids('hat'), 'tricorno'), hc: idx(l.hc, CLOTH_COLS.length), wig: pick(l.wig, ids('wig'), 'parrucca'), wc: idx(l.wc, WIG_COLS.length),
-    c1: idx(l.c1, CLOTH_COLS.length), c2: idx(l.c2, CLOTH_COLS.length, 5), pat: pick(l.pat, ids('pat'), 'tinta'), suit: pick(l.suit, ids('suit'), 'abito'),
+    c1: idx(l.c1, CLOTH_COLS.length), c2: idx(l.c2, CLOTH_COLS.length, 5), pat: pick(l.pat, ids('pat'), 'tinta'), suit: pick(l.suit, ids('suit'), 'abito'), expr: pick(l.expr, ids('expr'), 'felice'),
     collar: pick(l.collar, ids('collar'), 'gorgiera'), acc: pick(l.acc, ids('acc'), 'none'),
   };
 }
 export function randomLook(rand = Math.random) {
   const r = n => Math.floor(rand() * n), one = k => PARTS[k][r(PARTS[k].length)][0];
   let c1 = r(CLOTH_COLS.length), c2 = r(CLOTH_COLS.length); if (c2 === c1) c2 = (c1 + 5) % CLOTH_COLS.length;
-  return { mask: one('mask'), mc: r(MASK_COLS.length), sk: r(SKINS.length), hat: one('hat'), hc: r(CLOTH_COLS.length), wig: one('wig'), wc: r(WIG_COLS.length), c1, c2, pat: one('pat'), collar: one('collar'), acc: one('acc'), suit: rand() < .45 ? 'abito' : one('suit') };
+  return { mask: one('mask'), mc: r(MASK_COLS.length), sk: r(SKINS.length), hat: one('hat'), hc: r(CLOTH_COLS.length), wig: one('wig'), wc: r(WIG_COLS.length), c1, c2, pat: one('pat'), collar: one('collar'), acc: one('acc'), suit: rand() < .4 ? 'abito' : one('suit'), expr: one('expr') };
 }
 export const CROUPIER = { mask: 'bauta', mc: 0, sk: 1, hat: 'tricorno', hc: 0, wig: 'parrucca', wc: 0, c1: 1, c2: 5, pat: 'broccato', collar: 'jabot', acc: 'none' };
 export const BOTS = [
@@ -314,6 +315,76 @@ function buildWig(L) {
 }
 const SUIT_TEX = {};
 function boneTex() { return SUIT_TEX.b || (SUIT_TEX.b = tex(512, 256, (g, w, h) => { g.fillStyle = '#0e0d10'; g.fillRect(0, 0, w, h); g.strokeStyle = '#efe9da'; g.lineCap = 'round'; g.lineWidth = 9; g.beginPath(); g.moveTo(256, 14); g.lineTo(256, 190); g.stroke(); g.lineWidth = 7; for (let i = 0; i < 5; i++) { const y = 40 + i * 24, r = 62 - i * 5; g.beginPath(); g.moveTo(256 - r, y + 12); g.quadraticCurveTo(256, y - 14, 256 + r, y + 12); g.stroke(); } g.beginPath(); g.ellipse(256, 206, 44, 18, 0, 0, 7); g.stroke(); })); }
+const FULLS = { banana: 'obj', cactus: 'obj', fantasma: 'obj', hotdog: 'obj', squalo: 'hood', dino: 'hood', pollo: 'hood', rana: 'hood' };
+const SUIT_COL = { astronauta: '#eceae4', banana: '#f2d13a', cactus: '#3f8f3a', fantasma: '#f1eee6', hotdog: '#a8432a', squalo: '#7c8b98', pollo: '#f6f2e8', rana: '#4fa64a' };
+const OBJ = {
+  banana: { body: [[0, .4], [.15, .42], [.2, .62], [.215, .95], [.205, 1.3]], head: [[.144, -.1], [.146, .02], [.136, .14], [.1, .25], [.05, .33], [.024, .37], [.022, .43], [.03, .44], [0, .44]], r: .143, hat: .31 },
+  cactus: { body: [[0, .4], [.17, .42], [.2, .6], [.21, 1.3]], head: [[.148, -.1], [.152, .05], [.14, .18], [.1, .27], [0, .32]], r: .15, hat: .3 },
+  fantasma: { body: [[0, .34], [.4, .34], [.36, .5], [.29, .9], [.215, 1.3]], head: [[.152, -.1], [.156, .04], [.14, .17], [.09, .26], [0, .3]], r: .154, hat: .28 },
+  hotdog: { body: [[0, .4], [.13, .42], [.17, .6], [.17, 1.3]], head: [[.12, -.1], [.122, .08], [.11, .2], [.07, .28], [0, .31]], r: .12, hat: .29 },
+};
+function ridgeTex(col) { return SUIT_TEX[col] || (SUIT_TEX[col] = tex(256, 64, (g, w, h) => { g.fillStyle = col; g.fillRect(0, 0, w, h); for (let i = 0; i < 6; i++) { g.fillStyle = 'rgba(0,0,0,.16)'; g.fillRect(i * w / 6, 0, 5, h); g.fillStyle = 'rgba(255,255,255,.12)'; g.fillRect(i * w / 6 + 18, 0, 8, h); } }, [1, 1])); }
+function faceGroup(R, expr, hollow) {
+  const f = new THREE.Group(), white = mat('#fbf7ee', .3), black = mat('#0d0a09', .25), lip = mat('#7a1c1c', .4), z = -R + .012;
+  for (const s of [-1, 1]) {
+    if (hollow) { put(f, sph(.03, 12, 10), black, [s * .05, .05, z - .004], [0, 0, 0], [1, 1.4, .4]); continue; }
+    put(f, sph(.036, 14, 10), white, [s * .052, .05, z], [0, 0, 0], [1, 1.1, .55]); put(f, sph(.017, 10, 8), black, [s * .052 + (expr === 'furbo' ? .01 : 0), .048, z - .017], [0, 0, 0], [1, 1, .5]);
+    const brow = { arrabbiato: [s * .4, .098], sorpreso: [0, .118], furbo: [s < 0 ? -.35 : .1, s < 0 ? .1 : .118] }[expr];
+    if (brow) put(f, new THREE.BoxGeometry(.052, .012, .012), black, [s * .052, brow[1], z - .008], [0, 0, brow[0]]);
+  }
+  if (hollow || expr === 'sorpreso') put(f, sph(.022, 12, 10), black, [0, -.045, z - .008], [0, 0, 0], [1, 1.35, .4]);
+  else if (expr === 'arrabbiato') put(f, new THREE.TorusGeometry(.036, .009, 6, 14, Math.PI), lip, [0, -.07, z - .013]);
+  else if (expr === 'furbo') put(f, new THREE.TorusGeometry(.03, .009, 6, 12, Math.PI * .7), lip, [.012, -.025, z - .013], [0, 0, Math.PI + .5]);
+  else put(f, new THREE.TorusGeometry(.042, .01, 6, 16, Math.PI), lip, [0, -.022, z - .013], [0, 0, Math.PI]);
+  return f;
+}
+function ring(parent, n, fn) { for (let i = 0; i < n; i++) fn(i, i / n * Math.PI * 2); }
+function fullBody(g, L, cloth, c1, c2) {
+  const white = mat('#f6f2e8', .8), s = L.suit, tilt = (m, a, x) => { m.rotation.order = 'YXZ'; m.rotation.set(x, a, 0); return m; };
+  if (s === 'banana') { ring(g, 4, (i, a) => tilt(put(g, sph(1, 12, 8), mat('#f8eaa0', .8), [Math.sin(a + .6) * .27, 1.02, Math.cos(a + .6) * .27], [0, 0, 0], [.085, .3, .018]), a + .6, -.45)); put(g, cyl(.04, .03, .05, 8), mat('#5a3d18', .8), [0, .4, 0]); }
+  else if (s === 'cactus') { for (let i = 0; i < 34; i++) { const a = i * 2.4, y = .5 + (i % 9) * .09; put(g, sph(.008, 6, 6), white, [Math.sin(a) * .207, y, Math.cos(a) * .207]); } }
+  else if (s === 'hotdog') {
+    for (const k of [-1, 1]) put(g, sph(1, 16, 12), mat('#d9a25a', .8), [k * .19, .86, .03], [0, 0, 0], [.11, .52, .23]);
+    const pts = []; for (let i = 0; i < 9; i++) pts.push(new THREE.Vector3(i % 2 ? .06 : -.06, .5 + i * .09, -.178));
+    put(g, new THREE.TubeGeometry(new THREE.CatmullRomCurve3(pts), 40, .014, 6), mat('#f2c81e', .5));
+  } else if (s === 'squalo') {
+    put(g, sph(1, 14, 10), white, [0, .86, -.14], [0, 0, 0], [.2, .34, .1]); put(g, cone(.13, .34, 3), cloth, [0, 1.0, .3], [-.5, Math.PI / 2, 0], [1, 1, .2]);
+    for (const k of [-1, 1]) put(g, cone(.1, .34, 3), cloth, [k * .1, .5, .4], [Math.PI / 2 + .3, 0, k * .5], [1, 1, .2]);
+  } else if (s === 'dino') {
+    put(g, sph(1, 14, 10), mat(c2, .8), [0, .86, -.13], [0, 0, 0], [.19, .32, .1]); put(g, cone(.15, .7, 10), cloth, [0, .58, .46], [Math.PI / 2 + .45, 0, 0]);
+    for (let i = 0; i < 5; i++) put(g, cone(.045, .11, 4), mat(c2, .7), [0, .62 + i * .13, .25 - i * .012], [.9, Math.PI / 4, 0]);
+  } else if (s === 'pollo') {
+    for (const k of [-1, 1]) put(g, sph(1, 14, 10), white, [k * .3, .9, .06], [0, 0, k * -.35], [.07, .26, .18]);
+    for (let i = -1; i <= 1; i++) put(g, cone(.05, .3, 6), white, [i * .08, .72, .3], [-.9, 0, i * -.3], [1, 1, .4]);
+    put(g, sph(1, 14, 10), mat('#f3e3a0', .8), [0, .84, -.14], [0, 0, 0], [.18, .3, .1]);
+  } else if (s === 'rana') put(g, sph(1, 14, 10), mat('#cfe8a8', .8), [0, .86, -.14], [0, 0, 0], [.2, .34, .1]);
+}
+function objHead(head, L, cloth) {
+  const o = OBJ[L.suit]; put(head, lathe(o.head, 28), cloth); head.add(faceGroup(o.r, L.expr, L.suit === 'fantasma'));
+  if (L.suit === 'banana') put(head, cyl(.021, .026, .05, 8), mat('#5a3d18', .8), [0, .445, 0]);
+  if (L.suit === 'cactus') { for (let i = 0; i < 22; i++) { const a = 1 + i * 2.4, y = -.08 + (i % 6) * .055, r = y > .18 ? .12 : .15; if (Math.cos(a) < -.6 && y < .14) continue; put(head, sph(.006, 6, 6), mat('#f6f2e8', .8), [Math.sin(a) * r, y, Math.cos(a) * r]); } ring(head, 6, (i, a) => put(head, sph(.028, 8, 6), mat('#e56a9a', .6), [.07 + Math.sin(a) * .03, .29, .02 + Math.cos(a) * .03], [0, 0, 0], [1, .5, 1])); put(head, sph(.018, 8, 6), mat('#f2c81e', .5), [.07, .3, .02]); }
+}
+function hoodHead(head, L, cloth, c1, c2) {
+  const hm = cloth.clone(); hm.side = THREE.DoubleSide; const white = mat('#fbf7ee', .35), black = mat('#0d0a09', .25), s = L.suit;
+  put(head, new THREE.SphereGeometry(.17, 28, 20, Math.PI * 1.5 + .92, Math.PI * 2 - 1.84, 0, Math.PI * .86), hm, [0, .01, .012], [0, 0, 0], [1, 1.1, 1]);
+  const eye = (x, y, z, r, col = white) => { put(head, sph(r, 12, 10), col, [x, y, z]); put(head, sph(r * .5, 10, 8), black, [x, y, z - r * .75]); };
+  if (s === 'squalo') {
+    put(head, cone(.12, .22, 16), cloth, [0, .2, -.05], [-.8, 0, 0]);
+    for (let i = -3; i <= 3; i++) { put(head, cone(.013, .032, 4), white, [i * .029, .1 - Math.abs(i) * .007, -.158 + Math.abs(i) * .013], [Math.PI, 0, 0]); put(head, cone(.012, .028, 4), white, [i * .027, -.118 + Math.abs(i) * .006, -.13 + Math.abs(i) * .012]); }
+    for (const k of [-1, 1]) put(head, sph(.014, 8, 8), black, [k * .11, .16, -.1]);
+  } else if (s === 'dino') {
+    put(head, sph(1, 16, 12), cloth, [0, .15, -.15], [.12, 0, 0], [.105, .058, .16]);
+    for (let i = 0; i < 6; i++) put(head, cone(.011, .03, 4), white, [(i - 2.5) * .03, .098, -.25 + Math.abs(i - 2.5) * .02], [Math.PI, 0, 0]);
+    for (const k of [-1, 1]) { eye(k * .06, .21, -.13, .028, mat('#f2d13a', .3)); put(head, sph(.007, 6, 6), black, [k * .03, .19, -.3]); }
+    for (let i = 0; i < 4; i++) put(head, cone(.035, .08, 4), mat(c2, .7), [0, .2 - i * .05, .06 + i * .045], [.3 + i * .45, Math.PI / 4, 0]);
+  } else if (s === 'pollo') {
+    for (let i = 0; i < 3; i++) put(head, sph(.04 - i * .004, 10, 8), mat('#d1201c', .5), [0, .2 - i * .012, -.06 + i * .055]);
+    put(head, cone(.035, .09, 8), mat('#f08a1c', .5), [0, .11, -.2], [-Math.PI / 2 - .2, 0, 0]); put(head, sph(.022, 8, 8), mat('#d1201c', .5), [0, -.13, -.13], [0, 0, 0], [1, 1.5, .7]);
+    for (const k of [-1, 1]) eye(k * .075, .16, -.135, .026);
+  } else if (s === 'rana') {
+    for (const k of [-1, 1]) { put(head, sph(.058, 14, 10), cloth, [k * .085, .2, -.04]); eye(k * .085, .21, -.075, .04); put(head, sph(.006, 6, 6), black, [k * .02, .13, -.165]); }
+  }
+}
 const HAT_Y = { none: .118, parrucca: .145, alta: .37, ricci: .15, codino: .145, cresta: .118 };
 
 export function makeCharacter(look, o = {}) {
@@ -323,14 +394,14 @@ export function makeCharacter(look, o = {}) {
   const cloth = L.suit === 'abito' ? new THREE.MeshStandardMaterial({ map: clothTex(L.pat, c1, c2), roughness: .86 })
     : L.suit === 'scheletro' ? new THREE.MeshStandardMaterial({ map: boneTex(), roughness: .8 })
     : L.suit === 'cyborg' || L.suit === 'cavaliere' ? steelM
-    : mat(L.suit === 'astronauta' ? '#eceae4' : L.suit === 'banana' ? '#f2d13a' : c1, .8);
+    : L.suit === 'banana' || L.suit === 'cactus' ? new THREE.MeshStandardMaterial({ map: ridgeTex(SUIT_COL[L.suit]), roughness: .7 })
+    : mat(SUIT_COL[L.suit] || c1, L.suit === 'squalo' ? .5 : .8);
+  const FULL = FULLS[L.suit] || null;
   const wood = mat('#2a160c', .45), gold = mat('#c9a050', .32, { metalness: .9 }), white = mat('#f1ead8', .8);
-  const body = put(g, lathe([[0, .4], [.27, .41], [.31, .55], [.29, .8], [.26, 1.0], [.22, 1.12], [.13, 1.2], [.05, 1.24]], 28), cloth); body.scale.z = .78; body.receiveShadow = true;
-  put(g, sph(1, 16, 10), cloth, [0, 1.12, 0], [0, 0, 0], [.27, .1, .17]);
-  if (L.suit === 'dino') {
-    put(g, sph(1, 14, 10), mat(c2, .8), [0, .86, -.13], [0, 0, 0], [.19, .3, .1]); put(g, cone(.15, .7, 10), cloth, [0, .58, .46], [Math.PI / 2 + .45, 0, 0]);
-    for (let i = 0; i < 5; i++) put(g, cone(.04, .1, 4), mat(c2, .7), [0, .62 + i * .13, .24 - i * .012], [.9, Math.PI / 4, 0]);
-  } else if (L.suit === 'cyborg') {
+  const body = put(g, lathe(FULL === 'obj' ? OBJ[L.suit].body : [[0, .4], [.27, .41], [.31, .55], [.29, .8], [.26, 1.0], [.22, 1.12], [.13, 1.2], [.05, 1.24]], 28), cloth); body.scale.z = FULL === 'obj' ? 1 : .78; body.receiveShadow = true;
+  if (FULL !== 'obj') put(g, sph(1, 16, 10), cloth, [0, 1.12, 0], [0, 0, 0], [.27, .1, .17]);
+  if (FULL) fullBody(g, L, cloth, c1, c2);
+  else if (L.suit === 'cyborg') {
     put(g, sph(.045), glow(c1, 3), [0, 1.0, -.2]); put(g, new THREE.TorusGeometry(.06, .012, 8, 20), mat('#2a2d33', .4, { metalness: .7 }), [0, 1.0, -.2]);
     for (const s of [-1, 1]) { put(g, sph(.085), mat('#2a2d33', .4, { metalness: .7 }), [s * .25, 1.13, 0]); put(g, new THREE.TorusGeometry(.2, .012, 6, 20, Math.PI), mat('#c9a050', .3, { metalness: .9 }), [0, .7 + (s + 1) * .08, 0], [Math.PI / 2, 0, Math.PI], [1, .8, 1]); }
   } else if (L.suit === 'astronauta') {
@@ -342,12 +413,9 @@ export function makeCharacter(look, o = {}) {
   } else if (L.suit === 'supereroe') {
     put(g, new THREE.CylinderGeometry(.16, .42, .8, 16, 1, true, -Math.PI / 2, Math.PI), mat(c2, .8, { side: THREE.DoubleSide }), [0, .82, .06]);
     put(g, new THREE.CircleGeometry(.075, 5), mat('#e8c93a', .4, { side: THREE.DoubleSide }), [0, 1.0, -.215], [0, Math.PI, Math.PI / 2 * 0 + .31]); put(g, new THREE.TorusGeometry(.23, .02, 8, 24), mat('#e8c93a', .4), [0, .62, 0], [Math.PI / 2, 0, 0], [1, .8, 1]);
-  } else if (L.suit === 'banana') {
-    for (let i = 0; i < 4; i++) { const a = i / 4 * Math.PI * 2 + .6; put(g, cone(.09, .36, 6), mat('#f7e27a', .8), [Math.sin(a) * .2, 1.06, Math.cos(a) * .17], [Math.cos(a) * 2.2, 0, -Math.sin(a) * 2.2], [1, 1, .35]); }
-    put(g, cyl(.06, .05, .05, 8), mat('#5a3d18', .8), [0, .43, 0]);
   }
   // colletto
-  if (L.collar === 'gorgiera' || L.collar === 'gorgierona') {
+  if (FULL) { /* i tutoni non hanno colletto */ } else if (L.collar === 'gorgiera' || L.collar === 'gorgierona') {
     const big = L.collar === 'gorgierona', n = big ? 16 : 13, rr = big ? .19 : .1, s = big ? .06 : .036;
     for (let i = 0; i < n; i++) { const a = i / n * Math.PI * 2; put(g, sph(1, 8, 6), white, [Math.sin(a) * rr, 1.235, Math.cos(a) * rr * .8], [0, a, 0], [s * .55, s * .75, s * 1.5]); }
     put(g, cyl(rr * .8, rr * .8, .02, 16), white, [0, 1.235, 0], [0, 0, 0], [1, 1, .8]);
@@ -367,6 +435,7 @@ export function makeCharacter(look, o = {}) {
   }
   // testa
   const head = new THREE.Group(); head.position.y = 1.44; head.rotation.order = 'YXZ'; head.scale.setScalar(1.42); g.add(head);
+  if (FULL !== 'obj') {
   const skinM = mat(skin, .7);
   put(g, cyl(.045, .05, .1, 12), skinM, [0, 1.27, 0]);
   put(head, sph(.115, 24, 18), skinM, [0, 0, 0], [0, 0, 0], [1, 1.12, 1]);
@@ -384,21 +453,24 @@ export function makeCharacter(look, o = {}) {
   if (L.mask === 'sole') for (let i = 0; i < 14; i++) { const a = i / 14 * Math.PI * 2; put(head, cone(.018, i % 2 ? .07 : .11, 6), gold, [Math.sin(a) * .16, Math.cos(a) * .17 + .01, -.02], [0, 0, -a]); }
   if (L.mask === 'robot') { put(head, sph(.02), glow('#ff3020', 3), [EXc, .036, -.114]); put(head, sph(.013), glow('#3fd8ff', 2.5), [-EXc, .036, -.114]); }
   if (L.mask === 'dino') { put(head, sph(.07, 16, 12), solid, [0, -.04, -.15], [0, 0, 0], [.95, .62, 1.35]); for (let i = 0; i < 6; i++) put(head, cone(.009, .025, 5), mat('#f6f1e2', .4), [(i - 2.5) * .022, -.085, -.215 + Math.abs(i - 2.5) * .012], [Math.PI, 0, 0]); for (const s of [-1, 1]) put(head, sph(.008, 6, 6), mat('#0a0806', .5), [s * .025, -.01, -.235]); }
-  head.add(buildWig(L));
-  const hat = buildHat(L, c1, c2); hat.position.y = L.hat === 'astronauta' ? .02 : HAT_Y[L.wig] + (L.hat === 'aureola' ? .06 : 0); head.add(hat);
+  }
+  if (FULL === 'obj') objHead(head, L, cloth); else if (FULL === 'hood') hoodHead(head, L, cloth, c1, c2);
+  if (!FULL) head.add(buildWig(L));
+  const hat = buildHat(L, c1, c2); hat.position.y = L.hat === 'astronauta' ? .02 : (FULL === 'obj' ? OBJ[L.suit].hat : FULL ? (L.suit === 'squalo' ? .33 : .25) : HAT_Y[L.wig]) + (L.hat === 'aureola' ? .06 : 0); head.add(hat);
+  const H = new THREE.Group(); if (FULL === 'obj') H.position.z = -(OBJ[L.suit].r - .118); head.add(H);
   // accessori sul viso
   const hair = L.wig === 'none' ? '#3a2416' : WIG_COLS[L.wc][1], hairM = mat(hair, .85), EY = .036, EX = .04, EZ = -.116;
-  if (L.acc === 'monocolo') { put(head, new THREE.TorusGeometry(.03, .005, 8, 20), gold, [EX, EY, EZ - .006]); put(head, new THREE.CircleGeometry(.028, 16), mat('#cfe3ea', .05, { transparent: true, opacity: .35, side: THREE.DoubleSide }), [EX, EY, EZ - .006]); put(head, cyl(.002, .002, .17, 4), gold, [.085, -.05, -.07], [.3, 0, .25]); }
-  if (L.acc === 'occhiali') { for (const s of [-1, 1]) put(head, new THREE.TorusGeometry(.03, .005, 8, 20), mat('#15100c', .3), [s * EX, EY, EZ - .006], [0, s * -.3, 0]); put(head, cyl(.004, .004, .03, 6), mat('#15100c', .3), [0, EY, EZ - .012], [0, 0, Math.PI / 2]); }
-  if (L.acc === 'baffi') for (const s of [-1, 1]) put(head, new THREE.TorusGeometry(.036, .011, 6, 12, Math.PI * .95), hairM, [s * .036, -.03, -.124], [0, 0, s > 0 ? Math.PI : 0]);
-  if (L.acc === 'barba') { put(head, cone(.07, .2, 10), hairM, [0, -.19, -.065], [Math.PI + .25, 0, 0], [1, 1, .7]); put(head, sph(.06), hairM, [0, -.1, -.075], [0, 0, 0], [1.2, .7, .8]); }
-  if (L.acc === 'pipa') { put(head, cyl(.006, .006, .12, 6), mat('#1a100a', .4), [.03, -.075, -.17], [Math.PI / 2 - .3, -.3, 0]); put(head, cyl(.02, .016, .035, 10), mat('#3a1c0e', .4), [.048, -.08, -.228]); put(head, sph(.012, 8, 6), glow('#ff7a2a', 1.6), [.048, -.066, -.228]); }
-  if (L.acc === 'rosa') { put(head, cyl(.004, .004, .16, 6), mat('#2a5a2a', .7), [0, -.063, -.128], [0, 0, Math.PI / 2]); for (let i = 0; i < 5; i++) put(head, sph(.018, 8, 6), mat('#b3121b', .5), [.08 + Math.sin(i * 1.3) * .012, -.063 + Math.cos(i * 1.3) * .012, -.128 - (i % 2) * .01]); put(head, sph(1, 8, 6), mat('#2a5a2a', .7), [.03, -.05, -.128], [0, 0, .5], [.02, .008, .01]); }
-  if (L.acc === 'naso') put(head, sph(.032, 14, 10), mat('#d1201c', .15), [0, -.008, -.135]);
-  if (L.acc === 'cuffie') { put(head, new THREE.TorusGeometry(.135, .012, 8, 24, Math.PI), mat('#15100c', .4), [0, .02, .01]); for (const s of [-1, 1]) put(head, cyl(.045, .045, .035, 16), mat(c2, .5), [s * .13, 0, .01], [0, 0, Math.PI / 2]); }
-  if (L.acc === 'benda') { put(head, new THREE.CircleGeometry(.036, 16), mat('#0c0a0a', .6, { side: THREE.DoubleSide }), [-EX, EY, EZ - .012], [.25, .3, 0]); put(head, new THREE.TorusGeometry(.124, .006, 6, 28), mat('#0c0a0a', .6), [0, .05, 0], [Math.PI / 2 - .25, .12, 0]); }
+  if (L.acc === 'monocolo') { put(H, new THREE.TorusGeometry(.03, .005, 8, 20), gold, [EX, EY, EZ - .006]); put(H, new THREE.CircleGeometry(.028, 16), mat('#cfe3ea', .05, { transparent: true, opacity: .35, side: THREE.DoubleSide }), [EX, EY, EZ - .006]); put(H, cyl(.002, .002, .17, 4), gold, [.085, -.05, -.07], [.3, 0, .25]); }
+  if (L.acc === 'occhiali') { for (const s of [-1, 1]) put(H, new THREE.TorusGeometry(.03, .005, 8, 20), mat('#15100c', .3), [s * EX, EY, EZ - .006], [0, s * -.3, 0]); put(H, cyl(.004, .004, .03, 6), mat('#15100c', .3), [0, EY, EZ - .012], [0, 0, Math.PI / 2]); }
+  if (L.acc === 'baffi') for (const s of [-1, 1]) put(H, new THREE.TorusGeometry(.036, .011, 6, 12, Math.PI * .95), hairM, [s * .036, -.03, -.124], [0, 0, s > 0 ? Math.PI : 0]);
+  if (L.acc === 'barba') { put(H, cone(.07, .2, 10), hairM, [0, -.19, -.065], [Math.PI + .25, 0, 0], [1, 1, .7]); put(H, sph(.06), hairM, [0, -.1, -.075], [0, 0, 0], [1.2, .7, .8]); }
+  if (L.acc === 'pipa') { put(H, cyl(.006, .006, .12, 6), mat('#1a100a', .4), [.03, -.075, -.17], [Math.PI / 2 - .3, -.3, 0]); put(H, cyl(.02, .016, .035, 10), mat('#3a1c0e', .4), [.048, -.08, -.228]); put(H, sph(.012, 8, 6), glow('#ff7a2a', 1.6), [.048, -.066, -.228]); }
+  if (L.acc === 'rosa') { put(H, cyl(.004, .004, .16, 6), mat('#2a5a2a', .7), [0, -.063, -.128], [0, 0, Math.PI / 2]); for (let i = 0; i < 5; i++) put(H, sph(.018, 8, 6), mat('#b3121b', .5), [.08 + Math.sin(i * 1.3) * .012, -.063 + Math.cos(i * 1.3) * .012, -.128 - (i % 2) * .01]); put(H, sph(1, 8, 6), mat('#2a5a2a', .7), [.03, -.05, -.128], [0, 0, .5], [.02, .008, .01]); }
+  if (L.acc === 'naso') put(H, sph(.032, 14, 10), mat('#d1201c', .15), [0, -.008, -.135]);
+  if (L.acc === 'cuffie') { put(H, new THREE.TorusGeometry(.135, .012, 8, 24, Math.PI), mat('#15100c', .4), [0, .02, .01]); for (const s of [-1, 1]) put(H, cyl(.045, .045, .035, 16), mat(c2, .5), [s * .13, 0, .01], [0, 0, Math.PI / 2]); }
+  if (L.acc === 'benda') { put(H, new THREE.CircleGeometry(.036, 16), mat('#0c0a0a', .6, { side: THREE.DoubleSide }), [-EX, EY, EZ - .012], [.25, .3, 0]); put(H, new THREE.TorusGeometry(.124, .006, 6, 28), mat('#0c0a0a', .6), [0, .05, 0], [Math.PI / 2 - .25, .12, 0]); }
   // braccia
-  const gloveM = mat(isDark(c2) ? '#e8dcc0' : c2, .6), handY = .835 - (standing ? .18 : 0);
+  const gloveM = mat(FULL ? '#fbf7ee' : isDark(c2) ? '#e8dcc0' : c2, .6), handY = .835 - (standing ? .18 : 0);
   const arms = [-1, 1].map(sx => {
     const mesh = put(g, new THREE.CapsuleGeometry(.047, 1, 4, 10), cloth);
     const glove = new THREE.Group(); g.add(glove); put(glove, sph(.042, 14, 10), gloveM, [0, 0, 0], [0, 0, 0], [1, .55, 1.35]);
@@ -437,10 +509,13 @@ export const EDIT_TABS = [['mask', 'Maschera'], ['hat', 'Cappello'], ['wig', 'Ca
 const oB = (key, cur) => `<div class="opts">${PARTS[key].map(([id, l]) => `<button data-set="${key}" data-v="${id}" aria-pressed="${cur === id}">${l}</button>`).join('')}</div>`;
 const sB = (key, list, cur) => `<div class="sw">${list.map(([n, c], i) => `<button data-col="${key}" data-v="${i}" style="--c:${c}" aria-pressed="${cur === i}" aria-label="${n}" title="${n}"></button>`).join('')}</div>`;
 export function editorHTML(L, tab) {
+  if (FULLS[L.suit] === 'obj' && (tab === 'mask' || tab === 'wig')) return '<p class="note muted">Con questo costume sei tutto intero un ' + PARTS.suit.find(x => x[0] === L.suit)[1].toLowerCase() + ': la faccia la scegli nella scheda Costume. Cappelli ed extra funzionano lo stesso.</p>';
+  if (FULLS[L.suit] === 'hood' && tab === 'wig') return '<p class="note muted">Il cappuccio del costume copre i capelli.</p>';
   if (tab === 'mask') return oB('mask', L.mask) + '<h3>COLORE DELLA MASCHERA</h3>' + sB('mc', MASK_COLS, L.mc) + '<h3>PELLE</h3>' + sB('sk', SKINS, L.sk);
   if (tab === 'hat') return oB('hat', L.hat) + '<h3>COLORE DEL CAPPELLO</h3>' + sB('hc', CLOTH_COLS, L.hc);
   if (tab === 'wig') return oB('wig', L.wig) + '<h3>COLORE</h3>' + sB('wc', WIG_COLS, L.wc);
-  if (tab === 'suit') return oB('suit', L.suit) + (L.suit === 'abito' ? '<h3>FANTASIA</h3>' + oB('pat', L.pat) : '') + '<h3>COLORE PRINCIPALE</h3>' + sB('c1', CLOTH_COLS, L.c1) + '<h3>SECONDO COLORE</h3>' + sB('c2', CLOTH_COLS, L.c2) + '<h3>COLLETTO</h3>' + oB('collar', L.collar);
+  const full = FULLS[L.suit];
+  if (tab === 'suit') return oB('suit', L.suit) + (full === 'obj' ? '<h3>FACCIA</h3>' + oB('expr', L.expr) : '') + (L.suit === 'abito' ? '<h3>FANTASIA</h3>' + oB('pat', L.pat) : '') + (full && L.suit !== 'dino' ? '' : '<h3>COLORE PRINCIPALE</h3>' + sB('c1', CLOTH_COLS, L.c1) + '<h3>SECONDO COLORE</h3>' + sB('c2', CLOTH_COLS, L.c2)) + (full ? '' : '<h3>COLLETTO</h3>' + oB('collar', L.collar));
   return oB('acc', L.acc);
 }
 export function applyEdit(L, ds) { if (ds.set && PARTS[ds.set]) { L[ds.set] = ds.v; return true; } if (ds.col) { L[ds.col] = +ds.v; return true; } return false; }
