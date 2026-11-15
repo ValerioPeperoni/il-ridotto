@@ -4,7 +4,7 @@ import { RenderPass } from 'three/addons/postprocessing/RenderPass.js';
 import { UnrealBloomPass } from 'three/addons/postprocessing/UnrealBloomPass.js';
 import { ShaderPass } from 'three/addons/postprocessing/ShaderPass.js';
 import { OutputPass } from 'three/addons/postprocessing/OutputPass.js';
-import { makeCharacter, updateArms, disposeCharacter, normalizeLook, randomLook, BOTS, CROUPIER } from './chars.js';
+import { makeCharacter, updateArms, disposeCharacter, normalizeLook, randomLook, BOTS, CROUPIER, EDIT_TABS, editorHTML, applyEdit } from './chars.js';
 import { hostRoom, randomCode } from './net.js';
 import { SFX } from './sfx.js';
 
@@ -513,7 +513,7 @@ const BANK_TXT = {
 const RULE_NAMES = { baro: 'Il baro', diavolo: 'Diavolo', segreta: 'Puntata segreta', freebet: 'Free Bet', laterali: 'Laterali', gufata: 'Gufata' };
 
 function loadCfg() {
-  const d = { format: 'libera', hands: 20, elim: true, bank: 'casa', hints: true, rules: { baro: false, diavolo: false, segreta: false, freebet: false, laterali: false, gufata: false } };
+  const d = { game: 'blackjack', format: 'libera', hands: 20, elim: true, bank: 'casa', hints: true, rules: { baro: false, diavolo: false, segreta: false, freebet: false, laterali: false, gufata: false } };
   try { const s = JSON.parse(localStorage.getItem('ridotto-cfg') || 'null'); if (s) { Object.assign(d, s, { rules: Object.assign(d.rules, s.rules || {}) }); } } catch (e) { /* impostazioni di base */ }
   return d;
 }
@@ -622,7 +622,7 @@ let PID = 0;
 function charTop(p) { if (!p.ch) return 2; if (!p.ch.top) { p.ch.group.updateMatrixWorld(true); p.ch.top = new THREE.Box3().setFromObject(p.ch.group).max.y - p.ch.group.position.y; } return p.ch.top; }
 function placeChar(p) {
   if (isMe(p)) { if (p.ch) { disposeCharacter(p.ch); p.ch = null; } return; }
-  const cracks = CFG.format === 'ultimo' && S.phase !== 'lobby' && p.lives === 1;
+  const cracks = S.phase !== 'lobby' && (CFG.game === 'dubito' ? !p.alive : CFG.format === 'ultimo' && p.lives === 1);
   const key = JSON.stringify(p.look) + cracks;
   if (!p.ch || p.chKey !== key) { if (p.ch) disposeCharacter(p.ch); p.ch = makeCharacter(p.look, { cracks }); p.chKey = key; scene.add(p.ch.group); }
   const w = tablePt(2.62, p.a); p.ch.group.position.set(w.x, 0, w.z); p.ch.group.rotation.y = yawOf(p); p.ch.top = 0;
@@ -651,7 +651,7 @@ const cleanName = (s, d) => (String(s || '').replace(/\s+/g, ' ').trim().slice(0
 function refreshPlates() {
   for (const p of S.players) if (p.plate) {
     p.plate.el.className = 'nameplate' + (p.alive ? '' : ' out');
-    p.plate.el.innerHTML = `${S.banker === p ? '<div class="b">BANCO</div>' : ''}<div class="n">${esc(p.name)}</div>` + (S.phase === 'lobby' ? '' : `<div class="f">${p.alive ? fmt.format(p.chips) + ' fiches' : 'fuori'}</div>`);
+    p.plate.el.innerHTML = `${S.banker === p ? '<div class="b">BANCO</div>' : ''}<div class="n">${esc(p.name)}</div>` + (S.phase === 'lobby' ? '' : `<div class="f">${!p.alive ? 'fuori' : CFG.game === 'dubito' ? (p.hand || []).length + ' carte · ' + (p.pulls || 0) + '/6' : fmt.format(p.chips) + ' fiches'}</div>`);
   }
 }
 function say(who, text, small = '', bad = false, ms = 1900) {
@@ -723,7 +723,8 @@ function snapshot(p) {
   const pr = p.prompt, d = S.dealer;
   return {
     t: 'state', code: CODE, phase: S.phase === 'lobby' ? 'lobby' : S.ended ? 'end' : 'game', stage: S.stage,
-    cfg: { format: CFG.format, hands: CFG.hands, bank: CFG.bank, rules: CFG.rules, hints: CFG.hints },
+    dub: CFG.game === 'dubito' && S.D ? { round: S.D.round, rank: S.D.rank, hand: p.hand || [], pile: S.D.pileN, last: S.D.last ? { name: S.D.last.p.name, n: S.D.last.cards.length } : null, reveal: S.D.reveal, seats: order().map(q => ({ name: q.name, n: (q.hand || []).length, alive: q.alive, pulls: q.pulls || 0, me: q === p })) } : null,
+    cfg: { game: CFG.game, format: CFG.format, hands: CFG.hands, bank: CFG.bank, rules: CFG.rules, hints: CFG.hints },
     hand: S.hand, minBet: S.minBet, status: S.status, phrases: PHRASES,
     you: { pid: p.pid, name: p.name, look: p.look, chips: p.chips, alive: p.alive, lives: p.lives, loans: p.loans, banker: S.banker === p, cheatTok: p.cheatTok, secretTok: p.secretTok, inRound: p.inRound, betDone: !!p.betDone && S.stage === 'bet', bet: p.inRound && p.hands[0] ? p.hands.reduce((a, h) => a + h.stake, 0) : 0 },
     players: order().map(q => ({ pid: q.pid, name: q.name, chips: q.chips, alive: q.alive, lives: q.lives, banker: S.banker === q, bot: q.kind === 'bot', online: q.online, inRound: q.inRound })),
@@ -745,7 +746,7 @@ function ask(p, kind, data, pub, ms, fallback) {
     const pr = { id: ++PROMPT_ID, kind, data, pub, deadline: limit ? Date.now() + limit : 0, done: false, timer: 0 };
     pr.resolve = v => { if (pr.done) return; pr.done = true; clearTimeout(pr.timer); if (p.prompt === pr) p.prompt = null; pushState(); renderBar(); resolve(v); };
     if (limit) pr.timer = setTimeout(() => pr.resolve(fallback()), limit);
-    p.prompt = pr; p.draft = null; pushState(); renderBar();
+    p.prompt = pr; p.draft = null; p.dsel = null; pushState(); renderBar();
     if (kind === 'act' && p.kind === 'local') SFX.turn();
   });
 }
@@ -754,6 +755,11 @@ function acceptReply(p, v) {
   if (pr.kind === 'act') { if (pr.data.allowed.includes(v)) pr.resolve(v); }
   else if (pr.kind === 'bet') pr.resolve(cleanBet(p, v || {}, pr.data));
   else if (pr.kind === 'pact') pr.resolve(!!v);
+  else if (pr.kind === 'dub') {
+    if (v && v.call && pr.data.canCall) { pr.resolve({ call: true }); return; }
+    const n = pr.data.hand.length, idx = [...new Set((v && Array.isArray(v.play) ? v.play : []).map(x => x | 0).filter(x => x >= 0 && x < n))].slice(0, 3);
+    if (idx.length) pr.resolve({ play: idx });
+  }
 }
 function cleanBet(p, v, d) {
   const max = Math.max(10, Math.min(d.max, floor10(p.chips))), min = Math.min(d.min, max);
@@ -776,6 +782,12 @@ function botAnswer(p, kind, d) {
     if (d.gufo && d.gufo.length && p.style !== 'perfect' && Math.random() < .1) v.gufo = { pid: d.gufo[rnd(d.gufo.length)].pid, amt: 10 };
     if (d.secret && Math.random() < (CFG.format === 'torneo' && S.hand > CFG.hands * .8 ? .7 : .06)) v.secret = true;
     return cleanBet(p, v, d);
+  });
+  if (kind === 'dub') return wait(1000 + Math.random() * 900).then(() => {
+    const good = [], bad = []; d.hand.forEach((c, i) => (c === JOKER || BJ.rankOf(c) === d.rank ? good : bad).push(i));
+    if (d.canCall && Math.random() < .08 + .12 * d.lastN + (good.length >= 3 ? .22 : 0) + (d.lastEmpty ? .3 : 0)) return { call: true };
+    const src = (!good.length || (bad.length && Math.random() < .22)) ? bad : good;
+    return { play: src.slice(0, Math.max(1, Math.min(src.length, 1 + rnd(Math.random() < .3 ? 3 : 2)))) };
   });
   if (kind === 'pact') return wait(1700).then(() => d.total >= 17 || (d.total >= 9 && d.total <= 11) || Math.random() < .3);
   return wait(850 + Math.random() * 500).then(() => {
@@ -1161,6 +1173,7 @@ async function clearTable() {
 const elimHands = n => [Math.round(n * 8 / 30), Math.round(n * 16 / 30), Math.round(n * 25 / 30)];
 async function eliminate(p, why) {
   p.alive = false; S.outOrder.push(p); if (S.banker === p) { S.banker = null; showBankMark(null); }
+  if (CFG.game === 'dubito') placeChar(p);
   SFX.crack(); if (p.ch) { S.cam = { kind: 'seat', p }; say(p, 'Addio, signori.', '', true, 2600); }
   setStatus(`${why} ${p.name} è fuori.`); refreshPlates(); pushState(); await wait(2500); S.cam = { kind: 'home' };
 }
@@ -1184,7 +1197,7 @@ async function postRound() {
 function ranking() {
   const score = p => CFG.format === 'libera' ? p.chips - p.loans * 1000 : p.chips;
   const A = alive().sort((x, y) => score(y) - score(x)), O = S.outOrder.slice().reverse();
-  return [...A, ...O].map((p, i) => ({ pos: i + 1, pid: p.pid, name: p.name, chips: p.chips, loans: p.loans, out: !p.alive }));
+  return [...A, ...O].map((p, i) => ({ pos: i + 1, pid: p.pid, name: p.name, chips: p.chips, loans: p.loans, out: !p.alive, label: CFG.game === 'dubito' ? (p.alive ? 'in piedi' : 'fuori') : null }));
 }
 async function gameLoop() {
   const gen = ++S.gen;
@@ -1197,12 +1210,14 @@ async function gameLoop() {
 }
 function startGame() {
   if (!S.players.length) return;
+  if (CFG.game === 'dubito') { if (S.players.length >= 2) startDubito(); return; }
   SFX.unlock();
   if (CFG.bank === 'turno' && S.players.length < 2) CFG.bank = 'casa';
   const start = CFG.format === 'ultimo' ? 500 : 1000;
   for (const p of S.players) Object.assign(p, { chips: start, startChips: start, alive: true, lives: 2, loans: 0, cheatTok: 1, secretTok: 1, lastBet: 20, hands: [], inRound: false, side: null, peek: null, prompt: null });
   Object.assign(S, { phase: 'game', hand: 0, minBet: 10, banker: null, bankLeft: 0, nextBanker: null, outOrder: [], ended: false, abort: false, rank: null, stage: '' });
   layoutSeats(); showBankMark(null);
+  S.editing = null; renderEditor();
   $('#lobby').hidden = true; $('#end').hidden = true; $('#hud').hidden = false; $('#endBtn').textContent = 'Termina partita';
   renderHUD(); pushState(); gameLoop();
 }
@@ -1211,8 +1226,8 @@ function endGame() {
   const w = byPid(S.rank[0].pid); S.cam = w && w.ch ? { kind: 'winner', p: w } : { kind: 'home' };
   SFX.fanfare(); if (w && w.ch) say(w, 'Il Ridotto è mio!', '', false, 6000);
   setStatus('');
-  $('#endSheet').innerHTML = `<h2>${esc(S.rank[0].name)} vince</h2><p>${CFG.format === 'torneo' ? 'Torneo concluso dopo ' + S.hand + ' mani.' : CFG.format === 'ultimo' ? 'L\'ultima maschera intera.' : 'Partita chiusa dopo ' + S.hand + ' mani.'}</p>
-    <div class="rank">${S.rank.map(r => `<div class="row"><span>${r.pos}.</span><span>${esc(r.name)}${r.loans ? ` <small>(${r.loans} ${r.loans > 1 ? 'prestiti' : 'prestito'})</small>` : ''}</span><b>${r.out ? 'fuori' : fmt.format(r.chips)}</b></div>`).join('')}</div>
+  $('#endSheet').innerHTML = `<h2>${esc(S.rank[0].name)} vince</h2><p>${CFG.game === 'dubito' ? 'Resta una sola maschera intera, dopo ' + S.hand + ' giri.' : CFG.format === 'torneo' ? 'Torneo concluso dopo ' + S.hand + ' mani.' : CFG.format === 'ultimo' ? 'L\'ultima maschera intera.' : 'Partita chiusa dopo ' + S.hand + ' mani.'}</p>
+    <div class="rank">${S.rank.map(r => `<div class="row"><span>${r.pos}.</span><span>${esc(r.name)}${r.loans ? ` <small>(${r.loans} ${r.loans > 1 ? 'prestiti' : 'prestito'})</small>` : ''}</span><b>${r.label || (r.out ? 'fuori' : fmt.format(r.chips))}</b></div>`).join('')}</div>
     <div class="row-btns"><button class="ticket main" id="againBtn"><span class="t">Rivincita</span><span class="s">stessi giocatori e regole</span></button><button class="ticket" id="lobbyBtn"><span class="t">Sala d'attesa</span><span class="s">cambia regole o maschere</span></button></div>`;
   setTimeout(() => { $('#end').hidden = false; }, 2600 * Math.max(SPEED, .1));
   pushState();
@@ -1220,7 +1235,7 @@ function endGame() {
 async function toLobby() {
   S.gen++; S.phase = 'lobby'; S.ended = false; S.rank = null; S.banker = null; showBankMark(null); S.turn = null; S.focus = null; S.status = '';
   for (const p of S.players) { p.alive = true; p.lives = 2; }
-  await clearTable();
+  await clearTable(); dubClear();
   $('#end').hidden = true; $('#hud').hidden = true; $('#lobby').hidden = false; $('#status').textContent = '';
   layoutSeats();
   for (const [id, m] of S.late) { S.late.delete(id); onNet(id, m); }
@@ -1238,9 +1253,12 @@ function renderLobby() {
   $('#plist').innerHTML = S.players.length ? S.players.map((p, i) => `<div class="prow">
       ${p.kind === 'local' ? `<input id="pn-${p.pid}" data-name="${p.pid}" value="${esc(p.name)}" maxlength="14" aria-label="Nome del giocatore ${i + 1}">` : `<span class="nm">${esc(p.name)}</span>`}
       <span class="kind${p.kind === 'remote' && !p.online ? ' off' : ''}">${p.kind === 'remote' ? (p.online ? 'TELEFONO' : 'SCOLLEGATO') : p.kind === 'bot' ? 'MASCHERA' : 'QUI'}</span>
-      <span>${p.kind === 'local' ? `<button class="mini" data-dice="${p.pid}" title="Cambia aspetto">Aspetto</button> ` : ''}<button class="mini" data-del="${p.pid}" aria-label="Togli ${esc(p.name)}">Togli</button></span></div>`).join('')
+      <span>${p.kind === 'local' ? `<button class="mini" data-edit="${p.pid}">Personalizza</button> ` : ''}<button class="mini" data-del="${p.pid}" aria-label="Togli ${esc(p.name)}">Togli</button></span></div>`).join('')
     : '<p class="note">Ancora nessuno. Inquadrate il codice, oppure aggiungete un giocatore qui sotto.</p>';
   $('#addLocal').disabled = $('#addBot').disabled = S.players.length >= 6;
+  seg('#segGame', CFG.game, v => { CFG.game = v; saveCfg(); renderLobby(); pushState(); });
+  $('#bjOpts').hidden = CFG.game !== 'blackjack';
+  $('#gameNote').textContent = CFG.game === 'dubito' ? 'Ognuno riceve 5 carte segrete (sul telefono). A turno ne giochi da 1 a 3 coperte dichiarando che sono la carta del tavolo: Re, Regine o Assi. Puoi mentire. Chi viene dopo può dire "Dubito!": se mentivi premi tu il grilletto, se dicevi la verità lo preme lui. La pistola ha 6 colpi e uno solo è carico. I jolly valgono tutto. Vince l\'ultimo in piedi. Da 2 a 6 giocatori.' : 'Tutti contro il banco: vince chi si avvicina di più a 21 senza superarlo.';
   seg('#segFormat', CFG.format, v => { CFG.format = v; saveCfg(); renderLobby(); pushState(); });
   seg('#segHands', CFG.hands, v => { CFG.hands = +v; saveCfg(); renderLobby(); pushState(); });
   seg('#segBank', CFG.bank, v => { CFG.bank = v; saveCfg(); renderLobby(); pushState(); });
@@ -1248,15 +1266,38 @@ function renderLobby() {
   $('#torneoOpts').hidden = CFG.format !== 'torneo'; $('#optElim').checked = CFG.elim; $('#optHints').checked = CFG.hints;
   document.querySelectorAll('[data-rule]').forEach(c => { c.checked = !!CFG.rules[c.dataset.rule]; });
   const n = S.players.length, hs = humans().length;
-  $('#startBtn').disabled = n === 0 || hs === 0;
-  $('#startNote').textContent = n === 0 ? 'Serve almeno un giocatore.' : hs === 0 ? 'Serve almeno un giocatore in carne e ossa.' : `${n} al tavolo. Quando ci siete tutti, si parte.`;
+  const locals = S.players.filter(p => p.kind === 'local').length, dub = CFG.game === 'dubito', dubBad = dub && (n < 2 || locals > 1);
+  $('#startBtn').disabled = n === 0 || hs === 0 || dubBad;
+  $('#startNote').textContent = dubBad ? (locals > 1 ? 'A Dubito le carte sono segrete: al massimo un giocatore su questo schermo, gli altri dal telefono.' : 'A Dubito servono almeno due giocatori: aggiungi un telefono o una maschera del Ridotto.') : n === 0 ? 'Serve almeno un giocatore.' : hs === 0 ? 'Serve almeno un giocatore in carne e ossa.' : `${n} al tavolo. Quando ci siete tutti, si parte.`;
+}
+let editTab = 'mask';
+function openEditor(p) { S.editing = p; editTab = 'mask'; renderEditor(); }
+function renderEditor() {
+  const p = S.editing, box = $('#editBox');
+  if (!p || !S.players.includes(p) || S.phase !== 'lobby') { S.editing = null; box.hidden = true; $('#cfgBox').hidden = false; return; }
+  box.hidden = false; $('#cfgBox').hidden = true;
+  box.innerHTML = `<h2>La maschera di ${esc(p.name)}</h2><p class="note">Guardala al centro dello schermo mentre la cambi.</p>
+    <div class="tabs">${EDIT_TABS.map(([k, l]) => `<button data-tab="${k}" aria-selected="${k === editTab}">${l}</button>`).join('')}</div>
+    <div style="display:grid; gap:9px">${editorHTML(p.look, editTab)}</div>
+    <div class="seg"><button data-ed="dice">Sorpresa!</button><button data-ed="done" aria-pressed="true">Fatto</button></div>`;
+}
+function wireEditor() {
+  $('#editBox').addEventListener('click', e => {
+    const b = e.target.closest('button'), p = S.editing; if (!b || !p) return;
+    if (b.dataset.tab) editTab = b.dataset.tab;
+    else if (b.dataset.ed === 'done') S.editing = null;
+    else if (b.dataset.ed === 'dice') { p.look = normalizeLook(randomLook()); placeChar(p); }
+    else if (applyEdit(p.look, b.dataset)) { p.look = normalizeLook(p.look); placeChar(p); }
+    renderEditor();
+  });
 }
 function wireLobby() {
+  wireEditor();
   $('#addLocal').addEventListener('click', () => addPlayer('local', 'Giocatore ' + (S.players.length + 1), randomLook()));
   $('#addBot').addEventListener('click', () => { const b = BOTS.find(x => !S.players.some(p => p.name === x.name)); if (b) addPlayer('bot', b.name, b.look, { style: b.style }); });
   $('#plist').addEventListener('click', e => {
     const d = e.target.closest('[data-del]'); if (d) { const p = byPid(d.dataset.del); if (p) removePlayer(p); return; }
-    const r = e.target.closest('[data-dice]'); if (r) { const p = byPid(r.dataset.dice); if (p) { p.look = normalizeLook(randomLook()); placeChar(p); spotlight(p); refreshPlates(); } }
+    const r = e.target.closest('[data-edit]'); if (r) { const p = byPid(r.dataset.edit); if (p) openEditor(p); }
   });
   $('#plist').addEventListener('change', e => { const pid = e.target.dataset.name; const p = pid && byPid(pid); if (p) { p.name = cleanName(e.target.value, p.name); refreshPlates(); renderLobby(); } });
   $('#optElim').addEventListener('change', e => { CFG.elim = e.target.checked; saveCfg(); pushState(); });
@@ -1279,6 +1320,11 @@ function wireLobby() {
 function renderHUD() {
   if (S.phase === 'lobby') return;
   const fmtName = { libera: 'Partita libera', torneo: 'Torneo', ultimo: 'Ultimo in piedi' }[CFG.format];
+  if (CFG.game === 'dubito' && S.D) {
+    $('#sub').textContent = `Dubito · giro ${S.D.round} · carta del tavolo: ${DRANK[S.D.rank][0]}`; $('#rulechips').innerHTML = ''; refreshPlates();
+    $('#board').innerHTML = '<h4>AL TAVOLO</h4>' + order().map(p => `<div class="row${p.alive ? '' : ' out'}${S.turn === p ? ' turn' : ''}"><span>${esc(p.name)}</span><b>${p.alive ? (p.hand || []).length + ' carte · ' + (p.pulls || 0) + '/6' : 'fuori'}</b></div>`).join('');
+    $('#accuseBtn').hidden = true; return;
+  }
   $('#sub').textContent = `${fmtName} · ${handTitle().toLowerCase()}${S.minBet > 10 ? ' · minima ' + fmt.format(S.minBet) : ''}${CFG.bank === 'turno' ? ' · banco a turno' : ''}`;
   $('#rulechips').innerHTML = Object.keys(CFG.rules).filter(k => CFG.rules[k]).map(k => `<span>${RULE_NAMES[k].toUpperCase()}</span>`).join('');
   const rows = S.players.slice().sort((a, b) => (b.alive - a.alive) || (b.chips - a.chips));
@@ -1317,6 +1363,11 @@ function renderBar() {
       adv.hidden = false; $('#adviceK').textContent = 'IL CONSIGLIO DEL DOTTORE';
       $('#adviceText').innerHTML = (hint ? `<b>${NAME[d.best]}.</b> ${esc(d.why)}` : '') + (p.peek !== null && p.peek !== undefined ? `<br><b>Hai sbirciato:</b> il banco nasconde ${CARD_TXT(p.peek)}.` : '');
     }
+  } else if (pr.kind === 'dub') {
+    if (!p.dsel) p.dsel = new Set();
+    const k = p.dsel.size, nm = c => c === JOKER ? 'Jolly' : CARD_TXT(c);
+    bar.innerHTML = `<div class="who">${S.firstPerson ? 'Le tue carte' : esc(p.name) + ', le tue carte'}: scegline da 1 a 3</div>` + p.hand.map((c, i) => `<button class="ticket small${p.dsel.has(i) ? ' hint' : ''}" data-dc="${i}"><span class="t" style="font-size:22px">${nm(c)}</span></button>`).join('') +
+      `<button class="ticket main" data-x="dplay" ${k ? '' : 'disabled'}><span class="t">Gioca${k ? ' ' + k : ''}</span><span class="s">come ${DRANK[d.rank][1].toLowerCase()}</span></button>` + (d.canCall ? `<button class="ticket red" data-x="dcall"><span class="t">Dubito!</span><span class="s">sull'ultima giocata</span></button>` : '');
   } else if (pr.kind === 'pact') {
     bar.innerHTML = who + `<button class="ticket red" data-pact="1"><span class="t">Accetto il patto</span><span class="s">la mano vale il triplo</span></button><button class="ticket" data-pact="0"><span class="t">Rifiuto</span><span class="s">vade retro</span></button>`;
     adv.hidden = false; $('#adviceK').textContent = 'LA CARTA DEL DIAVOLO'; $('#adviceText').innerHTML = `Se accetti, questa mano vale <b>il triplo</b>: se vinci incassi tre volte, se perdi paghi tre volte (fin dove arrivano le tue fiches).`;
@@ -1342,6 +1393,9 @@ function wireBar() {
       else if (b.dataset.x === 'nocheat') { p.cheatMenu = false; renderBar(); }
       else if (b.dataset.cheat) { p.cheatMenu = false; tryCheat(p, b.dataset.cheat); }
       else if (b.dataset.a) acceptReply(p, b.dataset.a);
+    } else if (pr.kind === 'dub') {
+      if (b.dataset.dc !== undefined) { const i = +b.dataset.dc; if (p.dsel.has(i)) p.dsel.delete(i); else if (p.dsel.size < 3) p.dsel.add(i); renderBar(); }
+      else if (b.dataset.x === 'dplay') acceptReply(p, { play: [...p.dsel] }); else if (b.dataset.x === 'dcall') acceptReply(p, { call: true });
     } else if (pr.kind === 'pact') acceptReply(p, b.dataset.pact === '1');
   });
   document.addEventListener('keydown', e => {
@@ -1371,7 +1425,7 @@ function camTargets(t) {
   const c = S.cam, portrait = window.innerWidth < window.innerHeight;
   if (S.phase === 'lobby') {
     const ps = S.players.filter(p => p.ch);
-    if (ps.length) { const p = S.show && S.showUntil > t && ps.includes(S.show) ? S.show : ps[Math.floor(t / 5) % ps.length]; CAM.tp.copy(tablePt(.35, p.a)).setY(1.62); CAM.tl.copy(headWorld(p, 1.52)); }
+    if (ps.length) { const p = S.editing && ps.includes(S.editing) ? S.editing : S.show && S.showUntil > t && ps.includes(S.show) ? S.show : ps[Math.floor(t / 5) % ps.length]; CAM.tp.copy(tablePt(.35, p.a)).setY(1.62); CAM.tl.copy(headWorld(p, 1.52)); }
     else { CAM.tp.set(Math.sin(t * .11) * 1.5, 1.95, 3.3 + Math.cos(t * .11) * .2); CAM.tl.set(0, .95, -.45); }
     return;
   }
@@ -1380,6 +1434,7 @@ function camTargets(t) {
     if (c.kind === 'seat' && c.p && c.p.ch) CAM.tl.copy(headWorld(c.p, 1.2)).lerp(c.p.hands.length ? cardSpot(c.p, 0, 0) : tablePt(1.6, c.p.a), .45);
     else if (c.kind === 'winner' && c.p && c.p.ch) CAM.tl.copy(headWorld(c.p, 1.4));
     else if (c.kind === 'dealer') CAM.tl.set(0, .86, TZ + .2);
+    else if (c.kind === 'pile') CAM.tl.set(0, TH, TZ + .75);
     else CAM.tl.set(0, .74, -.45);
     return;
   }
@@ -1387,6 +1442,7 @@ function camTargets(t) {
     const p = c.p;
     if (c.kind === 'winner') { CAM.tp.copy(tablePt(.9, p.a)).setY(1.65); CAM.tl.copy(headWorld(p, 1.4)); }
     else { CAM.tp.copy(tablePt(.2, p.a)).setY(1.78); CAM.tl.copy(headWorld(p, 1.3)).lerp(cardSpot(p, 0, 0), .45); }
+  } else if (c.kind === 'pile') { CAM.tp.set(0, 1.85, TZ - .35); CAM.tl.set(0, TH, TZ + .8);
   } else if (c.kind === 'dealer') { CAM.tp.set(0, 1.8, 2.0); CAM.tl.set(0, .98, -1.0); }
   else { const wide = S.players.length > 4 || portrait; CAM.tp.set(0, wide ? 2.5 : 2.3, wide ? -3.2 : -2.75); CAM.tl.set(0, .62, .8); }
 }
@@ -1441,7 +1497,7 @@ function frame(now) {
   redNow += (S.red - redNow) * (1 - Math.exp(-dt * 3)); spot.color.copy(WARM).lerp(HELL, redNow); grain.uniforms.uRed.value = redNow;
   const focusPt = S.focus ? cardSpot(S.focus.p, S.focus.hi, 0) : null, dealerPt = tmpV.set(0, TH, TZ + .4).clone();
   for (const p of S.players) if (p.ch) {
-    const ch = p.ch; ch.t += dt; ch.group.children[0].scale.y = 1 + Math.sin(ch.t * 1.6) * .008;
+    const ch = p.ch; ch.t += dt; if (ch.spin) ch.spin.rotation.y += dt * 16; ch.group.children[0].scale.y = 1 + Math.sin(ch.t * 1.6) * .008;
     const gz = S.gaze.get(p.pid);
     let tgt;
     if (gz && now < gz.until) tgt = gz.at;
@@ -1474,3 +1530,116 @@ function frame(now) {
   setTimeout(() => $('#loader').classList.add('gone'), 400);
   if (TEST.debug) { window.__start = startGame; window.__add = addPlayer; window.__BOTS = BOTS; window.__accuse = accuse; window.__net = () => NET; window.__cam = (kind, i) => { S.cam = { kind, p: S.players[i] }; camTargets(0); CAM.pos.copy(CAM.tp); CAM.look.copy(CAM.tl); }; window.__ready = true; }
 })();
+
+// ================================================================ DUBITO (il gioco dei bugiardi, con la pistola)
+const JOKER = 100, DRANK = { 12: ['Re', 'Re'], 11: ['Regina', 'Regine'], 0: ['Asso', 'Assi'] };
+const PILE = new THREE.Vector3(0, TH + .002, TZ + .8);
+let jokerTexture = null, pistol = null;
+function makeDubCard(c) {
+  if (c !== JOKER) return makeCard(c);
+  if (!jokerTexture) jokerTexture = canvasTex(320, 448, (g, w, h) => {
+    paperBase(g, w, h); g.strokeStyle = 'rgba(110,40,30,.55)'; g.lineWidth = 2; roundRect(g, 14, 14, w - 28, h - 28, 14); g.stroke();
+    const cols = ['#a3201c', '#1f5a3a', '#c9a050'];
+    [[-1, 0], [1, 1], [0, 2]].forEach(([dx, k]) => { g.fillStyle = cols[k]; g.beginPath(); g.moveTo(w / 2 + dx * 20, 230); g.quadraticCurveTo(w / 2 + dx * 90, 120 - (dx ? 0 : 40), w / 2 + dx * 96, 170 - (dx ? 0 : 90)); g.quadraticCurveTo(w / 2 + dx * 40 + 30, 170, w / 2 + dx * 20 + 44, 230); g.fill(); g.fillStyle = '#c9a050'; g.beginPath(); g.arc(w / 2 + dx * 96, 170 - (dx ? 0 : 90), 12, 0, 7); g.fill(); });
+    g.fillStyle = '#f6edd6'; g.strokeStyle = '#1d140e'; g.lineWidth = 3; g.beginPath(); g.ellipse(w / 2 + 12, 270, 54, 60, 0, 0, 7); g.fill(); g.stroke();
+    g.fillStyle = '#1d140e'; for (const s of [-1, 1]) { g.beginPath(); g.arc(w / 2 + 12 + s * 20, 258, 6, 0, 7); g.fill(); } g.strokeStyle = '#a3201c'; g.lineWidth = 5; g.beginPath(); g.arc(w / 2 + 12, 276, 26, .15 * Math.PI, .85 * Math.PI); g.stroke();
+    g.fillStyle = '#1d140e'; g.font = '400 40px "IM Fell English SC", Georgia, serif'; g.textAlign = 'center'; g.fillText('JOLLY', w / 2, 400);
+  });
+  const grp = new THREE.Group(), f = new THREE.Mesh(cardGeoF, new THREE.MeshStandardMaterial({ map: jokerTexture, color: 0xcfc6b4, roughness: .75, alphaTest: .5 })), b = new THREE.Mesh(cardGeoB, backMat());
+  b.position.y = -.0004; f.castShadow = b.castShadow = true; grp.add(f, b); scene.add(grp); return grp;
+}
+function getPistol() {
+  if (pistol) return pistol;
+  const g = new THREE.Group(), steel = new THREE.MeshStandardMaterial({ color: 0x2b2d33, roughness: .35, metalness: .8 });
+  const barrel = new THREE.Mesh(new THREE.CylinderGeometry(.012, .015, .22, 10).rotateX(Math.PI / 2), steel); barrel.position.set(0, .03, -.13);
+  const body = new THREE.Mesh(new THREE.BoxGeometry(.03, .04, .11), M.darkwood); body.position.set(0, .024, -.04);
+  const grip = new THREE.Mesh(new THREE.BoxGeometry(.03, .1, .042), M.darkwood); grip.position.set(0, -.03, .02); grip.rotation.x = .45;
+  const guard = new THREE.Mesh(new THREE.TorusGeometry(.02, .004, 6, 14), M.gold); guard.position.set(0, -.004, -.04); guard.rotation.y = Math.PI / 2;
+  const cock = new THREE.Mesh(new THREE.BoxGeometry(.008, .035, .012), M.gold); cock.position.set(0, .06, .005); cock.rotation.x = -.5;
+  g.add(barrel, body, grip, guard, cock); g.visible = false; scene.add(g); return pistol = g;
+}
+const fanSpot = (p, i, n) => tablePt(isMe(p) ? 1.56 : 1.45, p.a).addScaledVector(seatRight(p), (i - (n - 1) / 2) * .052).setY(TH + .002 + i * .0009);
+const nextAlive = p => { const o = order(); let i = o.indexOf(p); for (let k = 0; k < o.length; k++) { i = (i + 1) % o.length; if (o[i].alive) return o[i]; } return p; };
+function dubClear() { const D = S.D; if (!D) return; D.objs.forEach(o => scene.remove(o)); D.objs = []; dropLabel(D.tag); D.tag = null; for (const p of S.players) { p.hand = []; p.hobjs = []; } if (pistol) pistol.visible = false; }
+function startDubito() {
+  SFX.unlock();
+  for (const p of S.players) Object.assign(p, { alive: true, lives: 2, loans: 0, chips: 0, hands: [], inRound: false, prompt: null, hand: [], hobjs: [], pulls: 0, bullet: rnd(6), side: null, peek: null });
+  Object.assign(S, { phase: 'game', hand: 0, minBet: 10, banker: null, outOrder: [], ended: false, abort: false, rank: null, stage: 'dub', turn: null, focus: null, accOpen: false, D: { round: 0, rank: 12, last: null, pileN: 0, objs: [], tag: null, reveal: null } });
+  S.editing = null; renderEditor(); layoutSeats(); showBankMark(null);
+  $('#lobby').hidden = true; $('#end').hidden = true; $('#hud').hidden = false; $('#endBtn').textContent = 'Termina partita';
+  renderHUD(); pushState(); dubLoop();
+}
+async function dubLoop() {
+  const gen = ++S.gen; let starter = alive()[0];
+  while (gen === S.gen) {
+    const loser = await dubRound(starter); if (gen !== S.gen) return;
+    const a = alive();
+    if (a.length <= 1 || S.abort || !a.some(p => p.kind !== 'bot')) break;
+    starter = loser.alive ? loser : nextAlive(loser);
+    await wait(900);
+  }
+  if (gen === S.gen) endGame();
+}
+async function dubRound(starter) {
+  const D = S.D; dubClear(); D.round++; S.hand = D.round; D.rank = [12, 11, 0][rnd(3)]; D.last = null; D.pileN = 0; D.reveal = null;
+  const A = alive(), n = A.length, per = n <= 4 ? 6 : n === 5 ? 8 : 9, deck = [];
+  for (const r of [12, 11, 0]) for (let i = 0; i < per; i++) deck.push(r + 13 * (i % 4));
+  for (let i = 0; i < (n <= 5 ? 2 : 3); i++) deck.push(JOKER);
+  for (let i = deck.length - 1; i > 0; i--) { const j = rnd(i + 1), t = deck[i]; deck[i] = deck[j]; deck[j] = t; }
+  S.turn = null; S.cam = { kind: 'home' };
+  setStatus(`Giro ${D.round}. La carta del tavolo è: ${DRANK[D.rank][0]}. Chi viene scoperto a mentire preme il grilletto.`);
+  D.tag = makeLabel('tag gold', `TAVOLO: ${DRANK[D.rank][1].toUpperCase()}`, () => tmpV.set(0, TH + .14, TZ + .42));
+  for (let k = 0; k < 5; k++) for (const p of A) {
+    const c = deck.pop(), o = makeDubCard(c); p.hand.push(c); p.hobjs.push(o); D.objs.push(o);
+    o.position.copy(SHOE_MOUTH); o.rotation.set(0, yawOf(p), Math.PI); SFX.card(); flyTo(o, fanSpot(p, k, 5), 300, { lift: .08 }); await wait(70);
+  }
+  await wait(900); pushState();
+  let cur = starter.alive ? starter : nextAlive(starter);
+  for (;;) {
+    const holders = alive().filter(p => p.hand.length);
+    if (!cur.hand.length && holders.length) { cur = nextAlive(cur); continue; }
+    const canCall = !!D.last && D.last.p !== cur, must = canCall && holders.length <= 1;
+    S.turn = cur; S.cam = { kind: 'seat', p: cur };
+    setStatus(must ? `${cur.name} è l'ultimo con le carte in mano: deve dubitare.` : `Tocca a ${cur.name}.`);
+    let v;
+    if (must || !cur.hand.length) { await wait(1300); v = { call: true }; }
+    else v = await ask(cur, 'dub', { hand: cur.hand.slice(), rank: D.rank, canCall, lastN: D.last ? D.last.cards.length : 0, lastEmpty: !!(D.last && !D.last.p.hand.length) }, { canCall }, 30000, () => ({ play: [0] }));
+    if (v.call && D.last) { const loser = await dubCall(cur); await dubPistol(loser); return loser; }
+    const idx = (v.play || [0]).slice().sort((x, y) => y - x), cards = [], objs = [];
+    for (const i of idx) { cards.push(cur.hand.splice(i, 1)[0]); objs.push(cur.hobjs.splice(i, 1)[0]); }
+    objs.forEach((o, j) => { SFX.card(); flyTo(o, PILE.clone().add(new THREE.Vector3((Math.random() - .5) * .14, (D.pileN + j) * .0012, (Math.random() - .5) * .1)), 420, { lift: .1, yaw: Math.random() * 6 }); });
+    D.pileN += cards.length; D.last = { p: cur, cards, objs };
+    cur.hobjs.forEach((o, i) => flyTo(o, fanSpot(cur, i, cur.hobjs.length), 250, { lift: .01 }));
+    const word = `${cards.length === 1 ? (D.rank === 11 ? 'Una' : 'Un') : ['', '', 'Due', 'Tre'][cards.length]} ${DRANK[D.rank][cards.length > 1 ? 1 : 0]}.`;
+    if (cur.ch) say(cur, word, cur.hand.length ? '' : 'ha finito le carte', false, 2000);
+    setStatus(`${cur.name} gioca ${cards.length === 1 ? 'una carta coperta' : cards.length + ' carte coperte'} e dichiara: ${word}`);
+    pushState(); await wait(1400);
+    cur = nextAlive(cur);
+  }
+}
+async function dubCall(caller) {
+  const D = S.D, L = D.last; SFX.gong(); S.turn = null;
+  setStatus(`${caller.name} dubita di ${L.p.name}!`); if (caller.ch) say(caller, 'Dubito!', '', true, 2400);
+  S.cam = { kind: 'pile' }; await wait(1500);
+  L.objs.forEach((o, j) => { SFX.flip(); flyTo(o, PILE.clone().add(new THREE.Vector3((j - (L.objs.length - 1) / 2) * .11, .05, -.12)), 500, { lift: .12, yaw: Math.PI, flip: 0 }); });
+  await wait(1200);
+  const lie = L.cards.some(c => c !== JOKER && BJ.rankOf(c) !== D.rank), loser = lie ? L.p : caller;
+  D.reveal = { cards: L.cards.slice(), lie, liar: L.p.name, caller: caller.name };
+  setStatus(lie ? `${L.p.name} mentiva! Il grilletto tocca a lui.` : `${L.p.name} diceva la verità. Il grilletto tocca a ${caller.name}.`);
+  if (L.p.ch) say(L.p, lie ? 'Accidenti…' : 'Visto? Onesto.', '', lie, 2400);
+  if (lie) SFX.lose(); else SFX.win();
+  pushState(); await wait(2800); return loser;
+}
+async function dubPistol(p) {
+  const g = getPistol(); S.cam = p.ch ? { kind: 'seat', p } : { kind: 'home' }; S.turn = p;
+  setStatus(`${p.name} prende la pistola. Colpo ${p.pulls + 1} di 6…`);
+  let arm = null, from, to;
+  if (p.ch) { arm = p.ch.arms[1]; from = arm.hand.clone(); to = new THREE.Vector3(.21, 1.4, -.1); arm.glove.add(g); g.visible = true; g.position.set(-.02, .06, .0); g.rotation.set(.2, Math.PI / 2, 0); await tween(800, e => arm.hand.lerpVectors(from, to, e)); }
+  for (let i = 0; i < 4; i++) { SFX.tick(); await wait(430); }
+  const fired = p.pulls === p.bullet; p.pulls++;
+  if (fired) { SFX.bang(); S.red = 1; setTimeout(() => { S.red = 0; }, 600); } else SFX.click();
+  await wait(fired ? 350 : 800);
+  if (arm) { g.visible = false; scene.add(g); tween(500, e => arm.hand.lerpVectors(to, arm.rest, e)); }
+  if (fired) await eliminate(p, 'Il colpo parte:');
+  else { setStatus(`Clic. ${p.name} è salvo, per ora: ${p.pulls} ${p.pulls === 1 ? 'colpo tirato' : 'colpi tirati'} su 6.`); if (p.ch) say(p, 'Fiuu…', '', false, 2200); pushState(); await wait(2000); }
+}

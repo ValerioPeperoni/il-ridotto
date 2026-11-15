@@ -1,6 +1,6 @@
 // Il telefono: ingresso, editor della maschera, comandi di gioco.
 import * as THREE from 'three';
-import { makeCharacter, disposeCharacter, normalizeLook, randomLook, PARTS, MASK_COLS, CLOTH_COLS, WIG_COLS, SKINS } from './chars.js';
+import { makeCharacter, disposeCharacter, normalizeLook, randomLook, EDIT_TABS, editorHTML, applyEdit } from './chars.js';
 import { joinRoom } from './net.js';
 
 const $ = s => document.querySelector(s), main = $('#main');
@@ -67,7 +67,7 @@ function previewStart() {
       if (!PV) return;
       const w = el.clientWidth, h = el.clientHeight;
       if (r.domElement.width !== Math.round(w * r.getPixelRatio()) || r.domElement.height !== Math.round(h * r.getPixelRatio())) { r.setSize(w, h, false); cam.aspect = w / Math.max(1, h); cam.updateProjectionMatrix(); }
-      if (PV.ch) { PV.ch.group.rotation.y = Math.sin(t / 1400) * .45 + PV.drag; PV.ch.head.rotation.x = -.05 + Math.sin(t / 900) * .05; }
+      if (PV.ch) { if (PV.ch.spin) PV.ch.spin.rotation.y = t / 60; PV.ch.group.rotation.y = Math.sin(t / 1400) * .45 + PV.drag; PV.ch.head.rotation.x = -.05 + Math.sin(t / 900) * .05; }
       r.render(scene, cam); PV.raf = requestAnimationFrame(loop);
     };
     previewLook(); PV.raf = requestAnimationFrame(loop);
@@ -81,7 +81,7 @@ function previewLook() {
 function previewStop() { if (!PV) return; cancelAnimationFrame(PV.raf); if (PV.ch) disposeCharacter(PV.ch); PV.r.dispose(); PV.r.domElement.remove(); PV = null; }
 
 // ---------------------------------------------------------------- viste
-function cardHTML(c) { if (c < 0) return '<div class="cd back"></div>'; const r = RANKS[c % 13], s = SUITS[Math.floor(c / 13) % 4]; return `<div class="cd${s === '♥' || s === '♦' ? ' r' : ''}"><span>${r}<small>${s}</small></span></div>`; }
+function cardHTML(c) { if (c < 0) return '<div class="cd back"></div>'; if (c === 100) return '<div class="cd r"><span>★<small style="font-size:11px">Jolly</small></span></div>'; const r = RANKS[c % 13], s = SUITS[Math.floor(c / 13) % 4]; return `<div class="cd${s === '♥' || s === '♦' ? ' r' : ''}"><span>${r}<small>${s}</small></span></div>`; }
 const cardTxt = c => RANKS[c % 13] + SUITS[Math.floor(c / 13) % 4];
 function whichView() {
   if (!code) return 'code'; if (!joined) return 'join'; if (!ST) return 'wait';
@@ -105,31 +105,45 @@ function build(v) {
   else if (v === 'lobby') {
     main.innerHTML = `<div id="stage"><div class="who" id="who"></div></div>
       <div class="row"><input class="field" id="name2" maxlength="14" autocomplete="off" value="${esc(me.name)}" style="flex:2 1 0"><button class="btn paper" data-do="dice">Sorpresa!</button></div>
-      <div class="tabs" id="tabs" role="tablist">${[['mask', 'Maschera'], ['hat', 'Cappello'], ['wig', 'Capelli'], ['dress', 'Abito'], ['acc', 'Extra']].map(([k, l]) => `<button role="tab" data-tab="${k}">${l}</button>`).join('')}</div>
+      <div class="tabs" id="tabs" role="tablist">${EDIT_TABS.map(([k, l]) => `<button role="tab" data-tab="${k}">${l}</button>`).join('')}</div>
       <div id="editor" style="display:grid; gap:10px"></div><div class="panel" id="info"></div>`;
     previewStart(); editor();
   }
 }
-const optBtns = (key, cur) => `<div class="opts">${PARTS[key].map(([id, l]) => `<button data-set="${key}" data-v="${id}" aria-pressed="${cur === id}">${l}</button>`).join('')}</div>`;
-const swBtns = (key, list, cur) => `<div class="sw">${list.map(([n, c], i) => `<button data-col="${key}" data-v="${i}" style="--c:${c}" aria-pressed="${cur === i}" aria-label="${n}"></button>`).join('')}</div>`;
 function editor() {
-  const L = me.look, ed = $('#editor'); if (!ed) return;
+  const ed = $('#editor'); if (!ed) return;
   document.querySelectorAll('#tabs button').forEach(b => b.setAttribute('aria-selected', String(b.dataset.tab === tab)));
-  if (tab === 'mask') ed.innerHTML = optBtns('mask', L.mask) + '<h3>COLORE DELLA MASCHERA</h3>' + swBtns('mc', MASK_COLS, L.mc) + '<h3>PELLE</h3>' + swBtns('sk', SKINS, L.sk);
-  else if (tab === 'hat') ed.innerHTML = optBtns('hat', L.hat) + '<h3>COLORE DEL CAPPELLO</h3>' + swBtns('hc', CLOTH_COLS, L.hc);
-  else if (tab === 'wig') ed.innerHTML = optBtns('wig', L.wig) + '<h3>COLORE</h3>' + swBtns('wc', WIG_COLS, L.wc);
-  else if (tab === 'dress') ed.innerHTML = '<h3>FANTASIA</h3>' + optBtns('pat', L.pat) + '<h3>COLORE PRINCIPALE</h3>' + swBtns('c1', CLOTH_COLS, L.c1) + '<h3>SECONDO COLORE</h3>' + swBtns('c2', CLOTH_COLS, L.c2) + '<h3>COLLETTO</h3>' + optBtns('collar', L.collar);
-  else ed.innerHTML = optBtns('acc', L.acc);
+  ed.innerHTML = editorHTML(me.look, tab);
 }
 function updateLobby() {
   const w = $('#who'); if (w) w.textContent = me.name;
   const info = $('#info'); if (!info || !ST) return;
   const c = ST.cfg, on = Object.keys(c.rules).filter(k => c.rules[k]);
-  info.innerHTML = `<h3>LA SERATA</h3><p><b>${FORMAT[c.format]}</b>${c.format === 'torneo' ? ' · ' + c.hands + ' mani' : ''} · banco ${c.bank === 'turno' ? 'a turno' : 'della casa'}</p>
-    ${on.length ? `<div class="tags">${on.map(k => `<span>${RULES[k].toUpperCase()}</span>`).join('')}</div>` : ''}
+  info.innerHTML = `<h3>LA SERATA</h3><p>${c.game === 'dubito' ? '<b>Dubito</b> · bugiardi e pistola: le tue carte le vedi solo tu, qui.' : `<b>Blackjack · ${FORMAT[c.format]}</b>${c.format === 'torneo' ? ' · ' + c.hands + ' mani' : ''} · banco ${c.bank === 'turno' ? 'a turno' : 'della casa'}`}</p>
+    ${on.length && c.game !== 'dubito' ? `<div class="tags">${on.map(k => `<span>${RULES[k].toUpperCase()}</span>`).join('')}</div>` : ''}
     <p class="muted">Al tavolo: ${ST.players.map(p => esc(p.name)).join(', ')}. La tua maschera è già sullo schermo grande; la partita la fa partire chi ha il computer.</p>`;
 }
+let dsel = new Set(), dselFor = 0;
+function dubHTML() {
+  const y = ST.you, d = ST.dub, pr = ST.prompt, RN = { 12: ['Re', 'Re'], 11: ['Regina', 'Regine'], 0: ['Asso', 'Assi'] }[d.rank], mine = pr && pr.kind === 'dub';
+  if (pr && pr.id !== promptSeen) { promptSeen = pr.id; promptEnd = pr.left ? Date.now() + pr.left : 0; if (navigator.vibrate) { try { navigator.vibrate(70); } catch (e) { /* niente vibrazione */ } } }
+  if (mine && dselFor !== pr.id) { dselFor = pr.id; dsel = new Set(); }
+  let h = `<div class="me"><div><h3>${esc(y.name).toUpperCase()}</h3><div class="chips">${y.alive ? d.hand.length : 'fuori'}<small>${y.alive ? 'CARTE IN MANO' : ''}</small></div></div><div class="muted" style="text-align:right">Giro ${d.round}<br>mazzetto: ${d.pile}</div></div>`;
+  h += `<div class="status">${esc(ST.status)}</div>`;
+  h += `<div class="felt"><div style="text-align:center"><h3>CARTA DEL TAVOLO</h3><div style="font:400 40px/1.1 var(--display);color:var(--gold)">${RN[1].toUpperCase()}</div></div>
+    <div class="tags" style="justify-content:center">${d.seats.map(s => `<span style="${s.alive ? '' : 'opacity:.4;text-decoration:line-through'}${s.me ? ';background:var(--gold);color:var(--ink)' : ''}">${esc(s.name).toUpperCase()} · ${s.n} · ${s.pulls}/6</span>`).join('')}</div></div>`;
+  if (d.reveal) h += `<div class="panel"><h3>CARTE SCOPERTE</h3><div class="line"><div class="cards">${d.reveal.cards.map(cardHTML).join('')}</div><span class="tot ${d.reveal.lie ? 'bust' : 'win'}">${d.reveal.lie ? esc(d.reveal.liar) + ' mentiva' : esc(d.reveal.liar) + ' era onesto'}</span></div></div>`;
+  if (y.alive && d.hand.length) h += `<h3>LE TUE CARTE${mine ? ' · TOCCANE DA 1 A 3' : ''}</h3><div class="handrow">${d.hand.map((c, i) => `<button class="cdb${dsel.has(i) && mine ? ' sel' : ''}" data-dc="${i}" ${mine ? '' : 'disabled'}>${cardHTML(c)}</button>`).join('')}</div>`;
+  if (mine) {
+    const k = dsel.size;
+    h += (promptEnd ? `<div class="timer"><i style="animation-duration:${Math.max(200, promptEnd - Date.now())}ms"></i></div>` : '') +
+      `<button class="btn gold big" data-do="dplay" ${k ? '' : 'disabled'}>${k ? 'Gioca ' + k + ' come ' + RN[k > 1 ? 1 : 0] : 'Scegli le carte'}<small>coperte: puoi anche mentire</small></button>` +
+      (pr.canCall && d.last ? `<button class="btn red big" data-do="dcall">Dubito!<small>${esc(d.last.name)} ha dichiarato ${d.last.n} ${RN[d.last.n > 1 ? 1 : 0]}</small></button>` : '');
+  } else h += `<p class="it" style="text-align:center">${!y.alive ? 'La tua maschera è in pezzi: resta a guardare.' : ST.turn && ST.turn !== y.pid ? 'Tocca a ' + esc(ST.turnName) + '.' : 'Guarda il tavolo.'}</p>`;
+  return h + `<div class="spacer"></div><div class="phr">${(ST.phrases || []).map((p, i) => `<button data-say="${i}">${esc(p)}</button>`).join('')}</div>`;
+}
 function gameHTML() {
+  if (ST.cfg.game === 'dubito' && ST.dub) return dubHTML();
   const y = ST.you, pr = ST.prompt, c = ST.cfg;
   if (pr && pr.id !== promptSeen) { promptSeen = pr.id; promptEnd = pr.left ? Date.now() + pr.left : 0; sheet = null; if (pr.kind !== 'bet' && navigator.vibrate) { try { navigator.vibrate(pr.kind === 'pact' ? [80, 60, 80] : 70); } catch (e) { /* niente vibrazione */ } } }
   let h = `<div class="me"><div><h3>${esc(y.name).toUpperCase()}${y.banker ? ' · TIENI IL BANCO' : ''}${c.format === 'ultimo' && y.alive && y.lives === 1 ? ' · MASCHERA INCRINATA' : ''}</h3><div class="chips">${y.alive ? fmt(y.chips) : 'fuori'}<small>${y.alive ? 'FICHES' : ''}</small></div></div>
@@ -187,7 +201,7 @@ function gameHTML() {
 function endHTML() {
   const r = ST.rank || [], mine = r.find(x => x.pid === ST.you.pid);
   return `<h2>${mine && mine.pos === 1 ? 'Hai vinto tu!' : esc(r[0] ? r[0].name : '') + ' vince'}</h2><p class="muted">${mine ? 'Sei arrivato ' + mine.pos + '° su ' + r.length + '.' : ''}</p>
-    <div class="rank">${r.map(x => `<div class="${x.pid === ST.you.pid ? 'me' : ''}"><span>${x.pos}.</span><span>${esc(x.name)}</span><b>${x.out ? 'fuori' : fmt(x.chips)}</b></div>`).join('')}</div>
+    <div class="rank">${r.map(x => `<div class="${x.pid === ST.you.pid ? 'me' : ''}"><span>${x.pos}.</span><span>${esc(x.name)}</span><b>${x.label || (x.out ? 'fuori' : fmt(x.chips))}</b></div>`).join('')}</div>
     <p class="muted">Rivincita o nuove regole: decide chi ha il computer. Tieni aperta questa pagina.</p>
     <div class="spacer"></div><div class="phr">${(ST.phrases || []).map((p, i) => `<button data-say="${i}">${esc(p)}</button>`).join('')}</div>`;
 }
@@ -201,8 +215,7 @@ main.addEventListener('click', e => {
   if (d.do === 'leave') { joined = false; me.pid = null; save(); render(); return; }
   if (d.do === 'dice') { me.look = normalizeLook(randomLook()); previewLook(); editor(); sendProfile(); return; }
   if (d.tab) { tab = d.tab; editor(); return; }
-  if (d.set) { me.look[d.set] = d.v; previewLook(); editor(); sendProfile(); return; }
-  if (d.col) { me.look[d.col] = +d.v; previewLook(); editor(); sendProfile(); return; }
+  if (d.set || d.col) { if (applyEdit(me.look, d)) { me.look = normalizeLook(me.look); previewLook(); editor(); sendProfile(); } return; }
   if (d.say !== undefined) { net.send({ t: 'say', i: +d.say }); b.style.opacity = .4; setTimeout(() => { b.style.opacity = ''; }, 1500); return; }
   if (!ST) return;
   const pr = ST.prompt;
@@ -212,6 +225,12 @@ main.addEventListener('click', e => {
   if (d.cheat) { net.send({ t: 'cheat', kind: d.cheat }); sheet = null; render(); return; }
   if (d.accuse) { net.send({ t: 'accuse', target: d.accuse }); sheet = null; render(); return; }
   if (!pr) return;
+  if (pr.kind === 'dub') {
+    if (d.dc !== undefined) { const i = +d.dc; if (dsel.has(i)) dsel.delete(i); else if (dsel.size < 3) dsel.add(i); render(); }
+    else if (d.do === 'dplay' && dsel.size) { net.send({ t: 'reply', id: pr.id, v: { play: [...dsel] } }); b.disabled = true; }
+    else if (d.do === 'dcall') { net.send({ t: 'reply', id: pr.id, v: { call: true } }); b.disabled = true; }
+    return;
+  }
   if (pr.kind === 'bet' && draft) {
     const max = Math.max(10, Math.min(pr.max, floor10(ST.you.chips))), min = Math.min(pr.min, max), f = draft;
     if (d.chip) f.bet = Math.min(max, f.bet + +d.chip);

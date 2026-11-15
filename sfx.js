@@ -39,5 +39,7 @@ export const SFX = {
   gong() { [98, 147.5, 196.4, 263, 331.7].forEach((f, i) => tone(f, 2.4 - i * .3, { vol: .16 - i * .02 })); noise(.3, 900, .8, { vol: .1 }); },
   fanfare() { [392, 523, 659, 784, 659, 784, 1047].forEach((f, i) => tone(f, .34, { type: 'triangle', vol: .15, at: i * .15 })); },
   crack() { noise(.18, 1800, .6, { vol: .3, type: 'highpass' }); tone(110, .3, { type: 'square', vol: .08, slide: -50 }); },
+  bang() { noise(.5, 500, .5, { vol: .7, type: 'lowpass' }); noise(.12, 2500, .7, { vol: .5 }); tone(70, .5, { type: 'sawtooth', vol: .3, slide: -40 }); },
+  click() { noise(.03, 3000, 4, { vol: .3 }); tone(1800, .03, { type: 'square', vol: .08 }); },
   tick() { tone(1200, .03, { type: 'square', vol: .04 }); },
 };
