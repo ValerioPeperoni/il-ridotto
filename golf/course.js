@@ -58,6 +58,29 @@ export const HOLES = [
     b: [[2.0, 0.9, 0.1], [1.2, -1.6, 0.12], [-1.0, -2.3, 0.1]],
     q: [[-2.3, -1.2], [-0.6, 1.4], [1.7, 1.0]],
   },
+  {
+    name: 'Il flipper', par: 3, tee: [0, 2.8], hole: [0, -2.8],
+    p: [[0, 0, 2.4, 6.4]],
+    w: [[-1.2, 3.2, 1.2, 3.2], [-1.2, -3.2, 1.2, -3.2], [-1.2, 3.2, -1.2, -3.2], [1.2, 3.2, 1.2, -3.2], [-1.2, -1.7, -0.38, -2.25], [1.2, -1.7, 0.38, -2.25]],
+    b: [[-0.6, 1.4, 0.11], [0.6, 1.4, 0.11], [0, 0.8, 0.11], [-0.8, 0.2, 0.11], [0.8, 0.2, 0.11], [-0.3, -0.4, 0.11], [0.3, -0.4, 0.11], [0, -1.0, 0.11], [-0.75, -1.1, 0.09], [0.75, -1.1, 0.09]],
+    m: [[0, -1.7, 0.4, 0.1, 'x', 0.45, 2.0]],
+    q: [[-0.9, 1.0], [0.9, -0.4]],
+  },
+  {
+    name: 'Il ponte stretto', par: 3, tee: [0, 2.7], hole: [0.8, -3.35], wp: [[0, -1.2]],
+    p: [[0, 2.6, 1.2, 1.4], [0, -1.2, 1.4, 0.9], [0.8, -3.35, 1.0, 0.9]],
+    r: [[0, 0.6, 0.34, 2.8, 0, 0, 0], [0.4, -2.3, 0.34, 1.75, 0, 0, -0.535]],
+    w: [[-0.6, 3.3, 0.6, 3.3], [-0.6, 3.3, -0.6, 1.9], [0.6, 3.3, 0.6, 1.9], [0.3, -3.8, 1.3, -3.8], [1.3, -3.8, 1.3, -2.9], [-0.7, -0.75, -0.7, -1.65], [0.7, -0.75, 0.7, -1.65]],
+    q: [[-0.45, -1.2], [0.45, -1.0]],
+  },
+  {
+    name: 'La scala del Conte', par: 3, tee: [0, 2.9], hole: [0, -3.3], wp: [[0, 0.0], [0, -2.9]],
+    p: [[0, 2.6, 1.4, 1.6], [0, -0.4, 1.6, 1.6, 0.3], [0, -3.2, 1.4, 1.2]],
+    r: [[0, 1.1, 1.0, 1.4, 0, 0.3, 0], [0, -1.9, 1.0, 1.4, 0.3, 0, 0]],
+    w: [[-0.7, 3.4, 0.7, 3.4], [-0.7, 3.4, -0.7, 1.8], [0.7, 3.4, 0.7, 1.8], [-0.8, 0.4, -0.8, -1.2], [0.8, 0.4, 0.8, -1.2], [-0.7, -3.8, 0.7, -3.8], [-0.7, -3.8, -0.7, -2.6], [0.7, -3.8, 0.7, -2.6]],
+    m: [[0, -0.4, 0.45, 0.12, 'x', 0.5, 1.3]],
+    q: [[-0.55, -0.6]],
+  },
 ];
 
 // ---------- texture ----------
@@ -146,7 +169,7 @@ export function buildHole(def, world, mats, scene) {
   for (const [x, z, len, sp] of def.s || []) {
     const b = new CANNON.Body({ mass: 0, type: CANNON.Body.KINEMATIC, material: mats.wall });
     b.addShape(new CANNON.Box(new CANNON.Vec3(len, 0.08, 0.04))); b.addShape(new CANNON.Box(new CANNON.Vec3(0.04, 0.08, len)));
-    b.position.set(x, 0.1, z); b.angularVelocity.set(0, sp, 0); add(b);
+    b.position.set(x, 0.1 + floorYAt(def, x, z), z); b.angularVelocity.set(0, sp, 0); add(b);
     const m = new THREE.Group();
     const arm = new THREE.Mesh(new THREE.BoxGeometry(len * 2, 0.16, 0.08), MATS.moving); m.add(arm); const arm2 = arm.clone(); arm2.rotation.y = Math.PI / 2; m.add(arm2);
     const hub = new THREE.Mesh(new THREE.CylinderGeometry(0.1, 0.1, 0.3, 16), MATS.wallTop); m.add(hub);
@@ -155,7 +178,7 @@ export function buildHole(def, world, mats, scene) {
   // blocchi che vanno avanti e indietro
   for (const [x, z, w, d, ax, amp, sp] of def.m || []) {
     const b = new CANNON.Body({ mass: 0, type: CANNON.Body.KINEMATIC, material: mats.wall });
-    b.addShape(new CANNON.Box(new CANNON.Vec3(w / 2, 0.1, d / 2))); b.position.set(x, 0.1, z); add(b);
+    b.addShape(new CANNON.Box(new CANNON.Vec3(w / 2, 0.1, d / 2))); b.position.set(x, 0.1 + floorYAt(def, x, z), z); add(b);
     const m = new THREE.Mesh(new THREE.BoxGeometry(w, 0.2, d), MATS.moving); m.castShadow = true; grp.add(m);
     movers.push({ body: b, mesh: m, slide: { x, z, ax, amp, sp } });
   }

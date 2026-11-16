@@ -34,7 +34,7 @@ Stato: v1 PUBBLICATA. Idee: più buche, buche con salite a più piani, giro dell
 
 ## Prossimi ritocchi (in ordine, uno per sessione)
 1. FATTO: personaggio che lancia nel bowling. Resta: replay dello strike.
-2. Minigolf: 3 buche nuove (giro della morte, due piani con tubo, flipper), personaggio accanto alla palla.
+2. FATTO: 3 buche nuove (flipper, ponte stretto, scala a due piani), bot più furbi. Resta: giro della morte, personaggio accanto alla palla.
 3. Ping pong: colpi speciali (fiammata con la barra carica), torneo a eliminazione.
 4. Biliardo: partita online 1 contro 1 (ognuno sul suo telefono).
 5. Liar's Bar rifatto: NON iniziare senza parlarne con Valerio (prima persona su ogni telefono, schermo = regia, modelli animati CC0).

@@ -93,7 +93,7 @@ function snd(type, v = 1) {
 }
 
 // ---------- stato ----------
-const G = { phase: 'lobby', players: [], hole: 0, nHoles: HOLES.length, built: null, time: 0, holeT: 0, firstIn: null, camPos: new THREE.Vector3(0, 8, 8), camLook: new THREE.Vector3(), fx: [] };
+const G = { phase: 'lobby', players: [], hole: 0, nHoles: 6, built: null, time: 0, holeT: 0, firstIn: null, camPos: new THREE.Vector3(0, 8, 8), camLook: new THREE.Vector3(), fx: [] };
 
 // ---------- palle con faccia e cappello ----------
 function hatMesh(kind, color) {
@@ -294,7 +294,7 @@ $('#menuBtn').onclick = () => { if (window.confirm('Tornare alla sala?')) $('#to
 function startGame() {
   G.players.forEach((p, i) => { removeBall(p); p.cards = []; p.total = 0; p.hat = HATS[i % HATS.length]; p.power = null; });
   $('#lobby').classList.add('hide'); $('#hud').classList.remove('hide');
-  G.hole = 0; G.order = HOLES.map((_, i) => i).slice(0, G.nHoles);
+  G.hole = 0; G.order = G.nHoles >= HOLES.length ? HOLES.map((_, i) => i) : [0, ...HOLES.map((_, i) => i).slice(1).sort(() => Math.random() - 0.5).slice(0, G.nHoles - 1)];
   loadHole(G.order[0]); renderScores();
 }
 function endHole() {
@@ -365,9 +365,17 @@ function rayClear(x0, z0, y, x1, z1) {
   return !ray.hasHit || G.players.some(q => q.body === ray.body);
 }
 // la palla passa? tre raggi: centro e i due bordi
+function floorY(x, z, from = 2) {
+  ray.reset(); world.raycastClosest(new CANNON.Vec3(x, from, z), new CANNON.Vec3(x, -1, z), { skipBackfaces: true }, ray);
+  if (!ray.hasHit || G.players.some(q => q.body === ray.body)) return null;
+  return ray.hitPointWorld.y;
+}
 function clearPath(p, x, z) {
   const a = p.body.position, dx = x - a.x, dz = z - a.z, l = Math.hypot(dx, dz) || 1, nx = -dz / l * BALL_R * 1.1, nz = dx / l * BALL_R * 1.1, y = a.y;
-  return rayClear(a.x, a.z, y, x, z) && rayClear(a.x + nx, a.z + nz, y, x + nx, z + nz) && rayClear(a.x - nx, a.z - nz, y, x - nx, z - nz);
+  if (!(rayClear(a.x, a.z, y, x, z) && rayClear(a.x + nx, a.z + nz, y, x + nx, z + nz) && rayClear(a.x - nx, a.z - nz, y, x - nx, z - nz))) return false;
+  // niente vuoto sotto il percorso
+  for (let t = 0.15; t < l; t += 0.15) { const fy = floorY(a.x + dx / l * t, a.z + dz / l * t, y + 0.3); if (fy == null || fy < y - 0.4) return false; }
+  return true;
 }
 function botThink(p, dt) {
   if (p.power && Math.random() < dt * 0.4) usePower(p);
@@ -379,10 +387,11 @@ function botThink(p, dt) {
   while (p.wp < path.length - 1 && (Math.hypot(path[p.wp][0] - a.x, path[p.wp][1] - a.z) < 0.55 || clearPath(p, path[p.wp + 1][0], path[p.wp + 1][1]))) p.wp++;
   let tgt = null;
   for (let k = path.length - 1; k >= p.wp; k--) if (clearPath(p, path[k][0], path[k][1])) { tgt = path[k]; break; }
-  let spread = 0.05;
-  if (!tgt) { tgt = path[p.wp]; spread = 0.35; }
+  let spread = 0.04;
+  if (!tgt) { tgt = path[p.wp]; spread = 0.1; }
   const dx = tgt[0] - a.x, dz = tgt[1] - a.z, d = Math.hypot(dx, dz), isHole = tgt === def.hole;
-  const speedNeed = clamp(d / 1.07 * (isHole ? 1.0 : 1.05) + (isHole ? 0.2 : 0.1), 0.45, MAX_SPEED);
+  const ty = floorY(tgt[0], tgt[1]) ?? 0, rise = Math.max(0, ty - (a.y - BALL_R));
+  const speedNeed = clamp(d / 1.07 * (isHole ? 1.0 : 1.05) + (isHole ? 0.2 : 0.1) + rise * 7, 0.45, MAX_SPEED);
   let pow = Math.pow(Math.max(0.01, speedNeed - 0.25) / MAX_SPEED, 1 / 1.25);
   const ang = Math.atan2(dz, dx) + rnd(-1, 1) * spread;
   pow = clamp(pow * rnd(0.9, 1.1), 0.05, 1);
