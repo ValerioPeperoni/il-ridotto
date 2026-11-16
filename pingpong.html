@@ -22,6 +22,10 @@ button{font:inherit;color:inherit;cursor:pointer}
 #score .s.a b{color:var(--a)} #score .s.b b{color:var(--b)}
 #score .srv{width:9px;height:9px;border-radius:50%;background:#fff;opacity:0}
 #score .srv.on{opacity:1;box-shadow:0 0 8px #fff}
+#score .ch{display:block;width:40px;height:6px;border-radius:3px;background:rgba(255,255,255,.15);overflow:hidden;font-style:normal}
+#score .ch i{display:block;height:100%;width:0;background:linear-gradient(90deg,#ffd166,#ff5a00);transition:width .3s}
+#score .ch.full{box-shadow:0 0 10px #ff5a00;animation:pul .6s infinite alternate}
+@keyframes pul{to{box-shadow:0 0 18px #ffb000}}
 #score .mid{background:#000;padding:0 8px;display:grid;place-items:center;font-size:13px;opacity:.85}
 #big{position:absolute;left:50%;top:36%;transform:translate(-50%,-50%) scale(.6);font-family:"IM Fell English SC",serif;font-size:min(14vw,104px);opacity:0;transition:opacity .25s,transform .35s cubic-bezier(.2,1.6,.4,1);white-space:nowrap;text-shadow:0 4px 18px #000,0 0 30px rgba(255,255,255,.4)}
 #big.show{opacity:1;transform:translate(-50%,-50%) scale(1)}
@@ -58,7 +62,7 @@ input.nmi{font:inherit;font-size:17px;color:var(--ink);background:rgba(0,0,0,.35
 <body>
 <canvas id="gl"></canvas>
 <div id="hud" class="hide">
-  <div id="score"><div class="s a"><span id="nA">-</span><i class="srv" id="srvA"></i><b id="ptA">0</b></div><div class="mid" id="setInfo">a 11</div><div class="s b"><b id="ptB">0</b><i class="srv" id="srvB"></i><span id="nB">-</span></div></div>
+  <div id="score"><div class="s a"><span id="nA">-</span><i class="ch"><i id="chA"></i></i><i class="srv" id="srvA"></i><b id="ptA">0</b></div><div class="mid" id="setInfo">a 11</div><div class="s b"><b id="ptB">0</b><i class="srv" id="srvB"></i><span id="nB">-</span><i class="ch"><i id="chB"></i></i></div></div>
   <div id="big"></div>
   <div id="shot"></div>
   <div id="tip"></div>
@@ -76,7 +80,7 @@ input.nmi{font:inherit;font-size:17px;color:var(--ink);background:rgba(0,0,0,.35
         <div class="code" id="code"></div>
         <div class="url" id="url"></div>
         <div class="net" id="net">Apro la sala…</div>
-        <p class="note">Tieni il telefono come una racchetta e colpisci quando la palla arriva. Il tempo del colpo decide la direzione, la forza decide quanto va lunga, verso l'alto = palla carica o pallonetto, verso il basso = schiacciata o taglio.</p>
+        <p class="note">Tieni il telefono come una racchetta e colpisci quando la palla arriva. Il tempo del colpo decide la direzione, la forza decide quanto va lunga, verso l'alto = palla carica o pallonetto, verso il basso = schiacciata o taglio. I colpi a tempo riempiono la barra 🔥: quando è piena, la prossima schiacciata è un colpo di fuoco.</p>
       </div>
       <div>
         <h2>Giocatori (massimo 2)</h2>

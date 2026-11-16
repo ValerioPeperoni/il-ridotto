@@ -441,7 +441,9 @@ function finishThrow() {
   big(text, cyan, 1700);
   renderSheet();
   send(p, { t: 'res', text, score: Sc.total(p.sheet) });
-  G.phase = 'sweep'; G.sweepT = 0; G.sweepDown = down;
+  G.sweepT = 0; G.sweepDown = down;
+  if (text === 'STRIKE!' && G.rec && G.rec.length > 20) { G.phase = 'replay'; G.repT = 0; G.repEnd = G.deck.pins.map(p => [p.position.clone(), p.quaternion.clone()]); $('#replay').classList.remove('hide'); }
+  else G.phase = 'sweep';
 }
 function headSplit(st) {
   if (st.includes(1) || st.length < 2) return false;
@@ -530,7 +532,7 @@ function frame(now) {
     // rotazione visiva
     const w = Math.hypot(b.wx + b.sx, b.wz + b.sz); if (w > 0.01) { _ax.set((b.wx + b.sx) / w, 0, (b.wz + b.sz) / w); _q.setFromAxisAngle(_ax, w * dt); ballMesh.quaternion.premultiply(_q); }
     ballMesh.position.set(b.x, L.R + b.y + (b.gutter ? -0.07 : 0), b.z);
-    if (b.done) { Pins.launchBall(deck, b); G.phase = 'deck'; }
+    if (b.done) { Pins.launchBall(deck, b); G.phase = 'deck'; G.rec = []; }
     else if (b.fell || b.stopped || (b.back && b.z > 1) || G.rollT > 12) { G.phase = 'deck'; G.noDeck = true; G.deckT = 0; }
   }
   if (G.phase === 'deck') {
@@ -538,8 +540,15 @@ function frame(now) {
     if (!G.noDeck) {
       Pins.stepDeck(deck, dt);
       const bb = deck.ball; if (bb) { ballMesh.position.copy(bb.position); ballMesh.quaternion.copy(bb.quaternion); }
+      if (G.rec && G.rec.length < 400) G.rec.push({ b: [ballMesh.position.clone(), ballMesh.quaternion.clone()], p: deck.pins.map(p => [p.position.x, p.position.y, p.position.z, p.quaternion.x, p.quaternion.y, p.quaternion.z, p.quaternion.w]) });
       if (Pins.settled(deck)) finishThrow();
     } else { G.deckT += dt; if (G.ball.fell) ballMesh.position.y -= dt * 2; if (G.deckT > 1.4) { G.noDeck = false; finishThrow(); } }
+  }
+  if (G.phase === 'replay') {
+    G.repT += dt; const k = Math.min(G.rec.length - 1, Math.floor(G.repT * 60 * 0.4)), f = G.rec[k];
+    ballMesh.position.copy(f.b[0]); ballMesh.quaternion.copy(f.b[1]);
+    f.p.forEach((q, i) => { const m = pinMeshes[i]; if (deck.pins[i].removed) return; m.position.set(q[0], q[1], q[2]); m.quaternion.set(q[3], q[4], q[5], q[6]); });
+    if (k >= G.rec.length - 1 && G.repT > 1) { G.phase = 'sweep'; $('#replay').classList.add('hide'); }
   }
   if (G.phase === 'sweep') {
     G.sweepT += dt;
@@ -549,7 +558,7 @@ function frame(now) {
     if (t > 2.5) { rake.visible = false; afterSweep(); }
   }
   // sincronizza i birilli
-  deck.pins.forEach((p, i) => { const m = pinMeshes[i]; m.visible = !p.removed; m.position.copy(p.position); m.quaternion.copy(p.quaternion); });
+  if (G.phase !== 'replay') deck.pins.forEach((p, i) => { const m = pinMeshes[i]; m.visible = !p.removed; m.position.copy(p.position); m.quaternion.copy(p.quaternion); });
   // palla in mano durante la mira (oscilla col braccio)
   if (G.phase === 'aim' || G.phase === 'lobby' || G.phase === 'idle') {
     const th = G.swing, sx = G.aimX + 0.2, sy = 1.25, sz = 0.9;
@@ -564,6 +573,7 @@ function updateCamera(dt) {
   if (G.phase === 'lobby') { const t = G.time * 0.1; pos.set(Math.sin(t) * 1.5, 1.6, 3.5); look.set(0, 0.4, -18); }
   else if (G.phase === 'aim' || G.phase === 'idle') { pos.set(G.aimX * 0.8 - 0.9, 1.95, 2.95); look.set(G.aimX * 0.3 + Math.tan(G.aimA) * 18, 0.1, -18.5); }
   else if (G.phase === 'roll') { const b = G.ball; const z = Math.max(-14.5, b.z + 2.6); pos.set(b.x * 0.6, 0.75 + Math.max(0, b.y) * 0.5, z); look.set(b.x * 0.4, 0.2 + b.y * 0.5, b.z - 4); }
+  else if (G.phase === 'replay') { const a = 0.9 - G.repT * 0.25; pos.set(Math.sin(a) * 1.3, 0.28, -18.6 + Math.cos(a) * 1.3); look.set(0, 0.18, -18.7); }
   else { pos.set(0.7, 1.05, -15.6); look.set(0, 0.12, -18.7); }
   const k = 1 - Math.exp(-dt * (G.phase === 'roll' ? 8 : 3));
   G.camPos.lerp(pos, k); G.camLook.lerp(look, k);

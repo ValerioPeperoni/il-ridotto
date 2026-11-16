@@ -21,6 +21,8 @@ button{font:inherit;color:inherit;cursor:pointer}
 #big{position:absolute;left:50%;top:38%;transform:translate(-50%,-50%) scale(.6);font-family:"IM Fell English SC",serif;font-size:min(16vw,120px);color:#fff;opacity:0;transition:opacity .25s,transform .35s cubic-bezier(.2,1.6,.4,1);text-shadow:0 0 12px var(--neon),0 0 34px var(--neon),0 0 60px #f0f;white-space:nowrap}
 #big.show{opacity:1;transform:translate(-50%,-50%) scale(1)}
 #big.cyan{text-shadow:0 0 12px var(--cyan),0 0 34px var(--cyan),0 0 60px #0ff}
+#replay{position:absolute;top:max(70px,calc(env(safe-area-inset-top) + 64px));right:max(14px,env(safe-area-inset-right));font:700 22px Arial,sans-serif;color:#ff3d9a;letter-spacing:3px;text-shadow:0 0 10px #f0f;animation:blink 1s steps(2) infinite}
+@keyframes blink{50%{opacity:.3}}
 #sheet{position:absolute;left:50%;bottom:max(8px,env(safe-area-inset-bottom));transform:translateX(-50%);background:rgba(8,6,16,.82);border:1px solid rgba(56,232,255,.3);border-radius:12px;padding:6px 8px;font-family:Arial,Helvetica,sans-serif;font-size:12px;max-width:98vw;overflow:auto}
 #sheet table{border-collapse:collapse}
 #sheet td{border:1px solid rgba(255,255,255,.12);text-align:center;min-width:30px;padding:1px 3px}
@@ -79,6 +81,7 @@ input.nmi{font:inherit;font-size:17px;color:var(--ink);background:rgba(0,0,0,.35
   <div id="who"><b>-</b><span></span></div>
   <div id="tip"></div>
   <div id="big"></div>
+  <div id="replay" class="hide">▶ REPLAY</div>
   <div id="sheet"></div>
   <div id="aimbox" class="hide">
     <div id="aimlane"><div class="pins">• • • •<br>• • •<br>• •<br>•</div><svg viewBox="0 0 110 230"><line id="aimline" x1="55" y1="216" x2="55" y2="20" stroke="#fff" stroke-width="2" stroke-dasharray="5 5" opacity=".8"/></svg><div class="ball"></div></div>

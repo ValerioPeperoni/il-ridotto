@@ -33,9 +33,9 @@ Stato: v1 PUBBLICATA. Idee: più buche, buche con salite a più piani, giro dell
 ## 5. Liar's Bar rifatto — da fare (prima persona su ogni telefono, schermo = regia, modelli animati CC0)
 
 ## Prossimi ritocchi (in ordine, uno per sessione)
-1. FATTO: personaggio che lancia nel bowling. Resta: replay dello strike.
+1. FATTO: personaggio che lancia nel bowling e replay al rallentatore dello strike.
 2. FATTO: 3 buche nuove (flipper, ponte stretto, scala a due piani), bot più furbi. Resta: giro della morte, personaggio accanto alla palla.
-3. Ping pong: colpi speciali (fiammata con la barra carica), torneo a eliminazione.
+3. FATTO: ping pong con barra carica e colpo di fuoco. Resta (idea): torneo a eliminazione.
 4. FATTO: biliardo online 1 contro 1 (codice o link, chi crea fa da arbitro, risincronizzazione se cade la linea).
 5. Liar's Bar rifatto: NON iniziare senza parlarne con Valerio (prima persona su ogni telefono, schermo = regia, modelli animati CC0).
 Da fare con Valerio: prova con telefoni veri (soglie di giroscopio e gesto in bowling e ping pong).

@@ -94,6 +94,8 @@ ballMesh.castShadow = true; scene.add(ballMesh);
 const TRAIL = 18, trailGeo = new THREE.BufferGeometry(); trailGeo.setAttribute('position', new THREE.BufferAttribute(new Float32Array(TRAIL * 3), 3));
 const trail = new THREE.Line(trailGeo, new THREE.LineBasicMaterial({ color: 0xffd0a0, transparent: true, opacity: 0.55 })); trail.frustumCulled = false; scene.add(trail);
 const trailPts = [];
+const fireLight = new THREE.PointLight(0xff5a00, 3, 1.5, 2); fireLight.visible = false; scene.add(fireLight);
+function updateCharge() { const c = G.charge || [0, 0]; for (const [i, id] of [[0, '#chA'], [1, '#chB']]) { const el = document.querySelector(id); if (el) { el.style.width = (c[i] * 100) + '%'; el.parentElement.classList.toggle('full', c[i] >= 1); } } }
 
 // ---------- suoni ----------
 let AC = null, master, noiseB;
@@ -116,7 +118,7 @@ function snd(type, v = 1) {
 // ---------- stato ----------
 const G = {
   phase: 'lobby', players: [], level: 1, target: 11, assist: true, score: [0, 0], server: 0, serves: 0, time: 0,
-  ball: null, lastHitter: -1, bounces: [], ideal: null, pendingHit: null, serving: false, toss: null,
+  ball: null, charge: [0, 0], fire: false, lastHitter: -1, bounces: [], ideal: null, pendingHit: null, serving: false, toss: null,
   camPos: new THREE.Vector3(0, 3, 5), camLook: new THREE.Vector3(0, 0.8, 0), crowd: null, stillT: 0,
 };
 // side: giocatore 0 = vicino (z>0), 1 = lontano (z<0)
@@ -231,7 +233,7 @@ $('#menuBtn').onclick = () => { if (window.confirm('Tornare alla sala?')) $('#to
 function startMatch() {
   G.players = G.players.filter(p => p.kind !== 'cpu');
   if (G.players.length === 1) { const b = BOTS[Math.floor(Math.random() * BOTS.length)]; G.players.push({ kind: 'cpu', name: b.name, look: b.look }); }
-  G.score = [0, 0]; G.server = Math.random() < 0.5 ? 0 : 1; G.serves = 0;
+  G.score = [0, 0]; G.server = Math.random() < 0.5 ? 0 : 1; G.serves = 0; G.charge = [0, 0]; G.fire = false; updateCharge();
   $('#lobby').classList.add('hide'); $('#hud').classList.remove('hide');
   $('#nA').textContent = G.players[0].name; $('#nB').textContent = G.players[1].name; $('#setInfo').textContent = 'a ' + G.target;
   setupAvatars(); updateScore();
@@ -261,7 +263,8 @@ function scheduleCpu(i) {
   const dt = gauss() * lv * (id.serve ? 0.4 : 1);
   let p = rnd(0.45, 0.85), vert = rnd(0.2, 0.8), aim = rnd(-0.55, 0.55);
   if (!id.serve) {
-    if (id.y > 1.08 && G.level >= 1 && Math.random() < 0.55) { p = rnd(1.0, 1.15); vert = -0.6; }
+    if ((G.charge || [0, 0])[i] >= 1 && G.level >= 1 && Math.random() < 0.7) { p = 1.05; vert = -0.5; }
+    else if (id.y > 1.08 && G.level >= 1 && Math.random() < 0.55) { p = rnd(1.0, 1.15); vert = -0.6; }
     else if (G.incomingSpeed > 11 && Math.random() < 0.4) { p = rnd(0.25, 0.4); vert = 0.85; }
     else if (Math.random() < 0.12) { p = rnd(0.35, 0.6); vert = -0.5; }
     else if (Math.random() < 0.08 && G.level >= 1) { p = 0.12; vert = 0.1; }
@@ -274,7 +277,7 @@ function swing(i, sw) {
   if (G.phase !== 'serve' && G.phase !== 'rally') return;
   const id = G.ideal; if (!id || id.who !== i) return;
   if (G.serving && !G.toss) { toss(); return; } // il primo gesto lancia la palla
-  const W = G.assist && G.players[i].kind !== 'cpu' ? 0.24 : 0.16;
+  const W = (G.assist && G.players[i].kind !== 'cpu' ? 0.24 : 0.16) * (G.fire ? 0.6 : 1);
   const d = (sw.time ?? G.time) - id.t;
   if (Math.abs(d) > W) { if (G.players[i].kind !== 'cpu') shotTip(d < 0 ? 'Troppo presto!' : 'Troppo tardi!'); return; }
   G.pendingHit = { who: i, at: Math.max(G.time, id.t + d), d, W, sw };
@@ -307,6 +310,11 @@ function doHit(h) {
   const tz = -s * depth;
   // flight < 0 = velocità media: il tempo di volo dipende dalla distanza
   if (flight < 0) flight = Math.hypot(tx - b.x, tz - b.z) / -flight;
+  // barra carica: i colpi a tempo la riempiono; piena + schiacciata (o colpo perfetto) = colpo di fuoco
+  G.charge[i] = Math.min(1, G.charge[i] + (q > 0.8 ? 0.25 : 0.1));
+  let fire = false;
+  if (G.charge[i] >= 1 && (type === 'smash' || q > 0.85) && type !== 'lob' && type !== 'drop') { fire = true; G.charge[i] = 0; flight /= 1.35; spin.wx *= 1.4; label = '🔥 COLPO DI FUOCO'; big('🔥 Fuoco!', 900); snd('cheer'); }
+  G.fire = fire; updateCharge();
   const v = solve({ x: b.x, y: b.y, z: b.z }, tx, tz, flight, spin);
   Object.assign(b, { vx: v.vx, vy: v.vy, vz: v.vz, wx: spin.wx, wy: spin.wy, wz: spin.wz });
   G.netHit = false; G.lastHitter = i; G.bounces = []; G.ideal = null; G.pendingHit = null; G.incomingSpeed = Math.hypot(v.vx, v.vy, v.vz);
@@ -380,7 +388,7 @@ function onEvent(e) {
 function point(w, why) {
   if (G.phase !== 'rally' && G.phase !== 'serve') return;
   if (G.let && why !== 'Fuori!') { G.let = false; }
-  G.phase = 'point'; G.ideal = null; G.pendingHit = null; G.cpuSwing = null;
+  G.phase = 'point'; G.ideal = null; G.pendingHit = null; G.cpuSwing = null; G.fire = false;
   G.score[w]++; updateScore();
   const hum = G.players[w].kind !== 'cpu';
   big(`${why}`, 1400); tip(`Punto a ${G.players[w].name}`);
@@ -455,6 +463,8 @@ function frame(now) {
       if (G.cpuSwing && G.time >= G.cpuSwing.at) { const c = G.cpuSwing; G.cpuSwing = null; swing(c.who, { ...c.sw, time: G.time, yaw: 1 }); }
     }
     ballMesh.position.set(b.x, b.y, b.z); ballMesh.visible = true;
+    ballMesh.material.emissive.setHex(G.fire ? 0xff4400 : 0xffa060); ballMesh.material.emissiveIntensity = G.fire ? 2.2 : 0.25; trail.material.color.setHex(G.fire ? 0xff6a00 : 0xffd0a0);
+    fireLight.visible = !!G.fire; fireLight.position.copy(ballMesh.position);
     trailPts.push(b.x, b.y, b.z); if (trailPts.length > TRAIL * 3) trailPts.splice(0, 3);
     const arr = trailGeo.attributes.position.array; for (let i = 0; i < TRAIL * 3; i++) arr[i] = trailPts[Math.min(i, trailPts.length - 1)] ?? 0;
     trailGeo.attributes.position.needsUpdate = true; trailGeo.setDrawRange(0, trailPts.length / 3);
