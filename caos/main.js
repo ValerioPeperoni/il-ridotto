@@ -759,7 +759,7 @@ requestAnimationFrame(frame);
   // riflessi dal cielo
   const pm = new THREE.PMREMGenerator(renderer); const envScene = new THREE.Scene(); envScene.add(sky.clone()); scene.environment = pm.fromScene(envScene, 0.04).texture; pm.dispose();
   $('#load').classList.add('hide'); $('#lobby').classList.remove('hide'); G.phase = 'lobby';
-  if (DEBUG) { window.__G = G; window.__cam = camera; window.__sim = simulate; }
+  if (DEBUG) { window.__G = G; window.__cam = camera; window.__sim = simulate; window.__setCam = (a) => { camPos.set(a[0], a[1], a[2]); camLook.set(a[3], a[4], a[5]); }; window.__HOLES = HOLES; window.__boom = (x, z) => boom(new THREE.Vector3(x, heightAt(x, z), z), 5, null); }
   if (Q.has('cam')) { $('#lobby').classList.add('hide'); const c = Q.get('cam').split(',').map(Number); G.phase = 'still'; camPos.set(c[0], c[1], c[2]); camLook.set(c[3], c[4], c[5]); updateCamera = () => { camera.position.copy(camPos); camera.lookAt(camLook); sky.position.copy(camera.position); placeSun(camLook, 60); }; }
   if (Q.has('auto')) {
     const n = +(Q.get('bots') || 3);

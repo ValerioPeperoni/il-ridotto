@@ -32,15 +32,16 @@ export function explosion(pos, r = 5, { shake } = {}) {
   sound('boom');
   shake && shake(0.9);
   // lampo
-  const flash = new THREE.Mesh(new THREE.SphereGeometry(1, 20, 14), new THREE.MeshBasicMaterial({ color: new THREE.Color(3, 2.2, 1.2), transparent: true, toneMapped: false }));
+  const flash = new THREE.Mesh(new THREE.SphereGeometry(1, 20, 14), new THREE.MeshBasicMaterial({ color: new THREE.Color(1.6, 0.8, 0.3), transparent: true, toneMapped: false, blending: THREE.AdditiveBlending, depthWrite: false }));
   flash.position.copy(pos); scene.add(flash);
   const light = new THREE.PointLight(0xffaa55, 120, r * 5, 2); light.position.copy(pos).y += 1.5; scene.add(light);
   let t = 0;
-  live.push(dt => { t += dt; const k = t / 0.35; flash.scale.setScalar(r * (0.3 + k * 0.9)); flash.material.opacity = Math.max(0, 1 - k); light.intensity = 120 * Math.max(0, 1 - t / 0.5); if (t > 0.5) { scene.remove(flash, light); flash.geometry.dispose(); flash.material.dispose(); return false; } return true; });
+  live.push(dt => { t += dt; const k = t / 0.18; flash.scale.setScalar(r * (0.15 + k * 0.45)); flash.material.opacity = Math.max(0, 0.8 - k); light.intensity = 120 * Math.max(0, 1 - t / 0.5); if (t > 0.5) { scene.remove(flash, light); flash.geometry.dispose(); flash.material.dispose(); return false; } return true; });
   // palla di fuoco
-  for (let i = 0; i < 26; i++) { const d = new THREE.Vector3(Math.random() - .5, Math.random() * 0.9 + 0.1, Math.random() - .5).normalize(); spawn({ pos: pos.clone().addScaledVector(d, 0.4), vel: d.multiplyScalar(4 + Math.random() * 7), color: new THREE.Color().setHSL(0.06 + Math.random() * 0.06, 1, 0.55), size: 1.6 + Math.random() * 1.6, grow: 1.8, life: 0.5 + Math.random() * 0.35, add: true, drag: 3.5 }); }
+  for (let i = 0; i < 26; i++) { const d = new THREE.Vector3(Math.random() - .5, Math.random() * 0.9 + 0.1, Math.random() - .5).normalize(); spawn({ pos: pos.clone().addScaledVector(d, 0.4), vel: d.multiplyScalar(4 + Math.random() * 7), color: new THREE.Color().setHSL(0.03 + Math.random() * 0.07, 1, 0.42).multiplyScalar(0.9), size: 1.3 + Math.random() * 1.4, grow: 2.0, life: 0.45 + Math.random() * 0.35, add: true, drag: 3.5 }); }
+  for (let i = 0; i < 10; i++) { const d = new THREE.Vector3(Math.random() - .5, Math.random() * 0.7 + 0.2, Math.random() - .5).normalize(); spawn({ pos: pos.clone().addScaledVector(d, 0.3), vel: d.multiplyScalar(3 + Math.random() * 4), color: new THREE.Color(0.55, 0.12, 0.03), tex: smokeTex, size: 1.8 + Math.random(), grow: 2.2, life: 0.7, op: 0.9, drag: 3 }); }
   // fumo
-  for (let i = 0; i < 18; i++) { const d = new THREE.Vector3(Math.random() - .5, Math.random() * 0.8 + 0.3, Math.random() - .5).normalize(); spawn({ pos: pos.clone().addScaledVector(d, 0.8), vel: d.multiplyScalar(2 + Math.random() * 3), color: new THREE.Color(0.25, 0.23, 0.22), tex: smokeTex, size: 2.2 + Math.random() * 1.5, grow: 2.6, life: 1.6 + Math.random() * 1.2, op: 0.75, g: -0.6, drag: 1.2 }); }
+  for (let i = 0; i < 18; i++) { const d = new THREE.Vector3(Math.random() - .5, Math.random() * 0.8 + 0.3, Math.random() - .5).normalize(); spawn({ pos: pos.clone().addScaledVector(d, 0.8), vel: d.multiplyScalar(2 + Math.random() * 3), color: new THREE.Color(0.18, 0.16, 0.15), tex: smokeTex, size: 2.0 + Math.random() * 1.5, grow: 2.8, life: 1.8 + Math.random() * 1.4, op: 0.85, g: -0.6, drag: 1.2 }); }
   // scintille
   for (let i = 0; i < 30; i++) { const d = new THREE.Vector3(Math.random() - .5, Math.random() * 0.8 + 0.2, Math.random() - .5).normalize(); spawn({ pos: pos.clone(), vel: d.multiplyScalar(10 + Math.random() * 12), color: new THREE.Color(1, 0.8, 0.4), tex: HARD, size: 0.18, grow: 0.3, life: 0.6 + Math.random() * 0.5, add: true, g: 12, drag: 0.6 }); }
   // zolle e sassi

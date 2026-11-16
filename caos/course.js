@@ -53,7 +53,7 @@ function build() {
       const td = Math.max(Math.abs(x - hole.tee[0]), Math.abs(z - hole.tee[1]));
       if (td < 6) { const th = teeH(hole), k = Math.min(1, (6 - td) / 2.5); h = h * (1 - k) + th * k; if (td < 3.5) s = S.TEE; }
       for (const [bx, bz, br] of hole.bunkers) { const d = Math.hypot(x - bx, z - bz) / br; if (d < 1.25) { h -= Math.max(0, 1 - d * d) * 0.7; if (d < 1) s = S.SAND; } }
-      for (const [px, pz, pr] of hole.ponds) { const d = Math.hypot(x - px, z - pz) / pr; if (d < 1.6) { const k = Math.max(0, 1 - d / 1.6); h = h * (1 - k * k) + (-1.2) * k * k; } }
+      for (const [px, pz, pr] of hole.ponds) { const d = Math.hypot(x - px, z - pz) / pr + (fbm(x * 0.15, z * 0.15, 2) - 0.5) * 0.3; if (d < 1.5) { const k = Math.min(1, (1.5 - d) / 0.55), e = k * k * (3 - 2 * k); h = h * (1 - e) + (-1.0) * e; } }
     }
     if (h < WATER + 0.05) s = S.WATER;
     HGT[j * NX + i] = h; SURF[j * NX + i] = s;
