@@ -14,7 +14,6 @@ export function createGolfView({ canvas, arrow, readout } = {}) {
   const actors = new Map();
   const camTarget = new THREE.Vector3(), camPos = new THREE.Vector3(), camLook = new THREE.Vector3();
   const tmp = new THREE.Vector3();
-  const mobile = true;
 
   function makeSky() {
     const sky = new THREE.Mesh(new THREE.SphereGeometry(700, 24, 12), new THREE.ShaderMaterial({
@@ -184,8 +183,8 @@ export function createGolfView({ canvas, arrow, readout } = {}) {
     const follow = myId && actors.get(myId);
     if (follow) {
       const forwardX = Math.sin(follow.cameraYaw), forwardZ = Math.cos(follow.cameraYaw);
-      const desiredLook = new THREE.Vector3(follow.pos.x + forwardX * 1.15, follow.pos.y + 1.25, follow.pos.z + forwardZ * 1.15);
-      const desiredPos = new THREE.Vector3(follow.pos.x - forwardX * 4.7, follow.pos.y + 2.6, follow.pos.z - forwardZ * 4.7);
+      const desiredLook = camTarget.set(follow.pos.x + forwardX * 1.15, follow.pos.y + 1.25, follow.pos.z + forwardZ * 1.15);
+      const desiredPos = tmp.set(follow.pos.x - forwardX * 4.7, follow.pos.y + 2.6, follow.pos.z - forwardZ * 4.7);
       if (!camPos.lengthSq()) { camPos.copy(desiredPos); camLook.copy(desiredLook); }
       const k = 1 - Math.exp(-dt * 8.5); camPos.lerp(desiredPos, k); camLook.lerp(desiredLook, k);
       camera.position.copy(camPos); camera.lookAt(camLook);
@@ -194,7 +193,7 @@ export function createGolfView({ canvas, arrow, readout } = {}) {
         readout.textContent = `PALLA · ${d < 10 ? d.toFixed(1).replace('.', ',') : Math.round(d)} m`;
       }
       if (arrow) {
-        const projected = follow.ballPos.clone().add(new THREE.Vector3(0, .5, 0)).project(camera);
+        const projected = tmp.copy(follow.ballPos); projected.y += .5; projected.project(camera);
         const visible = projected.z >= -1 && projected.z <= 1 && Math.abs(projected.x) < .82 && Math.abs(projected.y) < .82;
         arrow.style.display = visible ? 'none' : 'grid';
         if (!visible) {
