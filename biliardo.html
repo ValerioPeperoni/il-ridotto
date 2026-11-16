@@ -116,6 +116,7 @@ input.nmi{font:inherit;font-size:18px;color:var(--ink);background:rgba(0,0,0,.35
     <div class="row" id="modes">
       <button class="opt sel" data-m="bot"><b>Contro il bot</b><span>Palla 8, tu contro la casa</span></button>
       <button class="opt" data-m="duo"><b>Due giocatori</b><span>Sullo stesso schermo, a turno</span></button>
+      <button class="opt" data-m="online"><b>Online</b><span>Ognuno sul suo telefono, anche lontani</span></button>
       <button class="opt" data-m="free"><b>Allenamento</b><span>Senza regole, sposta la bianca quando vuoi</span></button>
     </div>
     <div class="row" style="margin-top:8px"><button class="chip" id="caosBtn" data-caos="1">🔥 Modalità Caos: gettoni sul panno con poteri (bomba, mazzata, buche larghe, calamita, fantasma)</button></div>
@@ -133,6 +134,10 @@ input.nmi{font:inherit;font-size:18px;color:var(--ink);background:rgba(0,0,0,.35
         <h2>Panno</h2><div class="row" id="felts"></div>
       </div>
     </div>
+    <div id="onlineBox" class="hide" style="margin-top:14px;padding:12px;border:1px solid rgba(217,178,95,.35);border-radius:12px">
+      <div class="row" style="align-items:center"><button class="chip" id="hostBtn">Crea una partita</button><span style="opacity:.7">oppure</span><input class="nmi" id="joinCode" maxlength="4" placeholder="CODICE" style="width:120px;text-transform:uppercase;letter-spacing:3px"><button class="chip" id="joinBtn">Entra</button><button class="chip hide" id="shareBtn">Condividi link</button></div>
+      <div id="onlineState" style="margin-top:8px;font-size:16px"></div>
+    </div>
     <button class="go" id="go">Gioca</button>
     <div style="display:flex;justify-content:space-between;align-items:center"><a class="back" href="./">← Torna al Ridotto</a><button class="chip hide" id="resume">Riprendi la partita</button></div>
   </div>
@@ -148,6 +153,7 @@ input.nmi{font:inherit;font-size:18px;color:var(--ink);background:rgba(0,0,0,.35
   </div>
 </div>
 
+<script src="vendor/peerjs.min.js"></script>
 <script type="importmap">{"imports":{"three":"./vendor/three.module.js","three/addons/":"./vendor/jsm/"}}</script>
 <script type="module" src="pool/game.js"></script>
 </body>

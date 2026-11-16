@@ -13,7 +13,7 @@ Design: 8-ball in prima persona (stile 8 Ball Pool ma 3D), fisica vera (striscia
 alto/basso/laterale, sponde, bocche delle buche), linea di mira con palla fantasma, barra potenza, effetto,
 vista dall'alto, bot (3 livelli), 2 giocatori stesso schermo, allenamento, personalizzazione stecca/palline/panno.
 Dopo: online 1v1 (ognuno sul suo telefono), modalità "caos" con poteri.
-Stato: v1 PUBBLICATA (bot 3 livelli, 2 giocatori, allenamento, personalizzazione) + Modalità Caos (gettoni: bomba, mazzata, buche larghe, calamita, fantasma). Prossimo: online 1v1.
+Stato: v1 PUBBLICATA (bot 3 livelli, 2 giocatori, allenamento, personalizzazione) + Modalità Caos (gettoni: bomba, mazzata, buche larghe, calamita, fantasma). Online 1 contro 1 fatto.
 
 ## 2. Bowling (bowling.html, site/bowling/*, telecomando.html)
 Pista con olio davanti e secco in fondo (effetto vero), birilli a corpi rigidi (cannon-es), punteggio completo,
@@ -36,6 +36,6 @@ Stato: v1 PUBBLICATA. Idee: più buche, buche con salite a più piani, giro dell
 1. FATTO: personaggio che lancia nel bowling. Resta: replay dello strike.
 2. FATTO: 3 buche nuove (flipper, ponte stretto, scala a due piani), bot più furbi. Resta: giro della morte, personaggio accanto alla palla.
 3. Ping pong: colpi speciali (fiammata con la barra carica), torneo a eliminazione.
-4. Biliardo: partita online 1 contro 1 (ognuno sul suo telefono).
+4. FATTO: biliardo online 1 contro 1 (codice o link, chi crea fa da arbitro, risincronizzazione se cade la linea).
 5. Liar's Bar rifatto: NON iniziare senza parlarne con Valerio (prima persona su ogni telefono, schermo = regia, modelli animati CC0).
 Da fare con Valerio: prova con telefoni veri (soglie di giroscopio e gesto in bowling e ping pong).

@@ -10,6 +10,7 @@ import * as P from './physics.js';
 import * as Ru from './rules.js';
 import * as Bot from './bot.js';
 import { CUES, SETS, FELTS, ballTexture, makeCue, feltTexture, woodTexture } from './looks.js';
+import { hostRoom, joinRoom, randomCode } from '../net.js';
 
 const { T } = P, R = T.R;
 const Q = new URLSearchParams(location.search);
@@ -332,13 +333,17 @@ const cueBall = () => balls.find(b => b.id === 0);
 const cur = () => G.players[G.match.turn];
 const isHumanTurn = () => G.match && !cur().bot;
 
-function newGame() {
-  balls = P.rack();
-  const names = [CFG.n0.trim() || 'Giocatore 1', CFG.mode === 'duo' ? (CFG.n1.trim() || 'Giocatore 2') : CFG.mode === 'bot' ? 'Il Banco' : '—'];
-  G.players = [{ name: names[0], bot: false }, { name: names[1], bot: CFG.mode === 'bot' }];
+function newGame(remote) {
+  const online = !!G.net;
+  balls = remote ? remote.balls.map(b => ({ ...P.makeBall(b.id, b.x, b.z) })) : P.rack();
+  let names = [CFG.n0.trim() || 'Giocatore 1', CFG.mode === 'duo' ? (CFG.n1.trim() || 'Giocatore 2') : CFG.mode === 'bot' ? 'Il Banco' : '—'];
+  if (online) names = remote ? remote.names : [CFG.n0.trim() || 'Giocatore 1', G.net.peerName || 'Ospite'];
+  G.players = [{ name: names[0], bot: false }, { name: names[1], bot: !online && CFG.mode === 'bot' }];
+  if (online) G.players[1 - G.net.local].remote = true;
+  if (online && G.net.role === 'host') netSend({ t: 'start', names, balls: balls.map(b => ({ id: b.id, x: b.x, z: b.z })) });
   G.match = Ru.newMatch(names, { practice: CFG.mode === 'free', first: 0 });
   G.potLog = []; G.spinA = G.spinB = 0; G.power = 0;
-  clearTokens(); G.held = [[], []]; G.dizzy = [0, 0]; G.mods = null; if (CFG.caos && CFG.mode !== 'free') for (let i = 0; i < 3; i++) spawnToken();
+  clearTokens(); G.held = [[], []]; G.dizzy = [0, 0]; G.mods = null; if (CFG.caos && CFG.mode !== 'free' && !online) for (let i = 0; i < 3; i++) spawnToken();
   syncBallMeshes(); setCue(CFG.cue);
   G.ang = 0; G.view = 'fp';
   $('#hud').classList.remove('hide'); $('#menu').classList.add('hide'); $('#over').classList.add('hide');
@@ -358,6 +363,7 @@ function startTurn(first) {
   updateHud(); showPowers();
   if (CFG.caos && G.dizzy[m.turn] > 0 && !cur().bot) say(`${cur().name} è ancora stordito dalla mazzata! 😵`, true);
   if (cur().bot) { botTurn(); return; }
+  if (cur().remote) { G.phase = 'remote'; G.placing = false; $('#place').classList.add('hide'); kitchenLine.visible = false; if (!first) say(`Tocca a ${cur().name}`); G.view = G.prefView || 'fp'; if (G.pendingShot) { const ps = G.pendingShot; G.pendingShot = null; applyShot(ps); } return; }
   if (m.ballInHand) {
     G.placing = true; kitchenLine.visible = !!m.kitchen;
     if (!first || !m.breakShot) say(m.kitchen ? 'Palla in mano: puoi spostare la bianca dietro la linea' : 'Palla in mano: trascina la bianca dove vuoi');
@@ -374,6 +380,7 @@ function shoot(power) {
   G.placing = false; $('#place').classList.add('hide'); kitchenLine.visible = false;
   const speed = 0.25 + 7.8 * Math.pow(power, 1.6);
   G.phase = 'stroke'; G.strokeT = 0; G.strokePow = power; G.lastShot = { speed, a: G.spinA, b: G.spinB, ang: G.ang };
+  if (G.net && !cur().remote) { const c = cueBall(); netSend({ t: 'shot', ...G.lastShot, p: power, cx: c.x, cz: c.z }); }
 }
 function doStrike() {
   const s = G.lastShot, cue = cueBall();
@@ -385,6 +392,7 @@ function doStrike() {
 
 function endShot() {
   G.mods = null; showMods();
+  if (G.net && G.net.role === 'guest') { G.phase = 'waitState'; tryState(); return; }
   if (CFG.caos) { while (G.tokens.length < 3 && Math.random() < 0.7) spawnToken(); }
   const m = G.match, ev = G.events;
   const r = Ru.judge(m, balls, ev);
@@ -393,6 +401,7 @@ function endShot() {
   if (r.msg) say(r.msg, r.foul);
   if (r.foul) snd('foul');
   updateHud();
+  if (G.net && G.net.role === 'host') netSend({ t: 'state', balls: balls.map(b => ({ id: b.id, x: b.x, z: b.z, on: b.on })), match: m, msg: r.msg || '', foul: !!r.foul, end: !!r.end });
   if (r.end) { setTimeout(() => gameOver(r.msg), 1400); G.phase = 'over'; return; }
   setTimeout(() => startTurn(false), r.msg ? 900 : 350);
   G.phase = 'wait';
@@ -481,7 +490,7 @@ fine.addEventListener('pointerdown', e => { if (!canAim()) return; fine.setPoint
 fine.addEventListener('pointermove', e => { if (fDrag == null) return; const d = e.clientX - fDrag; fDrag = e.clientX; G.ang += d * 0.0007; fine.style.backgroundPositionX = (parseFloat(fine.style.backgroundPositionX || 0) + d) + 'px'; if (Math.abs(d) > 2) snd('tick'); });
 fine.addEventListener('pointerup', () => fDrag = null);
 
-const canAim = () => G.phase === 'aim' && isHumanTurn();
+const canAim = () => G.phase === 'aim' && isHumanTurn() && !cur().remote;
 $('#place').onclick = () => { G.placing = false; $('#place').classList.add('hide'); kitchenLine.visible = false; G.view = G.prefView || 'fp'; };
 $('#bView').onclick = () => { G.view = G.view === 'fp' ? 'top' : 'fp'; if (!G.placing) G.prefView = G.view; };
 $('#bMenu').onclick = () => openMenu(true);
@@ -581,12 +590,12 @@ function updateCamera(dt) {
 // ---------- disegno di stecca e linee ----------
 function updateCueAndGuides(dt) {
   const cue = cueBall();
-  const aiming = (G.phase === 'aim' && !G.placing) || G.phase === 'botAim' || G.phase === 'stroke';
+  const aiming = (G.phase === 'aim' && !G.placing) || G.phase === 'botAim' || G.phase === 'stroke' || G.phase === 'remote';
   cueRig.visible = aiming && cue.on;
   if (cueRig.visible) {
     let back = 0.03 + G.power * 0.28;
     if (G.charge != null) back = 0.03 + G.charge * 0.28;
-    if (G.phase === 'aim') back += Math.sin(performance.now() / 260) * 0.006;
+    if (G.phase === 'aim' || G.phase === 'remote') back += Math.sin(performance.now() / 260) * 0.006;
     if (G.phase === 'stroke') {
       const t = G.strokeT, p = G.strokePow;
       back = t < 0.08 ? 0.03 + p * 0.28 : Math.max(-0.05, 0.03 + p * 0.28 - (t - 0.08) / 0.07 * (0.06 + p * 0.28));
@@ -656,6 +665,7 @@ function frame(now) {
     G.rollT += dt;
     if (!P.anyMoving(balls) && sinking.length === 0) { if (G.phase === 'settle') endSettle(); else endShot(); }
   }
+  netTick();
   placeMeshes(dt);
   updateSinking(dt);
   updateCueAndGuides(dt);
@@ -757,6 +767,71 @@ function showMods() {
 }
 document.addEventListener('click', e => { const b = e.target.closest('[data-pw]'); if (b && canAim()) usePower(b.dataset.pw); });
 
+
+// ---------- partita online: ognuno sul suo telefono ----------
+// Chi crea la partita fa da arbitro: decide i falli e manda la posizione esatta delle palle dopo ogni tiro.
+G.net = null;
+function netSend(m) { const n = G.net; if (!n) return; if (DEBUG) (G.sentlog = G.sentlog || []).push(m.t + (n.conn ? '' : '(noconn)')); if (n.role === 'host') { if (n.conn) n.room.send(n.conn, m); } else n.room.send(m); }
+function onNet(m) {
+  if (!m || m.t === 'ping') return;
+  if (DEBUG) (G.netlog = G.netlog || []).push(m.t + '@' + G.phase);
+  if (m.t === 'hello' && G.net.role === 'host') { G.net.peerName = (m.name || 'Ospite').slice(0, 14); $('#onlineState').textContent = `${G.net.peerName} è entrato: si gioca!`; setTimeout(() => newGame(), 700); return; }
+  if (m.t === 'start' && G.net.role === 'guest') { newGame(m); return; }
+  if (m.t === 'aim' && G.phase === 'remote') { G.ang = m.ang; G.spinA = m.a; G.spinB = m.b; setSpinDot(); G.power = m.p || 0; const c = cueBall(); if (m.cx != null && P.freeSpot(balls, m.cx, m.cz, c)) { c.x = m.cx; c.z = m.cz; } return; }
+  if (m.t === 'shot') { if (G.phase !== 'remote') { G.pendingShot = m; return; } applyShot(m); return; }
+  if (m.t === 'state') { G.pendingState = m; tryState(); return; }
+  if (m.t === 'resync' && G.net.role === 'guest') {
+    if (m.moving) return; // arriverà lo stato a fine tiro
+    if (!G.match) newGame({ names: m.names, balls: m.balls });
+    G.pendingState = { ...m, msg: '', foul: false, end: false }; G.phase = 'waitState'; tryState(); return;
+  }
+  if (m.t === 'again' && G.net.role === 'host') { newGame(); return; }
+}
+function applyShot(m) {
+  {
+    const c = cueBall(); c.on = true; c.x = m.cx; c.z = m.cz; ballMeshes.get(0).visible = true;
+    G.ang = m.ang; G.spinA = m.a; G.spinB = m.b; G.power = 0; G.shooter = G.match.turn;
+    G.phase = 'stroke'; G.strokeT = 0; G.strokePow = m.p; G.lastShot = { speed: m.speed, a: m.a, b: m.b, ang: m.ang };
+  }
+}
+function tryState() {
+  const st = G.pendingState; if (!st || G.phase !== 'waitState') return;
+  G.pendingState = null;
+  for (const b of st.balls) { const x = balls.find(q => q.id === b.id); Object.assign(x, { x: b.x, z: b.z, on: b.on, vx: 0, vz: 0, wx: 0, wy: 0, wz: 0, moving: false }); const mesh = ballMeshes.get(b.id); if (mesh) mesh.visible = b.on; }
+  G.match = st.match; if (st.msg) say(st.msg, st.foul); if (st.foul) snd('foul');
+  updateHud();
+  if (st.end) { G.phase = 'over'; setTimeout(() => gameOver(st.msg), 1400); return; }
+  G.phase = 'wait'; setTimeout(() => startTurn(false), st.msg ? 900 : 350);
+}
+let aimSent = 0;
+function netTick() {
+  if (!G.net || !G.match || cur().remote || (G.phase !== 'aim')) return;
+  const now = performance.now(); if (now - aimSent < 90) return; aimSent = now;
+  const c = cueBall(); netSend({ t: 'aim', ang: G.ang, a: G.spinA, b: G.spinB, p: G.charge != null ? G.charge : G.power, cx: c.x, cz: c.z });
+}
+function hostOnline() {
+  const code = randomCode(); G.net = { role: 'host', local: 0, code };
+  $('#onlineState').textContent = 'Apro la stanza…';
+  G.net.room = hostRoom(code, {
+    onOpen() { const url = new URL(`biliardo.html?join=${code}${Q.get('peer') ? '&peer=' + Q.get('peer') : ''}`, location.href).href; G.net.url = url; $('#onlineState').innerHTML = `Codice <b style="font-size:26px;letter-spacing:4px">${code}</b> · manda questo link al tuo amico:<br><a href="${url}" style="color:#ffd166;word-break:break-all">${url}</a>`; if (navigator.share) $('#shareBtn').classList.remove('hide'); },
+    onMsg(id, m) {
+      if (m && m.t === 'ping') { G.net.room.send(id, { t: 'pong' }); if (G.net.conn && G.net.conn !== id && !G.net.alive) G.net.conn = null; }
+      if (!G.net.conn) { G.net.conn = id; if (G.match && G.players[1].remote) netSend({ t: 'resync', names: G.match.names, balls: balls.map(b => ({ id: b.id, x: b.x, z: b.z, on: b.on })), match: G.match, moving: G.phase === 'roll' || G.phase === 'stroke' }); }
+      if (id === G.net.conn) { G.net.alive = true; onNet(m); }
+    },
+    onClose(id) { if (id === G.net.conn) { G.net.conn = null; G.net.alive = false; say('Il tuo amico si è scollegato: aspetto che rientri', true); } },
+    onError(t) { $('#onlineState').textContent = 'Non riesco ad aprire la stanza (' + t + ')'; },
+  });
+}
+function joinOnline(code) {
+  G.net = { role: 'guest', local: 1, code };
+  $('#onlineState').textContent = 'Mi collego…';
+  G.net.room = joinRoom(code, {
+    onState(s) { $('#onlineState').textContent = s === 'open' ? 'Collegato! Aspetto il tavolo…' : s === 'noroom' ? 'Non trovo la stanza: controlla il codice' : s === 'lost' ? 'Connessione persa, riprovo…' : 'Mi collego…'; if (s === 'open') G.net.room.send({ t: 'hello', name: CFG.n0.trim() || 'Ospite' }); },
+    onMsg: onNet,
+  });
+}
+
 // ---------- menu ----------
 function openMenu(inGame) {
   $('#menu').classList.remove('hide'); $('#resume').classList.toggle('hide', !inGame || !G.match || G.phase === 'over');
@@ -765,7 +840,7 @@ function openMenu(inGame) {
 function fillMenu() {
   const sel = (sel, attr, val) => document.querySelectorAll(sel).forEach(b => b.classList.toggle('sel', b.dataset[attr] === val));
   sel('#modes .opt', 'm', CFG.mode); const cz = $('#caosBtn'); if (cz) { cz.classList.toggle('sel', CFG.caos); cz.classList.toggle('hide', CFG.mode === 'free'); } sel('#levels .chip', 'l', CFG.level); sel('#guides .chip', 'g', CFG.guide);
-  $('#n1wrap').classList.toggle('hide', CFG.mode !== 'duo'); $('#lvwrap').classList.toggle('hide', CFG.mode !== 'bot');
+  $('#n1wrap').classList.toggle('hide', CFG.mode !== 'duo'); $('#onlineBox').classList.toggle('hide', CFG.mode !== 'online'); $('#go').classList.toggle('hide', CFG.mode === 'online'); $('#lvwrap').classList.toggle('hide', CFG.mode !== 'bot');
   $('#n0').value = CFG.n0; $('#n1').value = CFG.n1;
   $('#cues').innerHTML = CUES.map(c => `<button class="cuesw${c.id === CFG.cue ? ' sel' : ''}" data-c="${c.id}" style="background:${c.css}"><span>${c.name}</span></button>`).join('');
   $('#sets').innerHTML = SETS.map(s => `<button class="sw${s.id === CFG.set ? ' sel' : ''}" data-s="${s.id}" title="${s.name}" style="background:conic-gradient(${s.colors[1]} 0 25%,${s.colors[2]} 0 50%,${s.colors[3]} 0 75%,${s.colors[8]} 0)"></button>`).join('');
@@ -786,8 +861,11 @@ document.addEventListener('click', e => {
 $('#n0').oninput = e => { CFG.n0 = e.target.value; saveCfg(); };
 $('#n1').oninput = e => { CFG.n1 = e.target.value; saveCfg(); };
 $('#go').onclick = () => { ac(); saveCfg(); newGame(); };
+$('#hostBtn').onclick = () => { ac(); saveCfg(); if (!G.net) hostOnline(); };
+$('#joinBtn').onclick = () => { ac(); saveCfg(); const c = $('#joinCode').value.trim().toUpperCase(); if (c.length === 4 && !G.net) joinOnline(c); };
+$('#shareBtn').onclick = () => { try { navigator.share({ title: 'Biliardo al Ridotto', text: 'Sfidami a biliardo!', url: G.net.url }); } catch (e) { } };
 $('#resume').onclick = () => { $('#menu').classList.add('hide'); };
-$('#again').onclick = () => newGame();
+$('#again').onclick = () => { if (G.net && G.net.role === 'guest') { netSend({ t: 'again' }); $('#over').classList.add('hide'); } else newGame(); };
 $('#toMenu').onclick = () => { $('#over').classList.add('hide'); $('#hud').classList.add('hide'); G.match = null; openMenu(false); };
 
 // ---------- avvio ----------
@@ -796,8 +874,9 @@ balls = P.rack(); syncBallMeshes(); setCue(CFG.cue);
 fillMenu(); resize(); requestAnimationFrame(frame);
 G.camPos.set(3, 2, 2);
 
+if (Q.get('join')) { CFG.mode = 'online'; fillMenu(); $('#joinCode').value = Q.get('join').toUpperCase(); }
 if (DEBUG) {
-  window.__scene = scene; window.__cueRig = cueRig; window.__guides = guides; window.__composer = composer; window.__G = G; window.__balls = () => balls; window.__CFG = CFG; window.__new = newGame; window.__shoot = shoot;
+  window.__net = () => G.net; window.__scene = scene; window.__cueRig = cueRig; window.__guides = guides; window.__composer = composer; window.__G = G; window.__balls = () => balls; window.__CFG = CFG; window.__new = newGame; window.__shoot = shoot;
   window.__setView = v => { G.view = v; };
 }
 if (Q.has('auto')) {
