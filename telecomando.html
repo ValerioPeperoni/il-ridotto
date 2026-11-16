@@ -68,6 +68,15 @@ input{background:#fff;color:var(--ink);border:none;box-shadow:0 3px 0 rgba(0,0,0
 .spinrow button.sel{background:#3d7bff;color:#fff;box-shadow:0 3px 0 #2650b8}
 .hint{font-size:14px;text-align:center;opacity:.75}
 .links{flex-wrap:wrap;justify-content:center;font-size:13px}
+.cstate{font-size:20px;font-weight:700;min-height:28px;color:#ff5c9a}
+.citem{min-width:200px;padding:12px 20px;border-radius:999px;background:#fff;font-size:22px;font-weight:700;box-shadow:0 4px 0 rgba(0,0,0,.15)}
+.citem.on{background:#ffcf3a;animation:pulse 1s infinite}
+@keyframes pulse{50%{transform:scale(1.06)}}
+.cpad{display:flex;width:100%;justify-content:space-around;align-items:center;margin-top:auto;margin-bottom:10px}
+#joy{width:min(42vw,170px);height:min(42vw,170px);border-radius:50%;background:rgba(61,123,255,.15);border:4px solid #fff;position:relative;touch-action:none}
+#joy i{position:absolute;left:50%;top:50%;width:44%;height:44%;margin:-22% 0 0 -22%;border-radius:50%;background:#3d7bff;box-shadow:0 4px 0 #2650b8}
+#cBtn{width:min(38vw,150px);height:min(38vw,150px);border-radius:50%;background:var(--me);color:#fff;font-size:22px;font-weight:700;border:6px solid #fff;box-shadow:0 6px 0 rgba(0,0,0,.18);touch-action:none;text-shadow:0 2px 3px rgba(0,0,0,.3)}
+#cBtn.on{transform:scale(.93);filter:brightness(1.2)}
 </style>
 </head>
 <body>
@@ -108,6 +117,17 @@ input{background:#fff;color:var(--ink);border:none;box-shadow:0 3px 0 rgba(0,0,0
   <div id="pLast" class="state"></div>
   <div class="links"><button id="hand">Destro</button><button id="pFinger">Senza sensori? Usa il dito</button></div>
 </div>
+<div class="scr hide" id="caos">
+  <div class="top"><b id="cTitle">Golf Caos</b><span class="state" id="cInfo"></span></div>
+  <div id="cState" class="cstate"></div>
+  <button id="cItem" class="citem">nessun oggetto</button>
+  <div class="cpad">
+    <div id="joy"><i></i></div>
+    <button id="cBtn">TIRA</button>
+  </div>
+  <div class="hint">Muoviti con la levetta. Vicino alla palla: levetta di lato = mira, tieni premuto e lascia per tirare. Lontano dalla palla il tasto dà una mazzata a chi è vicino!</div>
+</div>
+
 <div class="scr hide" id="golf">
   <div class="top"><b id="gTitle">Minigolf</b><span class="state" id="gInfo"></span></div>
   <div id="gState" style="font-size:24px;font-weight:700;min-height:32px"></div>

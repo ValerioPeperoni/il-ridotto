@@ -31,7 +31,7 @@ $('#enter').onclick = async () => {
     onMsg: onMsg,
   });
 };
-function show(id) { for (const s of ['join', 'wait', 'bowl', 'pong', 'golf']) $('#' + s).classList.toggle('hide', s !== id); }
+function show(id) { for (const s of ['join', 'wait', 'bowl', 'pong', 'golf', 'caos']) $('#' + s).classList.toggle('hide', s !== id); }
 let wake = null;
 async function keepAwake() { try { if (!wake && navigator.wakeLock) { wake = await navigator.wakeLock.request('screen'); wake.addEventListener('release', () => { wake = null; }); } } catch (e) { } }
 document.addEventListener('visibilitychange', () => { if (!document.hidden) keepAwake(); });
@@ -39,6 +39,7 @@ document.addEventListener('visibilitychange', () => { if (!document.hidden) keep
 function onMsg(m) {
   if (m.t === 'sync') { net && net.send({ t: 'sync', h: m.h }); return; }
   if (m.t === 'golf') { game = 'golf'; golfState(m); return; }
+  if (m.t === 'caos') { game = 'caos'; caosState(m); return; }
   if (m.t === 'pong') { game = 'pong'; show('pong'); $('#pScore').textContent = `${m.score[0]} - ${m.score[1]}`; $('#pInfo').textContent = m.serving ? 'Tocca a te battere: colpisci quando la palla scende' : `contro ${m.vs}`; if (m.serving) vibrate(50); return; }
   if (m.t === 'hi') { game = m.game || 'bowling'; $('#waitT').textContent = `Ciao ${m.name}! Aspetta che parta la partita`; color = m.color || color; document.documentElement.style.setProperty('--me', color); }
   else if (m.t === 'full' || m.t === 'kicked') { $('#waitT').textContent = m.text || 'Sei stato tolto dalla sala'; }
@@ -266,3 +267,38 @@ gPad.addEventListener('pointerup', e => {
   if (v.l < 8) return;
   if (net) net.send({ t: 'gshot', ang: v.ang, pow: v.pow }); vibrate(30);
 });
+
+
+// ---------- Golf Caos: levetta + tasto + oggetto ----------
+let joyV = { x: 0, y: 0 }, joySent = 0, lastCaos = {};
+const joy = $('#joy'), knob = joy.querySelector('i');
+function joyFrom(e) {
+  const r = joy.getBoundingClientRect(), cx = r.left + r.width / 2, cy = r.top + r.height / 2, R = r.width / 2;
+  let x = (e.clientX - cx) / R, y = (e.clientY - cy) / R; const l = Math.hypot(x, y); if (l > 1) { x /= l; y /= l; }
+  joyV = { x, y: -y }; knob.style.transform = `translate(${x * R * 0.6}px,${y * R * 0.6}px)`; sendJoy();
+}
+function sendJoy(force) { const now = performance.now(); if (!force && now - joySent < 50) return; joySent = now; net && net.send({ t: 'joy', x: +joyV.x.toFixed(2), y: +joyV.y.toFixed(2) }); }
+joy.addEventListener('pointerdown', e => { joy.setPointerCapture(e.pointerId); joyFrom(e); });
+joy.addEventListener('pointermove', e => { if (e.buttons || e.pointerType === 'touch') joyFrom(e); });
+const joyEnd = () => { joyV = { x: 0, y: 0 }; knob.style.transform = ''; sendJoy(true); };
+joy.addEventListener('pointerup', joyEnd); joy.addEventListener('pointercancel', joyEnd);
+setInterval(() => { if (game === 'caos' && (joyV.x || joyV.y)) sendJoy(true); }, 120);
+const cBtn = $('#cBtn');
+cBtn.addEventListener('pointerdown', e => { e.preventDefault(); cBtn.setPointerCapture(e.pointerId); cBtn.classList.add('on'); vibrate(15); net && net.send({ t: 'btn', on: true }); });
+const cUp = () => { cBtn.classList.remove('on'); net && net.send({ t: 'btn', on: false }); };
+cBtn.addEventListener('pointerup', cUp); cBtn.addEventListener('pointercancel', cUp); cBtn.addEventListener('contextmenu', e => e.preventDefault());
+$('#cItem').onclick = () => { net && net.send({ t: 'use' }); vibrate(30); };
+function caosState(m) {
+  if (m.phase === 'lobby') { show('wait'); $('#waitT').textContent = 'Aspetta che parta la partita'; return; }
+  show('caos');
+  document.documentElement.style.setProperty('--me', m.color || color);
+  $('#cTitle').textContent = `Buca ${m.hole}`;
+  $('#cInfo').textContent = `${m.strokes} colpi · ${m.score} punti`;
+  const st = { frozen: '❄️ Congelato!', ko: '💫 Sei a terra!', done: '⛳ In buca!', addr: 'Mira e tira', charge: 'Lascia per tirare!' }[m.state] || (m.near ? 'Sei alla palla' : '');
+  $('#cState').textContent = st;
+  cBtn.textContent = m.near || m.state === 'addr' || m.state === 'charge' ? 'TIRA' : 'MAZZATA';
+  const it = $('#cItem'); it.textContent = m.item || 'nessun oggetto'; it.classList.toggle('on', !!m.item);
+  if (m.item && !lastCaos.item) vibrate(60);
+  if (m.state === 'ko' && lastCaos.state !== 'ko') vibrate([100, 50, 100]);
+  lastCaos = m;
+}
