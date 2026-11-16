@@ -73,6 +73,13 @@ input{font:inherit;font-size:22px;color:var(--ink);background:rgba(0,0,0,.4);bor
   <div class="links"><button id="swMode">Senza sensori? Usa il dito</button><button id="flip">Inverti effetto</button></div>
 </div>
 
+<div class="scr hide" id="pong">
+  <div class="top"><b id="pTitle">Ping pong</b><span class="state" id="pInfo">Tieni il telefono come una racchetta</span></div>
+  <div id="pScore" class="score" style="font-size:40px"></div>
+  <div id="pRacket" style="width:min(70vw,280px);height:min(70vw,280px);border-radius:50%;background:radial-gradient(circle at 40% 35%,#ff8a70,#b3261a 60%,#5a0f08);box-shadow:0 0 40px rgba(255,90,61,.5),inset 0 -12px 30px rgba(0,0,0,.5);display:grid;place-items:center;text-align:center;font-size:22px;font-weight:700;touch-action:none">Colpisci<br>quando arriva<br><small style="font-weight:400;font-size:15px">su = palla carica · giù = schiacciata</small></div>
+  <div id="pLast" class="state"></div>
+  <div class="links"><button id="hand">Destro</button><button id="pFinger">Senza sensori? Usa il dito</button></div>
+</div>
 <script src="vendor/peerjs.min.js"></script>
 <script type="module" src="telecomando.js"></script>
 </body>

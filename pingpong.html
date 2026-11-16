@@ -1,0 +1,116 @@
+<!doctype html>
+<html lang="it">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width,initial-scale=1,maximum-scale=1,user-scalable=no,viewport-fit=cover">
+<meta name="theme-color" content="#0a0c10">
+<title>Ping pong · Il Ridotto</title>
+<link rel="icon" href="favicon.svg" type="image/svg+xml">
+<link rel="stylesheet" href="fonts.css">
+<style>
+:root{--a:#ff5a3d;--b:#38e8ff;--ink:#f3f0e8;--bg:#0a0c10;--gold:#ffd166}
+*{box-sizing:border-box;-webkit-tap-highlight-color:transparent}
+html,body{margin:0;height:100%;background:var(--bg);color:var(--ink);font-family:"Cormorant Garamond",Georgia,serif;overflow:hidden;touch-action:none;user-select:none;-webkit-user-select:none}
+canvas#gl{position:fixed;inset:0;width:100%;height:100%}
+button{font:inherit;color:inherit;cursor:pointer}
+.hide{display:none!important}
+#hud{position:fixed;inset:0;pointer-events:none}
+#score{position:absolute;top:max(10px,env(safe-area-inset-top));left:50%;transform:translateX(-50%);display:flex;align-items:stretch;border-radius:14px;overflow:hidden;box-shadow:0 6px 24px rgba(0,0,0,.6);font-family:Arial,Helvetica,sans-serif}
+#score .s{display:flex;align-items:center;gap:10px;padding:6px 14px;background:rgba(15,15,20,.85)}
+#score .s b{font:700 34px Arial,sans-serif;min-width:34px;text-align:center}
+#score .s span{font-family:"Cormorant Garamond",serif;font-size:19px;font-weight:700}
+#score .s.a b{color:var(--a)} #score .s.b b{color:var(--b)}
+#score .srv{width:9px;height:9px;border-radius:50%;background:#fff;opacity:0}
+#score .srv.on{opacity:1;box-shadow:0 0 8px #fff}
+#score .mid{background:#000;padding:0 8px;display:grid;place-items:center;font-size:13px;opacity:.85}
+#big{position:absolute;left:50%;top:36%;transform:translate(-50%,-50%) scale(.6);font-family:"IM Fell English SC",serif;font-size:min(14vw,104px);opacity:0;transition:opacity .25s,transform .35s cubic-bezier(.2,1.6,.4,1);white-space:nowrap;text-shadow:0 4px 18px #000,0 0 30px rgba(255,255,255,.4)}
+#big.show{opacity:1;transform:translate(-50%,-50%) scale(1)}
+#tip{position:absolute;left:50%;bottom:max(14px,env(safe-area-inset-bottom));transform:translateX(-50%);font-size:18px;padding:6px 16px;border-radius:16px;background:rgba(10,10,16,.65);white-space:nowrap;max-width:96vw;overflow:hidden;text-overflow:ellipsis}
+#shot{position:absolute;right:max(12px,env(safe-area-inset-right));bottom:max(60px,calc(env(safe-area-inset-bottom) + 56px));text-align:right;font-size:17px;opacity:0;transition:opacity .3s}
+#shot.show{opacity:.95}
+#menuBtn{position:absolute;top:max(10px,env(safe-area-inset-top));right:max(10px,env(safe-area-inset-right));pointer-events:auto;width:40px;height:40px;border-radius:50%;border:1px solid rgba(255,255,255,.3);background:rgba(10,10,16,.7)}
+.ov{position:fixed;inset:0;display:flex;align-items:center;justify-content:center;background:radial-gradient(ellipse at center,rgba(10,12,18,.55),rgba(3,4,6,.92));overflow:auto;padding:14px}
+.card{width:min(900px,97vw);max-height:95vh;overflow:auto;background:linear-gradient(#141821,#0b0d12);border:1px solid rgba(255,90,61,.45);border-radius:18px;padding:16px 20px 20px;box-shadow:0 20px 60px #000}
+.card h1{margin:0;text-align:center;font-family:"IM Fell English SC",serif;font-weight:400;font-size:52px;color:#fff;text-shadow:0 0 18px rgba(255,90,61,.6)}
+.card .tag{text-align:center;font-style:italic;opacity:.8}
+.card h2{margin:14px 0 8px;font-size:14px;letter-spacing:3px;text-transform:uppercase;color:var(--gold);font-weight:600}
+.grid{display:grid;grid-template-columns:260px 1fr;gap:20px}
+@media (max-width:700px){.grid{grid-template-columns:1fr}.card h1{font-size:38px}}
+.qr{background:#fff;border-radius:12px;padding:8px;width:200px;height:200px;margin:0 auto}.qr svg{width:100%;height:100%}
+.code{text-align:center;font:700 34px Arial,sans-serif;letter-spacing:8px;margin-top:6px;color:var(--gold)}
+.url{text-align:center;font-size:13px;opacity:.7;word-break:break-all}
+.net{text-align:center;font-size:14px;opacity:.8;font-style:italic;margin-top:4px}
+.plist{display:flex;flex-direction:column;gap:6px}
+.pp{display:flex;align-items:center;gap:10px;padding:6px 10px;border-radius:12px;background:rgba(255,255,255,.04);border:1px solid rgba(255,255,255,.1)}
+.pp .dot{width:22px;height:22px;border-radius:50%}
+.pp b{font-size:19px;flex:1}.pp small{opacity:.7;font-style:italic}.pp button{border:none;background:none;font-size:18px;opacity:.6}
+.row{display:flex;gap:8px;flex-wrap:wrap;align-items:center}
+.chip{padding:6px 12px;border-radius:16px;border:1px solid rgba(255,255,255,.2);background:none;font-size:16px}
+.chip.sel{border-color:var(--a);background:rgba(255,90,61,.16)}
+.go{display:block;width:100%;margin-top:16px;padding:12px;border-radius:14px;border:1px solid var(--a);background:linear-gradient(#b8361e,#6a1a0c);font-size:26px;font-weight:700;color:#fff}
+.go:disabled{opacity:.4}
+.note{font-size:14px;opacity:.75;font-style:italic;margin:6px 0 0}
+a.back{color:var(--gold);opacity:.85;text-decoration:none;display:inline-block;margin-top:10px}
+input.nmi{font:inherit;font-size:17px;color:var(--ink);background:rgba(0,0,0,.35);border:1px solid rgba(255,255,255,.2);border-radius:10px;padding:6px 10px;width:150px}
+.final{font-size:22px;text-align:center}.final .w{font-size:34px;color:var(--gold)}
+</style>
+</head>
+<body>
+<canvas id="gl"></canvas>
+<div id="hud" class="hide">
+  <div id="score"><div class="s a"><span id="nA">-</span><i class="srv" id="srvA"></i><b id="ptA">0</b></div><div class="mid" id="setInfo">a 11</div><div class="s b"><b id="ptB">0</b><i class="srv" id="srvB"></i><span id="nB">-</span></div></div>
+  <div id="big"></div>
+  <div id="shot"></div>
+  <div id="tip"></div>
+  <button id="menuBtn">☰</button>
+</div>
+
+<div class="ov" id="lobby">
+  <div class="card">
+    <h1>Ping pong</h1>
+    <div class="tag">Il Ridotto · il tavolo in cortile</div>
+    <div class="grid">
+      <div>
+        <h2>Telefono = racchetta</h2>
+        <div class="qr" id="qr"></div>
+        <div class="code" id="code"></div>
+        <div class="url" id="url"></div>
+        <div class="net" id="net">Apro la sala…</div>
+        <p class="note">Tieni il telefono come una racchetta e colpisci quando la palla arriva. Il tempo del colpo decide la direzione, la forza decide quanto va lunga, verso l'alto = palla carica o pallonetto, verso il basso = schiacciata o taglio.</p>
+      </div>
+      <div>
+        <h2>Giocatori (massimo 2)</h2>
+        <div class="plist" id="plist"></div>
+        <div class="row" style="margin-top:8px">
+          <input class="nmi" id="localName" maxlength="14" placeholder="Nome">
+          <button class="chip" id="addLocal">+ Gioco qui (mouse o dito)</button>
+        </div>
+        <p class="note">Se siete in uno, l'avversario è il computer.</p>
+        <h2>Avversario computer</h2>
+        <div class="row" id="levels"><button class="chip" data-l="0">Facile</button><button class="chip sel" data-l="1">Medio</button><button class="chip" data-l="2">Campione</button></div>
+        <h2>Punti</h2>
+        <div class="row" id="pts"><button class="chip" data-p="5">a 5</button><button class="chip sel" data-p="11">a 11</button><button class="chip" data-p="21">a 21</button></div>
+        <h2>Aiuto sul tempo</h2>
+        <div class="row" id="assist"><button class="chip sel" data-a="1">Sì (più facile)</button><button class="chip" data-a="0">No</button></div>
+        <button class="go" id="start" disabled>Si gioca</button>
+        <a class="back" href="./">← Torna al Ridotto</a>
+      </div>
+    </div>
+  </div>
+</div>
+
+<div class="ov hide" id="end">
+  <div class="card" style="width:min(560px,94vw)">
+    <h1>Partita!</h1>
+    <div class="final" id="final"></div>
+    <button class="go" id="again">Rivincita</button>
+    <button class="chip" id="toLobby" style="margin-top:10px">Torna alla sala</button>
+  </div>
+</div>
+
+<script src="vendor/qrcode.js"></script>
+<script src="vendor/peerjs.min.js"></script>
+<script type="importmap">{"imports":{"three":"./vendor/three.module.js","three/addons/":"./vendor/jsm/"}}</script>
+<script type="module" src="pong/game.js"></script>
+</body>
+</html>

@@ -8,7 +8,7 @@ const COLORS = ['#ff3d9a', '#38e8ff', '#ffd166', '#7cff6b', '#b26bff', '#ff7b3d'
 const store = { get: k => { try { return localStorage.getItem(k); } catch (e) { return null; } }, set: (k, v) => { try { localStorage.setItem(k, v); } catch (e) { } } };
 let pid = store.get('ridotto-pid'); if (!pid) { pid = Math.random().toString(36).slice(2, 10); store.set('ridotto-pid', pid); }
 let color = store.get('ridotto-color') || COLORS[Math.floor(Math.random() * 6)];
-let net = null, myTurn = false, flipHook = store.get('ridotto-flip') === '1', fingerMode = false;
+let game = 'bowling', net = null, myTurn = false, flipHook = store.get('ridotto-flip') === '1', fingerMode = false;
 
 // ---------- schermata di ingresso ----------
 $('#name').value = store.get('ridotto-me') || '';
@@ -26,13 +26,15 @@ $('#enter').onclick = async () => {
     onMsg: onMsg,
   });
 };
-function show(id) { for (const s of ['join', 'wait', 'bowl']) $('#' + s).classList.toggle('hide', s !== id); }
+function show(id) { for (const s of ['join', 'wait', 'bowl', 'pong']) $('#' + s).classList.toggle('hide', s !== id); }
 let wake = null;
 async function keepAwake() { try { if (!wake && navigator.wakeLock) { wake = await navigator.wakeLock.request('screen'); wake.addEventListener('release', () => { wake = null; }); } } catch (e) { } }
 document.addEventListener('visibilitychange', () => { if (!document.hidden) keepAwake(); });
 
 function onMsg(m) {
-  if (m.t === 'hi') { $('#waitT').textContent = `Ciao ${m.name}! Aspetta che parta la partita`; color = m.color || color; document.documentElement.style.setProperty('--me', color); }
+  if (m.t === 'sync') { net && net.send({ t: 'sync', h: m.h }); return; }
+  if (m.t === 'pong') { game = 'pong'; show('pong'); $('#pScore').textContent = `${m.score[0]} - ${m.score[1]}`; $('#pInfo').textContent = m.serving ? 'Tocca a te battere: colpisci quando la palla scende' : `contro ${m.vs}`; if (m.serving) vibrate(50); return; }
+  if (m.t === 'hi') { game = m.game || 'bowling'; $('#waitT').textContent = `Ciao ${m.name}! Aspetta che parta la partita`; color = m.color || color; document.documentElement.style.setProperty('--me', color); }
   else if (m.t === 'full' || m.t === 'kicked') { $('#waitT').textContent = m.text || 'Sei stato tolto dalla sala'; }
   else if (m.t === 'turn') {
     myTurn = !!m.yours;
@@ -64,6 +66,7 @@ async function askMotion() {
     buf.push({ t: performance.now() / 1000, w: [r.beta * k, r.gamma * k, r.alpha * k] });
     while (buf.length && buf[0].t < buf[buf.length - 1].t - 3) buf.shift();
     if (holding) liveSwing();
+    if (game === 'pong') pongMotion(e);
   });
 }
 
@@ -156,3 +159,44 @@ pad.addEventListener('pointerup', e => {
   net && net.send({ t: 'throw', power: Math.min(1.25, vy / 3.4), hook: Math.max(-1, Math.min(1, vx / 2.2)), timing: Math.min(tm, 0.5), pull: 0 }); myTurn = false;
 });
 drawLane();
+
+
+// ---------- ping pong: il telefono è la racchetta ----------
+let gUp = [0, 1, 0], swingS = null, coolUntil = 0, lefty = store.get('ridotto-lefty') === '1';
+$('#hand').textContent = lefty ? 'Mancino' : 'Destro';
+$('#hand').onclick = () => { lefty = !lefty; store.set('ridotto-lefty', lefty ? '1' : '0'); $('#hand').textContent = lefty ? 'Mancino' : 'Destro'; };
+function pongMotion(e) {
+  const t = performance.now() / 1000, k = Math.PI / 180, r = e.rotationRate; if (!r) return;
+  const w = [r.beta * k, r.gamma * k, r.alpha * k], mag = Math.hypot(...w);
+  const ag = e.accelerationIncludingGravity, la = e.acceleration;
+  if (ag && ag.x != null && mag < 2) { const n = norm([ag.x, ag.y, ag.z]); gUp = norm(gUp.map((v, i) => v * 0.9 + n[i] * 0.1)); }
+  let lin = la && la.x != null ? [la.x, la.y, la.z] : ag && ag.x != null ? [ag.x - gUp[0] * 9.81, ag.y - gUp[1] * 9.81, ag.z - gUp[2] * 9.81] : [0, 0, 0];
+  if (!swingS && mag > 6 && t > coolUntil) swingS = { peak: mag, tPeak: t, wPeak: w, acc: [] };
+  if (swingS) {
+    swingS.acc.push({ t, up: dot(lin, gUp) });
+    if (mag > swingS.peak) { swingS.peak = mag; swingS.tPeak = t; swingS.wPeak = w; }
+    if (mag < swingS.peak * 0.55 || t - swingS.tPeak > 0.12) {
+      const s = swingS; swingS = null; coolUntil = t + 0.35;
+      const ups = s.acc.filter(a => a.t >= s.tPeak - 0.15 && a.t <= s.tPeak + 0.03);
+      const vert = Math.max(-1, Math.min(1, ups.reduce((a, b) => a + b.up, 0) / Math.max(1, ups.length) / 12));
+      const yaw = dot(s.wPeak, gUp) / s.peak * (lefty ? -1 : 1);
+      const twist = Math.max(-1, Math.min(1, s.wPeak[1] / s.peak));
+      const p = Math.max(0.1, Math.min(1.4, s.peak / 16));
+      net && net.send({ t: 'sw', ago: (performance.now() / 1000 - s.tPeak) * 1000, p, vert, yaw, twist });
+      $('#pLast').textContent = `Colpo: forza ${(p * 100).toFixed(0)}% · ${vert > 0.3 ? 'verso l\'alto' : vert < -0.3 ? 'verso il basso' : 'piatto'}`;
+      vibrate(25);
+    }
+  }
+}
+// col dito: strisciata sulla racchetta
+const pr = $('#pRacket'); let ps = null;
+pr.addEventListener('pointerdown', e => { pr.setPointerCapture(e.pointerId); ps = [{ t: performance.now(), x: e.clientX, y: e.clientY }]; });
+pr.addEventListener('pointermove', e => { if (!ps) return; const n = performance.now(); ps.push({ t: n, x: e.clientX, y: e.clientY }); while (ps.length > 2 && n - ps[0].t > 90) ps.shift(); });
+pr.addEventListener('pointerup', () => {
+  if (!ps || ps.length < 2) { ps = null; return; }
+  const a = ps[0], b = ps[ps.length - 1], dt = Math.max(0.01, (b.t - a.t) / 1000), H = innerHeight; ps = null;
+  const vx = (b.x - a.x) / dt / H, vy = (b.y - a.y) / dt / H, sp = Math.hypot(vx, vy); if (sp < 1) return;
+  net && net.send({ t: 'sw', ago: 0, p: Math.min(1.35, sp / 6), vert: Math.max(-1, Math.min(1, -vy / sp)), yaw: vx < 0 ? 1 : -1, twist: 0 });
+  vibrate(20);
+});
+$('#pFinger').onclick = () => { $('#pRacket').innerHTML = 'Striscia il dito<br>sulla racchetta<br><small style="font-weight:400;font-size:15px">veloce = forte · verso l\'alto = carica</small>'; };

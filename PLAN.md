@@ -20,6 +20,10 @@ Pista con olio davanti e secco in fondo (effetto vero), birilli a corpi rigidi (
 telefono come palla (giroscopio: forza dal braccio, effetto dal polso, tempismo del rilascio), dito/mouse come alternativa,
 bot, piste speciali (gobbe, muri mobili, corridoio, salto, girandola), 3/5/10 frame.
 Stato: v1 PUBBLICATA. Da provare con telefoni veri (soglie del giroscopio). Idee: avatar che lancia, replay dello strike.
-## 3. Ping pong — da fare (colpi: dritto, rovescio, taglio, pallonetto, schiacciata; tempismo)
+## 3. Ping pong (pingpong.html, site/pong/*, telecomando.html modalità racchetta)
+Pallina con Magnus/attrito/rimbalzi, personaggi del Ridotto, colpi: dritto, carico, schiacciata, pallonetto, taglio, smorzata;
+tempismo = direzione, forza = profondità (troppa = fuori), arbitro con regole vere (battuta, doppio rimbalzo, rete, a 11 ai vantaggi),
+computer a 3 livelli, 2 giocatori con vista TV, compensazione del ritardo del telefono.
+Stato: v1 PUBBLICATA. Da provare con telefoni veri (soglie del gesto). Idee: colpi speciali, tornei.
 ## 4. Minigolf delirio — da fare (mappe 3D, avatar, poteri, colpi tra giocatori)
 ## 5. Liar's Bar rifatto — da fare (prima persona su ogni telefono, schermo = regia, modelli animati CC0)
