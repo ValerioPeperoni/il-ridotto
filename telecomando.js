@@ -1,0 +1,158 @@
+// Telefono come controller di movimento (bowling; in futuro ping pong).
+import { joinRoom } from './net.js';
+
+const $ = s => document.querySelector(s);
+const Q = new URLSearchParams(location.search);
+const CODE = (Q.get('r') || '').toUpperCase();
+const COLORS = ['#ff3d9a', '#38e8ff', '#ffd166', '#7cff6b', '#b26bff', '#ff7b3d'];
+const store = { get: k => { try { return localStorage.getItem(k); } catch (e) { return null; } }, set: (k, v) => { try { localStorage.setItem(k, v); } catch (e) { } } };
+let pid = store.get('ridotto-pid'); if (!pid) { pid = Math.random().toString(36).slice(2, 10); store.set('ridotto-pid', pid); }
+let color = store.get('ridotto-color') || COLORS[Math.floor(Math.random() * 6)];
+let net = null, myTurn = false, flipHook = store.get('ridotto-flip') === '1', fingerMode = false;
+
+// ---------- schermata di ingresso ----------
+$('#name').value = store.get('ridotto-me') || '';
+function drawCols() { $('#cols').innerHTML = COLORS.map(c => `<button class="col${c === color ? ' sel' : ''}" data-c="${c}" style="background:${c};color:${c}"></button>`).join(''); }
+drawCols();
+$('#cols').onclick = e => { const b = e.target.closest('[data-c]'); if (!b) return; color = b.dataset.c; store.set('ridotto-color', color); drawCols(); document.documentElement.style.setProperty('--me', color); if (net) net.send({ t: 'color', color }); };
+document.documentElement.style.setProperty('--me', color);
+if (!CODE) $('#jstate').textContent = 'Manca il codice della sala: inquadra il QR sullo schermo.';
+$('#enter').onclick = async () => {
+  const name = $('#name').value.trim() || 'Giocatore'; store.set('ridotto-me', name);
+  await askMotion(); keepAwake();
+  show('wait'); $('#waitT').textContent = 'Mi collego…';
+  net = joinRoom(CODE, {
+    onState(s) { $('#netstate').textContent = s === 'open' ? 'Collegato' : s === 'noroom' ? 'Non trovo la sala: lo schermo è acceso?' : s === 'lost' ? 'Connessione persa, riprovo…' : 'Mi collego…'; if (s === 'open') net.send({ t: 'join', name, color, pid }); },
+    onMsg: onMsg,
+  });
+};
+function show(id) { for (const s of ['join', 'wait', 'bowl']) $('#' + s).classList.toggle('hide', s !== id); }
+let wake = null;
+async function keepAwake() { try { if (!wake && navigator.wakeLock) { wake = await navigator.wakeLock.request('screen'); wake.addEventListener('release', () => { wake = null; }); } } catch (e) { } }
+document.addEventListener('visibilitychange', () => { if (!document.hidden) keepAwake(); });
+
+function onMsg(m) {
+  if (m.t === 'hi') { $('#waitT').textContent = `Ciao ${m.name}! Aspetta che parta la partita`; color = m.color || color; document.documentElement.style.setProperty('--me', color); }
+  else if (m.t === 'full' || m.t === 'kicked') { $('#waitT').textContent = m.text || 'Sei stato tolto dalla sala'; }
+  else if (m.t === 'turn') {
+    myTurn = !!m.yours;
+    if (myTurn) {
+      show('bowl'); aimX = m.x ?? aimX; aimA = m.a ?? 0; drawLane();
+      $('#bTitle').textContent = 'Tocca a te!'; $('#bInfo').textContent = `Frame ${m.frame} · birilli in piedi: ${m.pins}` + (m.spec ? ' · ' + m.spec : '');
+      vibrate(60);
+    } else { show('wait'); $('#waitT').textContent = m.who ? `Tocca a ${m.who}` : 'Aspetta…'; }
+  }
+  else if (m.t === 'res') { $('#res').textContent = m.text; $('#score').textContent = `Punti: ${m.score}`; if (/STRIKE|SPARE/.test(m.text)) vibrate([80, 60, 160]); }
+  else if (m.t === 'end') { show('wait'); $('#waitT').textContent = m.text; $('#score').textContent = `I tuoi punti: ${m.score}`; }
+}
+function vibrate(p) { try { navigator.vibrate && navigator.vibrate(p); } catch (e) { } }
+
+// ---------- sensori ----------
+let motionOK = false;
+const buf = []; // campioni {t, w:[x,y,z] rad/s}
+async function askMotion() {
+  try {
+    if (typeof DeviceMotionEvent !== 'undefined' && typeof DeviceMotionEvent.requestPermission === 'function') {
+      const r = await DeviceMotionEvent.requestPermission(); if (r !== 'granted') return;
+    }
+  } catch (e) { return; }
+  addEventListener('devicemotion', e => {
+    const r = e.rotationRate; if (!r || r.alpha == null) return;
+    motionOK = true;
+    const k = Math.PI / 180;
+    // alpha: asse z (perpendicolare allo schermo), beta: asse x, gamma: asse y (lungo il telefono)
+    buf.push({ t: performance.now() / 1000, w: [r.beta * k, r.gamma * k, r.alpha * k] });
+    while (buf.length && buf[0].t < buf[buf.length - 1].t - 3) buf.shift();
+    if (holding) liveSwing();
+  });
+}
+
+// ---------- mira ----------
+let aimX = 0.18, aimA = 0;
+const lane = $('#lane');
+function drawLane() {
+  const f = 0.5 + aimX / 1.0541 * 0.76; lane.querySelector('.ball').style.left = (f * 100) + '%';
+  const l = $('#aimL'); l.setAttribute('x1', f * 100); l.setAttribute('x2', f * 100 + aimA * 900);
+}
+let dragL = false;
+const fromEv = e => { const r = lane.getBoundingClientRect(); aimX = Math.max(-0.44, Math.min(0.44, ((e.clientX - r.left) / r.width - 0.5) / 0.76 * 1.0541)); drawLane(); sendAim(); };
+lane.addEventListener('pointerdown', e => { lane.setPointerCapture(e.pointerId); dragL = true; fromEv(e); });
+lane.addEventListener('pointermove', e => { if (dragL) fromEv(e); });
+lane.addEventListener('pointerup', () => dragL = false);
+$('#aL').onclick = () => { aimA = Math.max(-0.06, aimA - 0.004); drawLane(); sendAim(); };
+$('#aR').onclick = () => { aimA = Math.min(0.06, aimA + 0.004); drawLane(); sendAim(); };
+let aimTimer = 0;
+function sendAim() { clearTimeout(aimTimer); aimTimer = setTimeout(() => net && net.send({ t: 'aim', x: aimX, a: aimA }), 40); }
+$('#flip').onclick = () => { flipHook = !flipHook; store.set('ridotto-flip', flipHook ? '1' : '0'); $('#flip').textContent = flipHook ? 'Effetto invertito ✓' : 'Inverti effetto'; };
+$('#flip').textContent = flipHook ? 'Effetto invertito ✓' : 'Inverti effetto';
+$('#swMode').onclick = () => { fingerMode = !fingerMode; $('#pad').classList.toggle('hide', !fingerMode); $('#hold').classList.toggle('hide', fingerMode); $('#swMode').textContent = fingerMode ? 'Usa i sensori' : 'Senza sensori? Usa il dito'; };
+
+// ---------- lancio col movimento ----------
+let holding = false, holdT0 = 0, lastSend = 0;
+const hold = $('#hold');
+hold.addEventListener('pointerdown', e => { e.preventDefault(); if (!myTurn) return; hold.setPointerCapture(e.pointerId); holding = true; holdT0 = performance.now() / 1000; hold.classList.add('on'); vibrate(20); if (!motionOK) { $('#bInfo').textContent = 'Non sento i sensori: usa il dito (link qui sotto)'; } });
+hold.addEventListener('pointerup', e => { if (!holding) return; holding = false; hold.classList.remove('on'); release(); });
+hold.addEventListener('pointercancel', () => { holding = false; hold.classList.remove('on'); });
+hold.addEventListener('contextmenu', e => e.preventDefault());
+
+const dot = (a, b) => a[0] * b[0] + a[1] * b[1] + a[2] * b[2];
+const norm = a => { const l = Math.hypot(...a) || 1; return a.map(x => x / l); };
+const cross = (a, b) => [a[1] * b[2] - a[2] * b[1], a[2] * b[0] - a[0] * b[2], a[0] * b[1] - a[1] * b[0]];
+function principalAxis(samples) {
+  // asse attorno a cui il telefono ruota di più (iterazione di potenza sulla matrice ω ωᵀ)
+  const M = [[0, 0, 0], [0, 0, 0], [0, 0, 0]];
+  for (const s of samples) for (let i = 0; i < 3; i++) for (let j = 0; j < 3; j++) M[i][j] += s.w[i] * s.w[j];
+  let v = [1, 0.3, 0.2];
+  for (let k = 0; k < 20; k++) v = norm([dot(M[0], v), dot(M[1], v), dot(M[2], v)]);
+  return v;
+}
+function analyse(samples) {
+  if (samples.length < 6) return null;
+  const u = principalAxis(samples);
+  let th = 0, sigma = 0, prev = samples[0].t; const th_t = [];
+  for (const s of samples) {
+    const r = dot(s.w, u);
+    if (!sigma && Math.abs(r) > 1.5) sigma = -Math.sign(r); // il primo movimento è all'indietro
+    th += r * (s.t - prev); prev = s.t; th_t.push({ t: s.t, r, th });
+  }
+  if (!sigma) sigma = 1;
+  return { u, sigma, th: th * sigma, rates: th_t.map(x => ({ t: x.t, r: x.r * sigma, th: x.th * sigma })) };
+}
+function liveSwing() {
+  const now = performance.now() / 1000;
+  const a = analyse(buf.filter(s => s.t >= holdT0));
+  if (!a) return;
+  const m = $('#meter i'); m.style.left = (50 + Math.max(-48, Math.min(48, a.th * 30))) + '%';
+  if (now - lastSend > 0.05) { lastSend = now; net && net.send({ t: 'swing', th: a.th }); }
+}
+function release() {
+  const s = buf.filter(x => x.t >= holdT0);
+  const a = analyse(s);
+  if (!a || !myTurn) { if (motionOK) $('#bInfo').textContent = 'Non ho sentito il movimento: riprova'; return; }
+  const tEnd = s[s.length - 1].t;
+  const lastR = a.rates.filter(x => x.t > tEnd - 0.25);
+  const peak = Math.max(0, ...lastR.map(x => x.r));
+  if (peak < 1.2) { $('#bInfo').textContent = 'Troppo piano: porta il braccio indietro e poi avanti, e lascia mentre vai avanti'; net && net.send({ t: 'swing', th: 0 }); return; }
+  // effetto (rotazione del polso attorno al telefono) e deviazione laterale
+  const y = norm([0, 1, 0].map((v, i) => v - a.u[i] * a.u[1]));
+  const w = norm(cross(a.u, y));
+  const tail = s.filter(x => x.t > tEnd - 0.15);
+  const twist = tail.reduce((acc, x) => acc + dot(x.w, y), 0) / tail.length;
+  const pull = tail.reduce((acc, x) => acc + dot(x.w, w), 0) / tail.length * a.sigma;
+  let hook = Math.max(-1, Math.min(1, twist / 6)); if (flipHook) hook = -hook;
+  const msg = { t: 'throw', power: Math.min(1.25, peak / 9.5), hook, timing: a.th, pull: Math.max(-0.05, Math.min(0.05, pull * 0.006)) };
+  net && net.send(msg); myTurn = false; vibrate(40);
+  $('#bInfo').textContent = `Potenza ${(msg.power * 100).toFixed(0)}% · effetto ${(hook * 100).toFixed(0)}`;
+}
+
+// ---------- lancio col dito ----------
+const pad = $('#pad'); let pg = null;
+pad.addEventListener('pointerdown', e => { if (!myTurn) return; pad.setPointerCapture(e.pointerId); pg = { y0: e.clientY, h: [{ t: performance.now(), x: e.clientX, y: e.clientY }] }; });
+pad.addEventListener('pointermove', e => { if (!pg) return; const n = performance.now(); pg.h.push({ t: n, x: e.clientX, y: e.clientY }); while (pg.h.length > 2 && n - pg.h[0].t > 160) pg.h.shift(); const th = -(e.clientY - pg.y0) / 160; net && net.send({ t: 'swing', th: Math.max(-1.5, Math.min(1.5, th)) }); });
+pad.addEventListener('pointerup', e => {
+  if (!pg) return; const h = pg.h, a = h[0], b = h[h.length - 1], dt = Math.max(0.016, (b.t - a.t) / 1000), H = innerHeight;
+  const vy = -(b.y - a.y) / dt / H, vx = (b.x - a.x) / dt / H; const tm = -(e.clientY - pg.y0) / 160; pg = null;
+  if (vy < 0.4) return;
+  net && net.send({ t: 'throw', power: Math.min(1.25, vy / 3.4), hook: Math.max(-1, Math.min(1, vx / 2.2)), timing: Math.min(tm, 0.5), pull: 0 }); myTurn = false;
+});
+drawLane();

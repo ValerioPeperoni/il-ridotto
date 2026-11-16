@@ -15,7 +15,11 @@ vista dall'alto, bot (3 livelli), 2 giocatori stesso schermo, allenamento, perso
 Dopo: online 1v1 (ognuno sul suo telefono), modalità "caos" con poteri.
 Stato: v1 PUBBLICATA (bot 3 livelli, 2 giocatori, allenamento, personalizzazione). Prossimo: online 1v1, modalità caos.
 
-## 2. Bowling — da fare (telefono come telecomando, stile Switch Sports: tempismo, rotazione polso, piste speciali)
+## 2. Bowling (bowling.html, site/bowling/*, telecomando.html)
+Pista con olio davanti e secco in fondo (effetto vero), birilli a corpi rigidi (cannon-es), punteggio completo,
+telefono come palla (giroscopio: forza dal braccio, effetto dal polso, tempismo del rilascio), dito/mouse come alternativa,
+bot, piste speciali (gobbe, muri mobili, corridoio, salto, girandola), 3/5/10 frame.
+Stato: v1 PUBBLICATA. Da provare con telefoni veri (soglie del giroscopio). Idee: avatar che lancia, replay dello strike.
 ## 3. Ping pong — da fare (colpi: dritto, rovescio, taglio, pallonetto, schiacciata; tempismo)
 ## 4. Minigolf delirio — da fare (mappe 3D, avatar, poteri, colpi tra giocatori)
 ## 5. Liar's Bar rifatto — da fare (prima persona su ogni telefono, schermo = regia, modelli animati CC0)
