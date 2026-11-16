@@ -27,11 +27,11 @@ $('#enter').onclick = async () => {
   await askMotion(); keepAwake();
   show('wait'); $('#waitT').textContent = 'Mi collego…';
   net = joinRoom(CODE, {
-    onState(s) { $('#netstate').textContent = s === 'open' ? 'Collegato' : s === 'noroom' ? 'Non trovo la sala: lo schermo è acceso?' : s === 'lost' ? 'Connessione persa, riprovo…' : 'Mi collego…'; if (s === 'open') net.send({ t: 'join', name, color, pid, look: myLook() }); },
+    onState(s) { $('#netstate').textContent = s === 'open' ? 'Collegato' : s === 'noroom' ? 'Non trovo la sala: lo schermo è acceso?' : s === 'lost' ? 'Connessione persa, riprovo…' : 'Mi collego…'; if (s === 'open') net.send({ t: 'join', name, color, pid, look: myLook(), wantView: want3D() }); },
     onMsg: onMsg,
   });
 };
-function show(id) { for (const s of ['join', 'wait', 'bowl', 'pong', 'golf', 'caos']) $('#' + s).classList.toggle('hide', s !== id); }
+function show(id) { for (const s of ['join', 'wait', 'bowl', 'pong', 'golf', 'caos']) $('#' + s).classList.toggle('hide', s !== id); const v = id === 'caos' && typeof V3 !== 'undefined' && V3; $('#cv3d').classList.toggle('hide', !v); $('#cvArrow').classList.toggle('hide', !v); }
 let wake = null;
 async function keepAwake() { try { if (!wake && navigator.wakeLock) { wake = await navigator.wakeLock.request('screen'); wake.addEventListener('release', () => { wake = null; }); } } catch (e) { } }
 document.addEventListener('visibilitychange', () => { if (!document.hidden) keepAwake(); });
@@ -40,6 +40,9 @@ function onMsg(m) {
   if (m.t === 'sync') { net && net.send({ t: 'sync', h: m.h }); return; }
   if (m.t === 'golf') { game = 'golf'; golfState(m); return; }
   if (m.t === 'caos') { game = 'caos'; caosState(m); return; }
+  if (m.t === 'cvl') { game = 'caos'; view3D().then(v => v && v.onLooks(m)); return; }
+  if (m.t === 'cv') { if (V3) V3.onSnap(m); return; }
+  if (m.t === 'cfx') { if (V3) V3.onFx(m); return; }
   if (m.t === 'pong') { game = 'pong'; show('pong'); $('#pScore').textContent = `${m.score[0]} - ${m.score[1]}`; $('#pInfo').textContent = m.serving ? 'Tocca a te battere: colpisci quando la palla scende' : `contro ${m.vs}`; if (m.serving) vibrate(50); return; }
   if (m.t === 'hi') { game = m.game || 'bowling'; $('#waitT').textContent = `Ciao ${m.name}! Aspetta che parta la partita`; color = m.color || color; document.documentElement.style.setProperty('--me', color); }
   else if (m.t === 'full' || m.t === 'kicked') { $('#waitT').textContent = m.text || 'Sei stato tolto dalla sala'; }
@@ -277,7 +280,7 @@ function joyFrom(e) {
   let x = (e.clientX - cx) / R, y = (e.clientY - cy) / R; const l = Math.hypot(x, y); if (l > 1) { x /= l; y /= l; }
   joyV = { x, y: -y }; knob.style.transform = `translate(${x * R * 0.6}px,${y * R * 0.6}px)`; sendJoy();
 }
-function sendJoy(force) { const now = performance.now(); if (!force && now - joySent < 50) return; joySent = now; net && net.send({ t: 'joy', x: +joyV.x.toFixed(2), y: +joyV.y.toFixed(2) }); }
+function sendJoy(force) { const now = performance.now(); if (!force && now - joySent < 50) return; joySent = now; const m = { t: 'joy', x: +joyV.x.toFixed(2), y: +joyV.y.toFixed(2) }; if (V3) m.cy = +V3.camYaw().toFixed(3); net && net.send(m); }
 joy.addEventListener('pointerdown', e => { joy.setPointerCapture(e.pointerId); joyFrom(e); });
 joy.addEventListener('pointermove', e => { if (e.buttons || e.pointerType === 'touch') joyFrom(e); });
 const joyEnd = () => { joyV = { x: 0, y: 0 }; knob.style.transform = ''; sendJoy(true); };
@@ -306,10 +309,25 @@ function caosState(m) {
   $('#cTitle').textContent = `Buca ${m.hole}`;
   $('#cInfo').textContent = `${m.strokes} colpi · ${m.score} punti`;
   const st = { frozen: '❄️ Congelato!', ko: '💫 Sei a terra!', done: '⛳ In buca!', addr: 'Mira e tira', charge: 'Lascia per tirare!' }[m.state] || (m.near ? 'Sei alla palla' : '');
-  $('#cState').textContent = st;
+  $('#cState').textContent = st; $('#cState').style.visibility = st ? '' : 'hidden';
   cBtn.innerHTML = m.near || m.state === 'addr' || m.state === 'charge' ? 'TIRA<br><small style="font-size:13px;font-weight:500">trascina giù<br>e lascia</small>' : 'MAZZATA';
   const it = $('#cItem'); it.textContent = m.item || 'nessun oggetto'; it.classList.toggle('on', !!m.item);
   if (m.item && !lastCaos.item) vibrate(60);
   if (m.state === 'ko' && lastCaos.state !== 'ko') vibrate([100, 50, 100]);
   lastCaos = m;
+}
+
+// ---------- Golf Caos: la propria visuale 3D sul telefono ----------
+let V3 = null, V3p = null;
+function want3D() { if (store.get('ridotto-3d') === '0') return false; try { const c = document.createElement('canvas'); return !!(c.getContext('webgl2') || c.getContext('webgl')); } catch (e) { return false; } }
+function view3D() {
+  if (V3p) return V3p;
+  if (!want3D()) return (V3p = Promise.resolve(null));
+  const ld = $('#cvLoad'); ld.classList.remove('hide');
+  V3p = import('./caos/phone-view.js').then(mod => {
+    $('#cv3d').classList.remove('hide'); $('#caos').classList.add('v3');
+    return mod.startPhoneView($('#cv3d'), { arrow: $('#cvArrow') }, p => { ld.querySelector('span').textContent = Math.round(p * 100) + '%'; });
+  }).then(v => { V3 = v; ld.classList.add('hide'); $('#cvArrow').classList.remove('hide'); return v; })
+    .catch(e => { console.error(e); ld.textContent = 'Visuale 3D non disponibile su questo telefono'; setTimeout(() => ld.classList.add('hide'), 3000); return null; });
+  return V3p;
 }
