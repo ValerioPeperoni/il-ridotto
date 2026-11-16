@@ -170,6 +170,7 @@ buildHall();
 
 // personaggi del camerino; il giocatore vicino, se umano, gioca in prima persona
 const avatars = [];
+const FP_BASE = new THREE.Quaternion().setFromEuler(new THREE.Euler(-0.35, 0.5, -0.45)), _pq = new THREE.Quaternion(), _pq2 = new THREE.Quaternion(), _pe = new THREE.Euler(), _pv = new THREE.Vector3();
 const fpRacket = makeRacket(0xe8243c); fpRacket.visible = false; camera.add(fpRacket); scene.add(camera);
 function setupAvatars() {
   for (const a of avatars) a.av.dispose();
@@ -208,7 +209,13 @@ function animateAvatars(dt) {
     a.av.update(dt);
   });
   // racchetta in prima persona: a destra in basso, spazza da destra a sinistra quando colpisci
-  if (fpRacket.visible) {
+  if (fpRacket.visible && G.pq && G.pq[0]) {
+    // racchetta = telefono: stessa rotazione della mano, con un po' di morbidezza
+    const q = _pq.set(...G.pq[0]); const e = _pe.setFromQuaternion(q, 'YXZ');
+    _pq2.copy(FP_BASE).multiply(q);
+    fpRacket.quaternion.slerp(_pq2, Math.min(1, dt * 18));
+    fpRacket.position.lerp(_pv.set(0.3 - Math.sin(e.y) * 0.45, -0.32 + Math.sin(e.x) * 0.25, -0.62 + Math.abs(Math.sin(e.y)) * 0.1), Math.min(1, dt * 18));
+  } else if (fpRacket.visible) {
     const a = avatars[0]; const k = a && a.swingT >= 0 ? clamp(a.swingT / 0.3, 0, 1) : 0, e = Math.sin(k * Math.PI);
     const dir = a ? a.swingDir : 1, up = a ? (a.up || 0) : 0;
     fpRacket.position.set(0.32 - 0.62 * k * dir, -0.3 + 0.12 * e + up * 0.08 * e, -0.62 - 0.18 * e);
@@ -246,8 +253,12 @@ function onPhone(id, m) {
   }
   const p = G.players.find(x => x.conn === id); if (!p) return;
   if (m.t === 'sync') { const rtt = (performance.now() - m.h) / 1000; if (rtt < 1) p.lat = p.lat * 0.7 + (rtt / 2) * 0.3; return; }
+  if (m.t === 'pq') { const i = G.players.indexOf(p); G.pq = G.pq || []; G.pq[i] = m.q; return; }
+  if (m.t === 'toss') { const i = G.players.indexOf(p); if (G.phase === 'serve' && G.server === i && !G.toss) toss(); return; }
   if (m.t === 'sw') {
     const i = G.players.indexOf(p);
+    // la direzione viene da come è girata la racchetta (il telefono) in quel momento
+    if (G.pq && G.pq[i]) { const e = new THREE.Euler().setFromQuaternion(new THREE.Quaternion(...G.pq[i]), 'YXZ'); m.yaw = clamp(e.y / 0.6, -1, 1) || m.yaw; }
     swing(i, { time: G.time - (p.lat || 0.04) - (m.ago || 0) / 1000, p: clamp(+m.p || 0.5, 0.05, 1.4), vert: clamp(+m.vert || 0, -1, 1), twist: clamp(+m.twist || 0, -1, 1), yaw: m.yaw || 0 });
   }
 }
@@ -299,9 +310,11 @@ function beginServe() {
   G.ball = mkBall(a.x - 0.12 * s, 0.95, s * (T.L / 2 + 0.25)); G.toss = null; G.ball.held = true;
   trailPts.length = 0;
   const p = G.players[i];
-  tip(p.kind === 'cpu' ? `${p.name} batte` : p.kind === 'phone' ? `${p.name}: colpisci col telefono quando la palla scende` : 'Battuta: muovi il mouse veloce quando la palla scende (o premi spazio)');
+  tip(p.kind === 'cpu' ? `${p.name} batte` : p.kind === 'phone' ? `${p.name}: premi LANCIA sul telefono, poi colpisci quando la palla scende` : 'Battuta: muovi il mouse veloce quando la palla scende (o premi spazio)');
   sendState();
-  setTimeout(() => { if (G.phase === 'serve') toss(); }, 700);
+  // il computer lancia subito; chi gioca lancia la palla col tasto (o dopo qualche secondo)
+  const sv = G.serveId = (G.serveId || 0) + 1;
+  setTimeout(() => { if (G.phase === 'serve' && G.serveId === sv && !G.toss) toss(); }, p.kind === 'cpu' ? 700 : 7000);
 }
 function toss() {
   const b = G.ball; b.held = false; b.vy = 2.3; G.toss = { t0: G.time };

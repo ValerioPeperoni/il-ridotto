@@ -43,7 +43,8 @@ function onMsg(m) {
   if (m.t === 'cvl') { game = 'caos'; view3D().then(v => v && v.onLooks(m)); return; }
   if (m.t === 'cv') { if (V3) V3.onSnap(m); return; }
   if (m.t === 'cfx') { if (V3) V3.onFx(m); return; }
-  if (m.t === 'pong') { game = 'pong'; show('pong'); $('#pScore').textContent = `${m.score[0]} - ${m.score[1]}`; $('#pInfo').textContent = m.serving ? 'Tocca a te battere: colpisci quando la palla scende' : `contro ${m.vs}`; if (m.serving) vibrate(50); return; }
+  if (m.t === 'pong') { game = 'pong'; show('pong'); pServing = !!m.serving; $('#pScore').textContent = `${m.score[0]} - ${m.score[1]}`; $('#pInfo').textContent = m.serving ? 'Tocca a te battere: premi LANCIA, poi colpisci quando la palla scende' : `contro ${m.vs}`; $('#pToss').classList.toggle('hide', !m.serving); if (m.serving) { vibrate(50); calibrate(); } return; }
+  if (m.t === 'hi' && m.game === 'caos') view3D(); // l'isola si carica subito, mentre si aspetta in sala
   if (m.t === 'hi') { game = m.game || 'bowling'; $('#waitT').textContent = `Ciao ${m.name}! Aspetta che parta la partita`; color = m.color || color; document.documentElement.style.setProperty('--me', color); }
   else if (m.t === 'full' || m.t === 'kicked') { $('#waitT').textContent = m.text || 'Sei stato tolto dalla sala'; }
   else if (m.t === 'turn') {
@@ -295,11 +296,18 @@ cBtn.addEventListener('pointerdown', e => {
 });
 cBtn.addEventListener('pointermove', e => {
   if (!sl) return; const now = performance.now(); if (now - slSent < 45) return; slSent = now;
-  const dx = (e.clientX - sl.x) / 160, pow = Math.max(0, Math.min(1, (e.clientY - sl.y) / (innerHeight * 0.32)));
-  if (Math.round(pow * 10) !== sl.lastP) { sl.lastP = Math.round(pow * 10); vibrate(6); }
-  net && net.send({ t: 'sling', on: true, dx: +dx.toFixed(3), pow: +pow.toFixed(3) });
+  const pow = Math.max(0, Math.min(1, (e.clientY - sl.y) / (innerHeight * 0.3)));
+  const notch = Math.floor(pow * 4 + 0.001); if (notch !== sl.lastP) { sl.lastP = notch; vibrate(notch === 4 ? 40 : 15); }
+  drawPow(pow);
+  net && net.send({ t: 'sling', on: true, dx: 0, pow: +pow.toFixed(3) });
 });
-const cUp = () => { cBtn.classList.remove('on'); if (sl) { sl = null; net && net.send({ t: 'sling', on: false }); } else net && net.send({ t: 'btn', on: false }); };
+const cUp = () => { cBtn.classList.remove('on'); drawPow(-1); if (sl) { sl = null; net && net.send({ t: 'sling', on: false }); } else net && net.send({ t: 'btn', on: false }); };
+function drawPow(p) { const el = $('#pBar'); el.classList.toggle('hide', p < 0); if (p < 0) return; el.querySelector('b').style.height = (p * 100) + '%'; el.querySelector('span').textContent = p < 0.04 ? 'trascina giù' : Math.round(p * 100) + '%'; }
+// mira: trascina il dito di lato in un punto libero dello schermo (giri senza limiti; la visuale ti segue)
+{ let ad = null, acc = 0, sent = 0; const area = $('#caos');
+  area.addEventListener('pointerdown', e => { if (e.target.closest('button,#joy')) return; ad = e.clientX; area.setPointerCapture(e.pointerId); });
+  area.addEventListener('pointermove', e => { if (ad == null) return; const dd = (e.clientX - ad) * 0.006; acc += dd; if (V3) V3.turn(dd); ad = e.clientX; const now = performance.now(); if (now - sent > 40 && Math.abs(acc) > 0.002) { sent = now; net && net.send({ t: 'turn', d: +acc.toFixed(4) }); acc = 0; } });
+  const end = () => { ad = null; if (acc) { net && net.send({ t: 'turn', d: +acc.toFixed(4) }); acc = 0; } }; area.addEventListener('pointerup', end); area.addEventListener('pointercancel', end); }
 cBtn.addEventListener('pointerup', cUp); cBtn.addEventListener('pointercancel', cUp); cBtn.addEventListener('contextmenu', e => e.preventDefault());
 $('#cItem').onclick = () => { net && net.send({ t: 'use' }); vibrate(30); };
 function caosState(m) {
@@ -310,7 +318,7 @@ function caosState(m) {
   $('#cInfo').textContent = `${m.strokes} colpi · ${m.score} punti`;
   const st = { frozen: '❄️ Congelato!', ko: '💫 Sei a terra!', done: '⛳ In buca!', addr: 'Mira e tira', charge: 'Lascia per tirare!' }[m.state] || (m.near ? 'Sei alla palla' : '');
   $('#cState').textContent = st; $('#cState').style.visibility = st ? '' : 'hidden';
-  cBtn.innerHTML = m.near || m.state === 'addr' || m.state === 'charge' ? 'TIRA<br><small style="font-size:13px;font-weight:500">trascina giù<br>e lascia</small>' : 'MAZZATA';
+  cBtn.innerHTML = m.near || m.state === 'addr' || m.state === 'charge' ? 'TIRA<br><small style="font-size:13px;font-weight:500">tieni, trascina<br>giù e lascia</small>' : 'MAZZATA';
   const it = $('#cItem'); it.textContent = m.item || 'nessun oggetto'; it.classList.toggle('on', !!m.item);
   if (m.item && !lastCaos.item) vibrate(60);
   if (m.state === 'ko' && lastCaos.state !== 'ko') vibrate([100, 50, 100]);
@@ -331,3 +339,25 @@ function view3D() {
     .catch(e => { console.error(e); ld.textContent = 'Visuale 3D non disponibile su questo telefono'; setTimeout(() => ld.classList.add('hide'), 3000); return null; });
   return V3p;
 }
+
+// ---------- ping pong: la racchetta sullo schermo segue il telefono ----------
+let pServing = false, oriQ = null, oriQ0 = null, oriSent = 0;
+const qMul = (a, b) => [a[3] * b[0] + a[0] * b[3] + a[1] * b[2] - a[2] * b[1], a[3] * b[1] - a[0] * b[2] + a[1] * b[3] + a[2] * b[0], a[3] * b[2] + a[0] * b[1] - a[1] * b[0] + a[2] * b[3], a[3] * b[3] - a[0] * b[0] - a[1] * b[1] - a[2] * b[2]];
+const qInv = a => [-a[0], -a[1], -a[2], a[3]];
+function qFromDev(al, be, ga) { // Eulero 'YXZ' (alpha attorno a y, beta attorno a x, -gamma attorno a z)
+  const k = Math.PI / 180, x = be * k / 2, y = al * k / 2, z = -ga * k / 2;
+  const c1 = Math.cos(x), c2 = Math.cos(y), c3 = Math.cos(z), s1 = Math.sin(x), s2 = Math.sin(y), s3 = Math.sin(z);
+  return [s1 * c2 * c3 + c1 * s2 * s3, c1 * s2 * c3 - s1 * c2 * s3, c1 * c2 * s3 - s1 * s2 * c3, c1 * c2 * c3 + s1 * s2 * s3];
+}
+function calibrate() { if (oriQ) oriQ0 = oriQ.slice(); }
+addEventListener('deviceorientation', e => {
+  if (e.alpha == null || game !== 'pong') return;
+  oriQ = qFromDev(e.alpha, e.beta, e.gamma); if (!oriQ0) oriQ0 = oriQ.slice();
+  const now = performance.now(); if (now - oriSent < 33) return; oriSent = now;
+  let r = qMul(qInv(oriQ0), oriQ); if (lefty) r = [r[0], -r[1], -r[2], r[3]];
+  net && net.send({ t: 'pq', q: r.map(v => +v.toFixed(3)) });
+});
+async function askOrientation() { try { if (typeof DeviceOrientationEvent !== 'undefined' && typeof DeviceOrientationEvent.requestPermission === 'function') await DeviceOrientationEvent.requestPermission(); } catch (e) { } }
+$('#enter').addEventListener('click', askOrientation);
+$('#pToss').onclick = () => { calibrate(); net && net.send({ t: 'toss' }); vibrate(30); $('#pToss').classList.add('hide'); };
+$('#pCal').onclick = () => { calibrate(); vibrate(20); };

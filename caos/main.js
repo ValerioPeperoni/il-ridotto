@@ -198,6 +198,7 @@ function onPhone(id, m) {
   const p = G.players.find(x => x.conn === id); if (!p) return;
   if (m.t === 'joy') { p.input.x = clamp(+m.x || 0, -1, 1); p.input.y = clamp(+m.y || 0, -1, 1); p.input.cy = m.cy != null ? +m.cy : null; }
   else if (m.t === 'btn') { p.input.btn = !!m.on; }
+  else if (m.t === 'turn') { p.input.aim += clamp(+m.d || 0, -1, 1); }
   else if (m.t === 'sling') { p.input.sling = m.on ? { dx: clamp(+m.dx || 0, -1.5, 1.5), pow: clamp(+m.pow || 0, 0, 1) } : null; }
   else if (m.t === 'use') { p.input.item = true; }
 }

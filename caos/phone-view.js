@@ -12,17 +12,17 @@ const lerpA = (a, b, k) => { let d = b - a; while (d > Math.PI) d -= Math.PI * 2
 
 export async function startPhoneView(canvas, ui, onProgress) {
   const renderer = new THREE.WebGLRenderer({ canvas, antialias: false, powerPreference: 'high-performance' });
-  renderer.setPixelRatio(Math.min(devicePixelRatio, 1.25));
+  renderer.setPixelRatio(Math.min(devicePixelRatio, 1));
   renderer.outputColorSpace = THREE.SRGBColorSpace; renderer.toneMapping = THREE.ACESFilmicToneMapping;
   const scene = new THREE.Scene();
-  const FOG = new THREE.Color(0xa9cbee); scene.background = FOG; scene.fog = new THREE.Fog(FOG, 70, 230);
-  const camera = new THREE.PerspectiveCamera(62, 1, 0.3, 900);
-  const W_ = buildWorld(scene, { shadow: 0, step: 2 });
-  FX.initFx(scene);
+  const FOG = new THREE.Color(0xa9cbee); scene.background = FOG; scene.fog = new THREE.Fog(FOG, 55, 190);
+  const camera = new THREE.PerspectiveCamera(62, 1, 0.3, 260);
+  const W_ = buildWorld(scene, { shadow: 0, step: 2.5 });
+  FX.initFx(scene); W_.sky.scale.setScalar(0.3);
   function resize() { const w = canvas.clientWidth || innerWidth, h = canvas.clientHeight || innerHeight; renderer.setSize(w, h, false); camera.aspect = w / h; camera.fov = w < h ? 68 : 55; camera.updateProjectionMatrix(); }
   addEventListener('resize', resize); resize();
   let a = 0, b = 0; const prog = () => onProgress && onProgress(a * 0.5 + b * 0.5);
-  await Promise.all([loadAvatarLibrary(p => { a = p; prog(); }), loadNature(scene, { mobile: true, plants: 0.3, trees: 0.6, onProgress: p => { b = p; prog(); } })]);
+  await Promise.all([loadAvatarLibrary(p => { a = p; prog(); }), loadNature(scene, { mobile: true, plants: 0.15, trees: 0.45, onProgress: p => { b = p; prog(); } })]);
   { const pm = new THREE.PMREMGenerator(renderer), es = new THREE.Scene(); es.add(W_.sky.clone()); scene.environment = pm.fromScene(es, 0.04).texture; pm.dispose(); }
 
   // ombre finte: un disco scuro sotto personaggi e palle (costa pochissimo)
@@ -61,6 +61,7 @@ export async function startPhoneView(canvas, ui, onProgress) {
   const view = {
     me: () => players[me],
     camYaw: () => camYaw,
+    turn(d) { const p = players[me]; if (!p || !(p.flags & 16)) camYaw -= d; },
     onLooks(m) { me = m.me; setupPlayers(m.players); setupBoxes(m.boxes || []); },
     onSnap(m) {
       phase = m.ph; if (m.me != null) me = m.me;

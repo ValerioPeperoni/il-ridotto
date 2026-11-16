@@ -397,7 +397,7 @@ function endShot() {
   const r = Ru.judge(m, balls, ev);
   for (const id of r.potted || []) if (id !== 0) G.potLog.push(id);
   for (const id of r.respot || []) { const e = balls.find(b => b.id === id); if (!e || e.on) continue; e.on = true; e.x = T.L / 4; e.z = 0; while (!P.freeSpot(balls, e.x, e.z, e)) e.x += 0.012; ballMeshes.get(id).visible = true; ballMeshes.get(id).position.set(e.x, R, e.z); G.potLog = G.potLog.filter(x => x !== id); }
-  if (r.respot8) { const e = balls.find(b => b.id === 8); e.on = true; e.x = T.L / 4; e.z = 0; while (!P.freeSpot(balls, e.x, e.z, e)) e.x += 0.01; ballMeshes.get(8).visible = true; ballMeshes.get(8).position.set(e.x, R, e.z); }
+  if (r.respot8) { const F = Ru.FINAL(), e = balls.find(b => b.id === F); e.on = true; e.x = T.L / 4; e.z = 0; while (!P.freeSpot(balls, e.x, e.z, e)) e.x += 0.01; ballMeshes.get(F).visible = true; ballMeshes.get(F).position.set(e.x, R, e.z); }
   if (r.msg) say(r.msg, r.foul);
   if (r.foul) snd('foul');
   updateHud();
@@ -453,9 +453,9 @@ function updateHud() {
     if (m.practice) html = '';
     else if (!g) html = '<span class="sub">tavolo aperto</span>';
     else {
-      const ids = g === 'piene' ? [1, 2, 3, 4, 5, 6, 7] : [9, 10, 11, 12, 13, 14, 15];
+      const ids = balls.map(b => b.id).filter(id => Ru.groupOf(id) === g).sort((a, b) => a - b);
       html = ids.map(id => miniBall(id, !balls.find(b => b.id === id).on)).join('');
-      if (Ru.remaining(balls, g) === 0) html += miniBall(8, false);
+      if (Ru.remaining(balls, g) === 0) html += miniBall(Ru.FINAL(), false);
     }
     el.querySelector('.grp').innerHTML = html;
     el.querySelector('.sub').textContent = m.practice ? `${m.shots} tiri` : g ? g : '';
@@ -707,13 +707,13 @@ function pickTokens() {
 }
 function opponentIds(turn) {
   const m = G.match, g = m.groups[1 - turn];
-  if (!g) return balls.filter(b => b.on && b.id !== 0 && b.id !== 8).map(b => b.id);
+  if (!g) return balls.filter(b => b.on && b.id !== 0 && b.id !== Ru.FINAL()).map(b => b.id);
   return balls.filter(b => b.on && Ru.groupOf(b.id) === g).map(b => b.id);
 }
 function myIds(turn) {
   const m = G.match, g = m.groups[turn];
-  if (!g) return balls.filter(b => b.on && b.id !== 0 && b.id !== 8).map(b => b.id);
-  const ids = balls.filter(b => b.on && Ru.groupOf(b.id) === g).map(b => b.id); return ids.length ? ids : [8];
+  if (!g) return balls.filter(b => b.on && b.id !== 0 && b.id !== Ru.FINAL()).map(b => b.id);
+  const ids = balls.filter(b => b.on && Ru.groupOf(b.id) === g).map(b => b.id); return ids.length ? ids : [Ru.FINAL()];
 }
 function usePower(kind, byBot) {
   const m = G.match, turn = m.turn, i = G.held[turn].indexOf(kind);
@@ -737,8 +737,8 @@ function usePower(kind, byBot) {
 }
 function endSettle() {
   // le palle andate in buca con la bomba restano fuori (l'8 e la bianca tornano)
-  const e8 = balls.find(b => b.id === 8);
-  if (!e8.on) { e8.on = true; e8.x = T.L / 4; e8.z = 0; while (!P.freeSpot(balls, e8.x, e8.z, e8)) e8.x += 0.01; ballMeshes.get(8).visible = true; }
+  const e8 = balls.find(b => b.id === Ru.FINAL());
+  if (!e8.on) { e8.on = true; e8.x = T.L / 4; e8.z = 0; while (!P.freeSpot(balls, e8.x, e8.z, e8)) e8.x += 0.01; ballMeshes.get(e8.id).visible = true; }
   const c = cueBall(); if (!c.on) { c.on = true; c.x = -T.L / 4; c.z = 0; while (!P.freeSpot(balls, c.x, c.z, c)) c.z += 0.01; ballMeshes.get(0).visible = true; }
   G.phase = 'aim'; updateHud();
   const f = G.afterSettle; G.afterSettle = null; if (f) f();

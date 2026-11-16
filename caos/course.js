@@ -101,7 +101,9 @@ for (const h of HOLES) { const dx = h.green[0] - h.mid[0], dz = h.green[1] - h.m
 
 // ---------- texture del terreno, disegnata una volta ----------
 const PX = 6; // pixel per metro
-export function terrainTexture() {
+export function terrainTexture(compute) {
+  // di solito si carica l'immagine già pronta (calcolarla sul telefono richiede troppi secondi)
+  if (!compute) { const t = new THREE.TextureLoader().load('assets/terrain.jpg', undefined, undefined, () => { const c = terrainTexture(true); t.image = c.image; t.needsUpdate = true; }); t.colorSpace = THREE.SRGBColorSpace; t.anisotropy = 8; t.flipY = false; return t; }
   const cw = Math.min(2048, W * PX), ch = Math.round(cw * D / W), sx = cw / W;
   const c = document.createElement('canvas'); c.width = cw; c.height = ch; const g = c.getContext('2d');
   const img = g.createImageData(cw, ch), d = img.data;
