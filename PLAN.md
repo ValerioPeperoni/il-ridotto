@@ -39,3 +39,12 @@ Stato: v1 PUBBLICATA. Idee: più buche, buche con salite a più piani, giro dell
 4. FATTO: biliardo online 1 contro 1 (codice o link, chi crea fa da arbitro, risincronizzazione se cade la linea).
 5. Liar's Bar rifatto: NON iniziare senza parlarne con Valerio (prima persona su ogni telefono, schermo = regia, modelli animati CC0).
 Da fare con Valerio: prova con telefoni veri (soglie di giroscopio e gesto in bowling e ping pong).
+
+## Nuova direzione grafica (16/11 pomeriggio, dopo il feedback di Valerio)
+Feedback: grafica troppo semplice ovunque (avatar, animazioni, luci troppo forti/sature, lag). Ping pong e golf da rifare; bowling da rifare;
+biliardo da migliorare (colori, bomba da piazzare con esplosione vera, regole 8 e 15 nelle buche centrali e 1 per ultima, 4 giocatori a squadre).
+Golf di riferimento: Super Battle Golf (campo vero, omini che corrono, oggetti, armi, golf cart). Potenza tipo Golf With Your Friends.
+Strategia: restare sul web (telefoni, link) ma con asset veri CC0: KayKit (personaggi con 95 animazioni, oggetti, ambienti - scaricati da GitHub),
+Quaternius (Valerio li manda), HDR Poly Haven; luci da studio condivise (site/avatar/stage.js), font Fredoka.
+Fatto: Camerino (avatar.html) con avatar componibili (testa/busto/braccia/gambe/cappello/mantello/oggetto/colore), salvato per tutti i giochi.
+Prossimo: bowling rifatto con i nuovi avatar e ambiente, poi Super Battle Golf, ping pong in prima persona, biliardo.
