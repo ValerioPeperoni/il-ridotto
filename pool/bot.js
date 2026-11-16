@@ -69,7 +69,10 @@ function evalShot(m, balls, shot, lvl) {
 
 export function chooseShot(m, balls, levelName = 'medio', rand = Math.random) {
   const lvl = LEVELS[levelName] || LEVELS.medio, cue = balls.find(b => b.id === 0);
-  if (m.breakShot) return { ang: Math.atan2(rand() * 0.04 - 0.02, 1), speed: 7.6 + rand() * 0.6, a: 0, b: -0.15 };
+  if (m.breakShot) {
+    const apex = balls.filter(b => b.on && b.id !== 0).sort((a, b) => a.x - b.x)[0];
+    return { ang: Math.atan2(apex.z - cue.z, apex.x - cue.x) + (rand() - 0.5) * 0.01, speed: 7.6 + rand() * 0.6, a: 0, b: -0.15 };
+  }
   const targets = legalTargets(m, balls);
   const cands = candidates(balls, targets).slice(0, lvl.think);
   let best = null;

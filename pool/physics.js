@@ -97,7 +97,8 @@ function segHit(b) {
 }
 
 // Un passo di simulazione. events: array dove vengono aggiunti gli eventi (urti, sponde, buche)
-export function step(balls, dt, events, time = 0) {
+// mods (modalità Caos): { pocketK: buche più larghe, ghost: Set di palle che la bianca attraversa, magnet: Set di palle attirate dalle buche }
+export function step(balls, dt, events, time = 0, mods = null) {
   const R = T.R, { L, W } = T;
   for (const b of balls) {
     if (!b.on || !b.moving) continue;
@@ -125,6 +126,7 @@ export function step(balls, dt, events, time = 0) {
     const a = balls[i]; if (!a.on) continue;
     for (let j = i + 1; j < balls.length; j++) {
       const b = balls[j]; if (!b.on || (!a.moving && !b.moving)) continue;
+      if (mods && mods.ghost && ((a.id === 0 && mods.ghost.has(b.id)) || (b.id === 0 && mods.ghost.has(a.id)))) continue;
       const dx = b.x - a.x, dz = b.z - a.z, d2 = dx * dx + dz * dz;
       if (d2 >= 4 * R * R) continue;
       const d = Math.sqrt(d2) || 1e-9, nx = dx / d, nz = dz / d;
@@ -162,7 +164,12 @@ export function step(balls, dt, events, time = 0) {
         events.push({ t: 'rail', a: b.id, v: -vn, time });
       }
     }
-    if (Math.abs(b.x) > L / 2 + R * 0.55 || Math.abs(b.z) > W / 2 + R * 0.55) {
+    if (mods && mods.magnet && mods.magnet.has(b.id)) {
+      for (const p of POCKETS) { const dx = p.x - b.x, dz = p.z - b.z, d = Math.hypot(dx, dz); if (d < 0.4 && d > 1e-4) { b.vx += dx / d * 1.6 * dt; b.vz += dz / d * 1.6 * dt; } }
+    }
+    let wide = false;
+    if (mods && mods.pocketK > 1) for (const p of POCKETS) if (Math.hypot(p.x - b.x, p.z - b.z) < p.r * mods.pocketK * 0.95) wide = true;
+    if (wide || Math.abs(b.x) > L / 2 + R * 0.55 || Math.abs(b.z) > W / 2 + R * 0.55) {
       let best = 0, bd = 1e9;
       POCKETS.forEach((p, i) => { const d = Math.hypot(p.x - b.x, p.z - b.z); if (d < bd) { bd = d; best = i; } });
       b.on = false; b.moving = false; b.pocket = best;

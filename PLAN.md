@@ -13,7 +13,7 @@ Design: 8-ball in prima persona (stile 8 Ball Pool ma 3D), fisica vera (striscia
 alto/basso/laterale, sponde, bocche delle buche), linea di mira con palla fantasma, barra potenza, effetto,
 vista dall'alto, bot (3 livelli), 2 giocatori stesso schermo, allenamento, personalizzazione stecca/palline/panno.
 Dopo: online 1v1 (ognuno sul suo telefono), modalità "caos" con poteri.
-Stato: v1 PUBBLICATA (bot 3 livelli, 2 giocatori, allenamento, personalizzazione). Prossimo: online 1v1, modalità caos.
+Stato: v1 PUBBLICATA (bot 3 livelli, 2 giocatori, allenamento, personalizzazione) + Modalità Caos (gettoni: bomba, mazzata, buche larghe, calamita, fantasma). Prossimo: online 1v1.
 
 ## 2. Bowling (bowling.html, site/bowling/*, telecomando.html)
 Pista con olio davanti e secco in fondo (effetto vero), birilli a corpi rigidi (cannon-es), punteggio completo,
@@ -31,3 +31,11 @@ tutti tirano insieme, palle con occhi e cappello, 7 poteri (bomba, raggio, ghiac
 fino a 6 giocatori (telefoni, uno su schermo, bot), classifica a colpi.
 Stato: v1 PUBBLICATA. Idee: più buche, buche con salite a più piani, giro della morte, editor di buche, avatar del Ridotto accanto alla palla.
 ## 5. Liar's Bar rifatto — da fare (prima persona su ogni telefono, schermo = regia, modelli animati CC0)
+
+## Prossimi ritocchi (in ordine, uno per sessione)
+1. Bowling: personaggio del Ridotto che lancia sull'approccio (animazione col braccio), replay dello strike.
+2. Minigolf: 3 buche nuove (giro della morte, due piani con tubo, flipper), personaggio accanto alla palla.
+3. Ping pong: colpi speciali (fiammata con la barra carica), torneo a eliminazione.
+4. Biliardo: partita online 1 contro 1 (ognuno sul suo telefono).
+5. Liar's Bar rifatto: NON iniziare senza parlarne con Valerio (prima persona su ogni telefono, schermo = regia, modelli animati CC0).
+Da fare con Valerio: prova con telefoni veri (soglie di giroscopio e gesto in bowling e ping pong).

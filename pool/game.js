@@ -18,7 +18,7 @@ const MOBILE = matchMedia('(pointer:coarse)').matches;
 const $ = s => document.querySelector(s);
 
 // ---------- impostazioni salvate ----------
-const CFG = Object.assign({ mode: 'bot', level: 'medio', guide: 'corta', cue: 'classica', set: 'classiche', felt: 'verde', n0: '', n1: '' },
+const CFG = Object.assign({ caos: false, mode: 'bot', level: 'medio', guide: 'corta', cue: 'classica', set: 'classiche', felt: 'verde', n0: '', n1: '' },
   (() => { try { return JSON.parse(localStorage.getItem('ridotto-pool')) || {}; } catch (e) { return {}; } })());
 const saveCfg = () => { try { localStorage.setItem('ridotto-pool', JSON.stringify(CFG)); } catch (e) { } };
 
@@ -338,6 +338,7 @@ function newGame() {
   G.players = [{ name: names[0], bot: false }, { name: names[1], bot: CFG.mode === 'bot' }];
   G.match = Ru.newMatch(names, { practice: CFG.mode === 'free', first: 0 });
   G.potLog = []; G.spinA = G.spinB = 0; G.power = 0;
+  clearTokens(); G.held = [[], []]; G.dizzy = [0, 0]; G.mods = null; if (CFG.caos && CFG.mode !== 'free') for (let i = 0; i < 3; i++) spawnToken();
   syncBallMeshes(); setCue(CFG.cue);
   G.ang = 0; G.view = 'fp';
   $('#hud').classList.remove('hide'); $('#menu').classList.add('hide'); $('#over').classList.add('hide');
@@ -354,7 +355,8 @@ function startTurn(first) {
   const targets = Ru.legalTargets(m, balls);
   const near = balls.filter(b => b.on && targets.includes(b.id)).sort((a, b) => Math.hypot(a.x - cue.x, a.z - cue.z) - Math.hypot(b.x - cue.x, b.z - cue.z))[0];
   if (m.breakShot) G.ang = 0; else if (near) G.ang = Math.atan2(near.z - cue.z, near.x - cue.x);
-  updateHud();
+  updateHud(); showPowers();
+  if (CFG.caos && G.dizzy[m.turn] > 0 && !cur().bot) say(`${cur().name} è ancora stordito dalla mazzata! 😵`, true);
   if (cur().bot) { botTurn(); return; }
   if (m.ballInHand) {
     G.placing = true; kitchenLine.visible = !!m.kitchen;
@@ -368,6 +370,7 @@ function startTurn(first) {
 
 function shoot(power) {
   if (G.phase !== 'aim' && G.phase !== 'botAim') return;
+  if (G.dizzy) G.dizzy[G.match.turn] = 0; G.shooter = G.match.turn;
   G.placing = false; $('#place').classList.add('hide'); kitchenLine.visible = false;
   const speed = 0.25 + 7.8 * Math.pow(power, 1.6);
   G.phase = 'stroke'; G.strokeT = 0; G.strokePow = power; G.lastShot = { speed, a: G.spinA, b: G.spinB, ang: G.ang };
@@ -381,6 +384,8 @@ function doStrike() {
 }
 
 function endShot() {
+  G.mods = null; showMods();
+  if (CFG.caos) { while (G.tokens.length < 3 && Math.random() < 0.7) spawnToken(); }
   const m = G.match, ev = G.events;
   const r = Ru.judge(m, balls, ev);
   for (const id of r.potted || []) if (id !== 0) G.potLog.push(id);
@@ -405,13 +410,15 @@ function gameOver(msg) {
 const esc = s => String(s).replace(/[&<>"]/g, c => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;' }[c]));
 
 // ---------- bot ----------
-function botTurn() {
+function botTurn(again) {
   const m = G.match;
-  G.phase = 'botThink'; say(`${cur().name} studia il tavolo…`);
+  G.phase = 'botThink'; if (!again) say(`${cur().name} studia il tavolo…`);
   setTimeout(() => {
     if (m.ballInHand) { Bot.placeCue(m, balls, m.kitchen); placeMeshes(0); }
     const lvl = CFG.mode === 'bot' ? CFG.level : 'medio';
+    if (CFG.caos && G.held[m.turn].length && Math.random() < 0.65) { const k = G.held[m.turn][0]; if (usePower(k, true)) { if (G.phase === 'settle') G.afterSettle = () => botTurn(true); else setTimeout(() => botTurn(true), FAST ? 50 : 900); return; } }
     const s = Bot.chooseShot(m, balls, lvl);
+    if (G.dizzy[m.turn] > 0) { G.dizzy[m.turn] = 0; s.ang += (Math.random() - 0.5) * 0.14; s.speed *= 0.8 + Math.random() * 0.5; }
     G.botPlan = { ...s, from: G.ang, t: 0 };
     G.spinA = s.a; G.spinB = s.b; setSpinDot();
     G.phase = 'botAim';
@@ -549,7 +556,7 @@ function updateCamera(dt) {
     const h = Math.max(needH / 2 / Math.tan(fov / 2), needW / 2 / (Math.tan(fov / 2) * a)) * 1.04;
     pos.set(0, off + h, 0.0001); look.set(0, off, 0);
     camera.up.set(portrait ? -1 : 0, 0, portrait ? 0 : -1);
-  } else if (G.phase === 'roll' || G.phase === 'wait' || G.phase === 'over') {
+  } else if (G.phase === 'roll' || G.phase === 'wait' || G.phase === 'over' || G.phase === 'settle') {
     // regia: segue l'azione dall'alto, alle spalle del tiro
     const moving = balls.filter(b => b.on && b.moving);
     if (moving.length) { let x = 0, z = 0; for (const b of moving) { x += b.x; z += b.z; } G.follow.lerp(new THREE.Vector3(x / moving.length, 0, z / moving.length), Math.min(1, dt * 1.5)); }
@@ -566,7 +573,9 @@ function updateCamera(dt) {
   if (lampObj) lampObj.visible = G.camPos.y < 2.45;
   const k = 1 - Math.exp(-dt * (G.phase === 'aim' || G.phase === 'botAim' ? 14 : 3.2));
   G.camPos.lerp(pos, k); G.camLook.lerp(look, k);
-  camera.position.copy(G.camPos); camera.lookAt(G.camLook);
+  camera.position.copy(G.camPos);
+  if (G.shake > 0) { G.shake = Math.max(0, G.shake - dt); camera.position.x += (Math.random() - .5) * G.shake * 0.08; camera.position.y += (Math.random() - .5) * G.shake * 0.08; }
+  camera.lookAt(G.camLook);
 }
 
 // ---------- disegno di stecca e linee ----------
@@ -618,6 +627,7 @@ function frame(now) {
   let dt = Math.min(0.05, (now - last) / 1000); last = now;
   if (FAST) dt *= 3;
   if (G.charge != null) { G.charge = Math.min(1, G.charge + dt * 0.75); pfill.style.height = (G.charge * 100) + '%'; }
+  if (canAim() && G.dizzy && G.dizzy[G.match.turn] > 0) G.ang += Math.sin(performance.now() / 260) * dt * 0.5;
   if (canAim()) {
     const fineK = keys.ShiftLeft || keys.ShiftRight ? 0.08 : 0.6;
     if (keys.ArrowLeft) G.ang -= dt * fineK; if (keys.ArrowRight) G.ang += dt * fineK;
@@ -632,18 +642,19 @@ function frame(now) {
     if (b.t > 1.9) { G.ang = b.ang; const p = Math.pow(Math.max(0, (b.speed - 0.25) / 7.8), 1 / 1.6); G.power = 0; shoot(p); }
   }
   if (G.phase === 'stroke') { G.strokeT += dt; if (G.strokeT >= 0.15) doStrike(); }
-  if (G.phase === 'roll') {
+  if (G.phase === 'roll' || G.phase === 'settle') {
     simAcc += dt; let n = 0;
     while (simAcc >= P.DT && n < 200) {
       const before = G.events.length;
-      P.step(balls, P.DT, G.events, G.simT); G.simT += P.DT; simAcc -= P.DT; n++;
+      P.step(balls, P.DT, G.events, G.simT, G.phase === 'roll' ? G.mods : null); G.simT += P.DT; simAcc -= P.DT; n++;
+      if (G.phase === 'roll' && CFG.caos) pickTokens();
       for (let i = before; i < G.events.length; i++) {
         const e = G.events[i];
         if (e.t === 'ball') snd('ball', e.v / 3); else if (e.t === 'rail') snd('rail', e.v / 3); else if (e.t === 'pot') { snd('pot'); sinkBall(e.a, e.pocket); }
       }
     }
     G.rollT += dt;
-    if (!P.anyMoving(balls) && sinking.length === 0) endShot();
+    if (!P.anyMoving(balls) && sinking.length === 0) { if (G.phase === 'settle') endSettle(); else endShot(); }
   }
   placeMeshes(dt);
   updateSinking(dt);
@@ -652,6 +663,100 @@ function frame(now) {
   composer.render();
 }
 
+
+// ---------- modalità Caos: gettoni sul panno e poteri ----------
+const POW = {
+  bomba: { icon: '💣', name: 'Bomba', desc: 'fa saltare in aria le palle dell\'avversario' },
+  larghe: { icon: '🕳️', name: 'Buche larghe', desc: 'per questo tiro le buche sono enormi' },
+  calamita: { icon: '🧲', name: 'Calamita', desc: 'le tue palle vengono attirate dalle buche' },
+  mazzata: { icon: '🏏', name: 'Mazzata', desc: 'stecca in testa all\'avversario: al prossimo tiro gli trema la mano' },
+  fantasma: { icon: '👻', name: 'Fantasma', desc: 'la bianca attraversa le palle dell\'avversario' },
+};
+G.tokens = []; G.held = [[], []]; G.dizzy = [0, 0];
+const tokenGeo = new THREE.CylinderGeometry(0.03, 0.03, 0.004, 24);
+function tokenTex(icon) { const c = document.createElement('canvas'); c.width = c.height = 128; const g = c.getContext('2d'); g.fillStyle = '#ffd166'; g.beginPath(); g.arc(64, 64, 62, 0, 7); g.fill(); g.fillStyle = '#7a1424'; g.beginPath(); g.arc(64, 64, 52, 0, 7); g.fill(); g.font = '64px serif'; g.textAlign = 'center'; g.textBaseline = 'middle'; g.fillText(icon, 64, 70); const t = new THREE.CanvasTexture(c); t.colorSpace = THREE.SRGBColorSpace; return t; }
+function spawnToken() {
+  const kinds = Object.keys(POW), kind = kinds[Math.floor(Math.random() * kinds.length)];
+  for (let k = 0; k < 40; k++) {
+    const x = (Math.random() - .5) * (T.L - 0.3), z = (Math.random() - .5) * (T.W - 0.3);
+    if (!P.freeSpot(balls, x, z) || G.tokens.some(t => Math.hypot(t.x - x, t.z - z) < 0.2)) continue;
+    const m = new THREE.Mesh(tokenGeo, [new THREE.MeshStandardMaterial({ color: 0xd9b25f, metalness: 1, roughness: 0.3 }), new THREE.MeshStandardMaterial({ map: tokenTex(POW[kind].icon), emissive: 0x442200, emissiveMap: tokenTex(POW[kind].icon), emissiveIntensity: 0.6 }), new THREE.MeshStandardMaterial({ color: 0xd9b25f })]);
+    m.position.set(x, 0.003, z); tableGroup.add(m);
+    G.tokens.push({ x, z, kind, m }); return;
+  }
+}
+function clearTokens() { for (const t of G.tokens || []) tableGroup.remove(t.m); G.tokens = []; }
+function pickTokens() {
+  const c = cueBall(); if (!c.on) return;
+  for (let i = G.tokens.length - 1; i >= 0; i--) {
+    const t = G.tokens[i]; if (Math.hypot(t.x - c.x, t.z - c.z) > 0.055) continue;
+    tableGroup.remove(t.m); G.tokens.splice(i, 1);
+    const who = G.shooter ?? G.match.turn;
+    if (G.held[who].length < 2) { G.held[who].push(t.kind); say(`${G.players[who].name} prende ${POW[t.kind].icon} ${POW[t.kind].name}!`); snd('tick'); snd('cue', 0.3); }
+  }
+}
+function opponentIds(turn) {
+  const m = G.match, g = m.groups[1 - turn];
+  if (!g) return balls.filter(b => b.on && b.id !== 0 && b.id !== 8).map(b => b.id);
+  return balls.filter(b => b.on && Ru.groupOf(b.id) === g).map(b => b.id);
+}
+function myIds(turn) {
+  const m = G.match, g = m.groups[turn];
+  if (!g) return balls.filter(b => b.on && b.id !== 0 && b.id !== 8).map(b => b.id);
+  const ids = balls.filter(b => b.on && Ru.groupOf(b.id) === g).map(b => b.id); return ids.length ? ids : [8];
+}
+function usePower(kind, byBot) {
+  const m = G.match, turn = m.turn, i = G.held[turn].indexOf(kind);
+  if (i < 0 || (G.phase !== 'aim' && G.phase !== 'botThink')) return false;
+  G.held[turn].splice(i, 1);
+  say(`${cur().name}: ${POW[kind].icon} ${POW[kind].name}!`);
+  if (kind === 'bomba') {
+    const opp = balls.filter(b => opponentIds(turn).includes(b.id)); if (!opp.length) return true;
+    const cx = opp.reduce((a, b) => a + b.x, 0) / opp.length, cz = opp.reduce((a, b) => a + b.z, 0) / opp.length;
+    const tgt = opp.sort((a, b) => Math.hypot(a.x - cx, a.z - cz) - Math.hypot(b.x - cx, b.z - cz))[0];
+    for (const b of balls) { if (!b.on) continue; const dx = b.x - tgt.x, dz = b.z - tgt.z, d = Math.hypot(dx, dz); if (d > 0.45) continue; const k = 2.4 * (1 - d / 0.45), l = d || 1; const a = d < 1e-4 ? Math.random() * 6.28 : 0; b.vx += (d < 1e-4 ? Math.cos(a) : dx / l) * k; b.vz += (d < 1e-4 ? Math.sin(a) : dz / l) * k; b.moving = true; }
+    boom(tgt.x, tgt.z);
+    G.events = []; G.simT = 0; G.phase = 'settle'; G.afterSettle = byBot ? null : () => startTurn(true);
+  } else if (kind === 'mazzata') {
+    G.dizzy[1 - turn] = 1; whack();
+  } else if (kind === 'larghe') { G.mods = { ...(G.mods || {}), pocketK: 1.7 }; }
+  else if (kind === 'calamita') { G.mods = { ...(G.mods || {}), magnet: new Set(myIds(turn)) }; }
+  else if (kind === 'fantasma') { G.mods = { ...(G.mods || {}), ghost: new Set(opponentIds(turn)) }; }
+  showMods(); showPowers();
+  return true;
+}
+function endSettle() {
+  // le palle andate in buca con la bomba restano fuori (l'8 e la bianca tornano)
+  const e8 = balls.find(b => b.id === 8);
+  if (!e8.on) { e8.on = true; e8.x = T.L / 4; e8.z = 0; while (!P.freeSpot(balls, e8.x, e8.z, e8)) e8.x += 0.01; ballMeshes.get(8).visible = true; }
+  const c = cueBall(); if (!c.on) { c.on = true; c.x = -T.L / 4; c.z = 0; while (!P.freeSpot(balls, c.x, c.z, c)) c.z += 0.01; ballMeshes.get(0).visible = true; }
+  G.phase = 'aim'; updateHud();
+  const f = G.afterSettle; G.afterSettle = null; if (f) f();
+}
+function boom(x, z) {
+  snd('pot'); snd('foul');
+  const fl = new THREE.PointLight(0xffa040, 6, 2); fl.position.set(x, 0.2, z); tableGroup.add(fl);
+  const ball = new THREE.Mesh(new THREE.SphereGeometry(0.05, 16, 12), new THREE.MeshBasicMaterial({ color: 0xffc070, transparent: true, toneMapped: false })); ball.position.set(x, 0.03, z); tableGroup.add(ball);
+  let t = 0; const iv = setInterval(() => { t += 0.03; ball.scale.setScalar(1 + t * 14); ball.material.opacity = Math.max(0, 1 - t * 2.2); fl.intensity = Math.max(0, 6 - t * 14); if (t > 0.5) { clearInterval(iv); tableGroup.remove(ball); tableGroup.remove(fl); } }, 30);
+  G.shake = 0.5;
+}
+function whack() {
+  const el = document.createElement('div'); el.textContent = '🏏'; el.style.cssText = 'position:fixed;font-size:160px;left:50%;top:40%;transform:translate(-50%,-50%) rotate(-80deg);transition:transform .25s cubic-bezier(.5,-0.5,.6,1.6);pointer-events:none;z-index:9';
+  document.body.appendChild(el); requestAnimationFrame(() => { el.style.transform = 'translate(-50%,-50%) rotate(40deg)'; });
+  setTimeout(() => { snd('rail', 1); snd('foul'); G.shake = 0.6; const o = $('#p' + (1 - G.match.turn)); o.style.transform = 'scale(1.15) rotate(-6deg)'; o.querySelector('.av').textContent = '😵'; setTimeout(() => { o.style.transform = ''; updateHud(); }, 900); }, 220);
+  setTimeout(() => el.remove(), 700);
+}
+function showPowers() {
+  const box = $('#powers'); if (!box) return;
+  const m = G.match; if (!m || !CFG.caos || cur().bot) { box.innerHTML = ''; return; }
+  box.innerHTML = G.held[m.turn].map(k => `<button class="pw" data-pw="${k}" title="${POW[k].desc}">${POW[k].icon}<span>${POW[k].name}</span></button>`).join('');
+}
+function showMods() {
+  const el = $('#mods'); if (!el) return; const m = G.mods; if (!m) { el.textContent = ''; return; }
+  el.textContent = [m.pocketK ? '🕳️ buche larghe' : '', m.magnet ? '🧲 calamita' : '', m.ghost ? '👻 fantasma' : ''].filter(Boolean).join(' · ');
+}
+document.addEventListener('click', e => { const b = e.target.closest('[data-pw]'); if (b && canAim()) usePower(b.dataset.pw); });
+
 // ---------- menu ----------
 function openMenu(inGame) {
   $('#menu').classList.remove('hide'); $('#resume').classList.toggle('hide', !inGame || !G.match || G.phase === 'over');
@@ -659,7 +764,7 @@ function openMenu(inGame) {
 }
 function fillMenu() {
   const sel = (sel, attr, val) => document.querySelectorAll(sel).forEach(b => b.classList.toggle('sel', b.dataset[attr] === val));
-  sel('#modes .opt', 'm', CFG.mode); sel('#levels .chip', 'l', CFG.level); sel('#guides .chip', 'g', CFG.guide);
+  sel('#modes .opt', 'm', CFG.mode); const cz = $('#caosBtn'); if (cz) { cz.classList.toggle('sel', CFG.caos); cz.classList.toggle('hide', CFG.mode === 'free'); } sel('#levels .chip', 'l', CFG.level); sel('#guides .chip', 'g', CFG.guide);
   $('#n1wrap').classList.toggle('hide', CFG.mode !== 'duo'); $('#lvwrap').classList.toggle('hide', CFG.mode !== 'bot');
   $('#n0').value = CFG.n0; $('#n1').value = CFG.n1;
   $('#cues').innerHTML = CUES.map(c => `<button class="cuesw${c.id === CFG.cue ? ' sel' : ''}" data-c="${c.id}" style="background:${c.css}"><span>${c.name}</span></button>`).join('');
@@ -674,6 +779,7 @@ document.addEventListener('click', e => {
   else if (t.dataset.c) { CFG.cue = t.dataset.c; setCue(CFG.cue); }
   else if (t.dataset.s) { CFG.set = t.dataset.s; syncBallMeshes(); updateHud(); }
   else if (t.dataset.f) { CFG.felt = t.dataset.f; applyFelt(); }
+  else if (t.dataset.caos != null) { CFG.caos = !CFG.caos; }
   else return;
   saveCfg(); fillMenu();
 });
@@ -696,6 +802,6 @@ if (DEBUG) {
 }
 if (Q.has('auto')) {
   // test: entrambi i giocatori sono bot
-  CFG.mode = Q.get('auto') || 'bot'; CFG.level = 'campione';
+  CFG.mode = Q.get('auto') || 'bot'; CFG.level = 'campione'; CFG.caos = Q.has('caos');
   newGame(); G.players[0].bot = true; G.players[1].bot = CFG.mode !== 'free'; startTurn(true);
 }
