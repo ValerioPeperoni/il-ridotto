@@ -84,7 +84,9 @@ Feedback del 16/11 e prossimi passi, **in ordine**:
 4. Animazioni più curate: uno swing da golf vero (oggi si usa `1H_Melee_Attack_Slice_Horizontal`; si può fare a mano con le ossa o prendere la Universal Animation Library di Quaternius, che Valerio ha già), cadute e rialzi, esultanze.
 5. Più caos alla Super Battle Golf: golf cart, oggetti nuovi, buche a tema, ostacoli che si muovono.
 
-### Ping pong (riferimento: Switch Sports; il peggiore secondo Valerio, da rifare)
+### Ping pong (riferimento: Switch Sports / Wii Sports Resort)
+**FATTO 16/11 sera (Claude, screenshot controllati):** palazzetto chiaro senza pubblico (parquet, campo azzurro, transenne blu PING PONG, vetrate), tavolo e rete nuovi, racchette rifatte, avversario = avatar del camerino (KayKit) con racchetta in mano, animazioni di spostamento laterale morbide e colpo; il giocatore vicino in prima persona con la racchetta davanti alla telecamera; interfaccia Fredoka chiara. Prova: `pingpong.html?debug&auto&fp` (prima persona coi bot) o `&auto=tv`. Restano: battuta più chiara, gesti del telefono, racchetta dell'avversario da orientare meglio, scia più bella.
+Vecchie note:
 Da fare:
 - Prima persona, senza spettatori.
 - L'avatar dell'avversario non deve tremare.

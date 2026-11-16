@@ -3,7 +3,7 @@
 <head>
 <meta charset="utf-8">
 <meta name="viewport" content="width=device-width,initial-scale=1,maximum-scale=1,user-scalable=no,viewport-fit=cover">
-<meta name="theme-color" content="#0a0c10">
+<meta name="theme-color" content="#3d7bff">
 <title>Ping pong · Il Ridotto</title>
 <link rel="icon" href="favicon.svg" type="image/svg+xml">
 <link rel="stylesheet" href="fonts.css">
@@ -57,6 +57,35 @@ button{font:inherit;color:inherit;cursor:pointer}
 a.back{color:var(--gold);opacity:.85;text-decoration:none;display:inline-block;margin-top:10px}
 input.nmi{font:inherit;font-size:17px;color:var(--ink);background:rgba(0,0,0,.35);border:1px solid rgba(255,255,255,.2);border-radius:10px;padding:6px 10px;width:150px}
 .final{font-size:22px;text-align:center}.final .w{font-size:34px;color:var(--gold)}
+
+/* stile nuovo: chiaro, Fredoka, palette del Ridotto */
+:root{--a:#e8243c;--b:#3d7bff;--ink:#1d2340;--gold:#ff9f1c}
+html,body{background:#eef2f8;color:var(--ink);font-family:"Fredoka",system-ui,sans-serif}
+#score{font-family:"Fredoka",sans-serif;box-shadow:0 5px 0 rgba(29,35,64,.15);border-radius:18px}
+#score .s{background:#fff}
+#score .s b{font:700 34px "Fredoka",sans-serif}
+#score .s span{font-family:"Fredoka",sans-serif;font-size:18px;font-weight:600}
+#score .srv{background:var(--gold)}#score .srv.on{box-shadow:0 0 0 3px rgba(255,159,28,.3)}
+#score .ch{background:#eef3ff}
+#score .mid{background:var(--ink);color:#fff;font-weight:600}
+#big{font-family:"Fredoka",sans-serif;font-weight:700;color:#fff;-webkit-text-stroke:6px var(--ink);paint-order:stroke fill;text-shadow:0 8px 0 var(--ink)}
+#tip{background:rgba(29,35,64,.82);color:#fff;font-weight:500}
+#shot{color:var(--ink);font-weight:700;background:#fff;border-radius:14px;padding:6px 12px;box-shadow:0 4px 0 rgba(0,0,0,.1)}
+#menuBtn{background:#fff;border:none;box-shadow:0 4px 0 rgba(29,35,64,.15)}
+.ov{background:rgba(61,123,255,.35);backdrop-filter:blur(6px);-webkit-backdrop-filter:blur(6px)}
+.card{background:#fff;border:none;border-radius:26px;box-shadow:0 10px 0 rgba(29,35,64,.15),0 20px 60px rgba(29,35,64,.35)}
+.card h1{font-family:"Fredoka",sans-serif;font-weight:700;color:var(--b);text-shadow:none}
+.card .tag{font-style:normal;color:#5a6390}
+.card h2{color:#5a6390;font-weight:600;letter-spacing:2px}
+.code{font-family:"Fredoka",sans-serif;color:var(--b)}
+.url,.net,.note{color:#5a6390;font-style:normal}
+.pp{background:#eef3ff;border:none;border-radius:14px}
+.chip{border:none;background:#eef3ff;border-radius:999px;font-weight:600;padding:8px 14px}
+.chip.sel{background:var(--b);color:#fff}
+.go{border:none;background:#ffcf3a;color:var(--ink);box-shadow:0 6px 0 #d9a400;border-radius:18px}
+a.back{color:var(--b);font-weight:600}
+input.nmi{background:#eef3ff;border:none;border-radius:999px;color:var(--ink)}
+.final .w{color:var(--b)}
 </style>
 </head>
 <body>
@@ -72,7 +101,7 @@ input.nmi{font:inherit;font-size:17px;color:var(--ink);background:rgba(0,0,0,.35
 <div class="ov" id="lobby">
   <div class="card">
     <h1>Ping pong</h1>
-    <div class="tag">Il Ridotto · il tavolo in cortile</div>
+    <div class="tag">In prima persona, col telefono come racchetta</div>
     <div class="grid">
       <div>
         <h2>Telefono = racchetta</h2>
