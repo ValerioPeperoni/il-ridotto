@@ -1,0 +1,147 @@
+<!doctype html>
+<html lang="it">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width,initial-scale=1,maximum-scale=1,user-scalable=no,viewport-fit=cover">
+<meta name="theme-color" content="#0b0806">
+<title>Biliardo · Il Ridotto</title>
+<link rel="icon" href="favicon.svg" type="image/svg+xml">
+<link rel="stylesheet" href="fonts.css">
+<style>
+:root{--brass:#d9b25f;--brass2:#a8823a;--ink:#f3e7cc;--bg:#0b0806;--red:#c8432f}
+*{box-sizing:border-box;-webkit-tap-highlight-color:transparent}
+html,body{margin:0;height:100%;background:var(--bg);color:var(--ink);font-family:"Cormorant Garamond",Georgia,serif;overflow:hidden;touch-action:none;user-select:none;-webkit-user-select:none}
+canvas#gl{position:fixed;inset:0;width:100%;height:100%;display:block}
+button{font:inherit;color:inherit;cursor:pointer}
+.hide{display:none!important}
+/* HUD */
+#hud{position:fixed;inset:0;pointer-events:none}
+.pl{position:absolute;top:max(8px,env(safe-area-inset-top));display:flex;gap:10px;align-items:center;padding:6px 12px 6px 6px;border-radius:40px;background:rgba(12,9,7,.72);border:1px solid rgba(217,178,95,.25);transition:.3s;min-width:170px}
+.pl.left{left:max(8px,env(safe-area-inset-left))}
+.pl.right{right:max(8px,env(safe-area-inset-right));flex-direction:row-reverse;padding:6px 6px 6px 12px}
+.pl.on{border-color:var(--brass);box-shadow:0 0 18px rgba(217,178,95,.45)}
+.av{width:38px;height:38px;border-radius:50%;display:grid;place-items:center;font-weight:700;font-size:20px;background:radial-gradient(circle at 35% 30%,#6b4a2a,#2a1a10);border:2px solid var(--brass2)}
+.pl.on .av{border-color:var(--brass)}
+.nm{font-size:18px;font-weight:700;line-height:1}
+.grp{display:flex;gap:2px;margin-top:4px;min-height:14px}
+.pl.right .grp{justify-content:flex-end}
+.pl.right .info{text-align:right}
+.mb{width:14px;height:14px;border-radius:50%;font:700 8px/14px Arial,sans-serif;color:#000;text-align:center;box-shadow:inset -2px -2px 3px rgba(0,0,0,.35)}
+.mb.gone{opacity:.18}
+.sub{font-size:12px;opacity:.7;font-style:italic}
+#msg{position:absolute;top:max(64px,calc(env(safe-area-inset-top) + 58px));left:50%;transform:translateX(-50%);padding:7px 18px;border-radius:20px;background:rgba(12,9,7,.8);border:1px solid rgba(217,178,95,.35);font-size:19px;white-space:nowrap;max-width:94vw;overflow:hidden;text-overflow:ellipsis;opacity:0;transition:opacity .3s}
+#msg.show{opacity:1}
+#msg.foul{border-color:var(--red);color:#ffd6cf}
+#toolbar{position:absolute;top:max(8px,env(safe-area-inset-top));left:50%;transform:translateX(-50%);display:flex;gap:6px;pointer-events:auto}
+.tb{width:40px;height:40px;border-radius:50%;border:1px solid rgba(217,178,95,.4);background:rgba(12,9,7,.72);font-size:18px;display:grid;place-items:center}
+/* potenza */
+#power{position:absolute;right:max(10px,env(safe-area-inset-right));top:50%;transform:translateY(-42%);width:58px;height:min(52vh,330px);pointer-events:auto;touch-action:none}
+#power .track{position:absolute;inset:0;border-radius:29px;background:linear-gradient(#1b130d,#0e0a07);border:1px solid rgba(217,178,95,.4);overflow:hidden}
+#power .fill{position:absolute;left:0;right:0;top:0;height:0;background:linear-gradient(#f5d77a,#e0782a 60%,#c8261c)}
+#power .stick{position:absolute;left:50%;top:6px;width:10px;height:calc(100% - 12px);margin-left:-5px;border-radius:5px;background:linear-gradient(#2c6fd6 0 3%,#f5f1e6 3% 6%,#e8cf9c 6% 58%,#c9a24a 58% 60%,#3a1d0e 60%);box-shadow:0 2px 6px #000}
+#power .lab{position:absolute;bottom:-22px;left:0;right:0;text-align:center;font-size:13px;opacity:.75}
+/* effetto */
+#spin{position:absolute;left:max(12px,env(safe-area-inset-left));bottom:max(14px,env(safe-area-inset-bottom));width:84px;height:84px;border-radius:50%;pointer-events:auto;touch-action:none;background:radial-gradient(circle at 38% 32%,#fff,#e9e4d8 45%,#a8a294);box-shadow:0 4px 14px rgba(0,0,0,.6),0 0 0 2px rgba(217,178,95,.4)}
+#spin::before,#spin::after{content:"";position:absolute;background:rgba(0,0,0,.12)}
+#spin::before{left:50%;top:10%;bottom:10%;width:1px}
+#spin::after{top:50%;left:10%;right:10%;height:1px}
+#spin .dot{position:absolute;width:16px;height:16px;margin:-8px 0 0 -8px;border-radius:50%;background:#d42a1e;left:50%;top:50%;box-shadow:0 0 0 2px #fff}
+#spin .lab{position:absolute;top:-20px;left:0;right:0;text-align:center;font-size:13px;opacity:.75}
+/* mira fine */
+#fine{position:absolute;left:50%;bottom:max(14px,env(safe-area-inset-bottom));transform:translateX(-50%);width:min(46vw,300px);height:38px;border-radius:19px;pointer-events:auto;touch-action:none;background:repeating-linear-gradient(90deg,#2a1d12 0 5px,#5b412a 5px 7px);border:1px solid rgba(217,178,95,.4);box-shadow:inset 0 6px 10px rgba(0,0,0,.6),inset 0 -6px 10px rgba(0,0,0,.6)}
+#fine .lab{position:absolute;top:-20px;left:0;right:0;text-align:center;font-size:13px;opacity:.75}
+#place{position:absolute;left:50%;bottom:max(64px,calc(env(safe-area-inset-bottom) + 64px));transform:translateX(-50%);pointer-events:auto;padding:9px 20px;border-radius:22px;border:1px solid var(--brass);background:rgba(40,28,14,.9);font-size:18px}
+#tray{position:absolute;left:50%;top:max(110px,calc(env(safe-area-inset-top) + 104px));transform:translateX(-50%);display:flex;gap:3px}
+/* overlay menu */
+.ov{position:fixed;inset:0;display:flex;align-items:center;justify-content:center;background:radial-gradient(ellipse at center,rgba(10,7,5,.55),rgba(5,3,2,.9));pointer-events:auto;overflow:auto;padding:16px}
+.card{width:min(760px,96vw);max-height:94vh;overflow:auto;background:linear-gradient(#1c140e,#120c08);border:1px solid rgba(217,178,95,.45);border-radius:18px;padding:18px 22px 22px;box-shadow:0 20px 60px #000}
+.card h1{margin:0;font-family:"IM Fell English SC",serif;font-weight:400;font-size:44px;color:var(--brass);letter-spacing:1px;text-align:center}
+.card h2{margin:16px 0 8px;font-size:15px;letter-spacing:3px;text-transform:uppercase;color:var(--brass);font-weight:600}
+.tag{text-align:center;font-style:italic;opacity:.8;margin-top:-2px}
+.row{display:flex;gap:8px;flex-wrap:wrap}
+.opt{flex:1 1 150px;padding:10px 12px;border-radius:12px;border:1px solid rgba(217,178,95,.3);background:rgba(255,255,255,.03);text-align:left}
+.opt b{display:block;font-size:19px}
+.opt span{font-size:14px;opacity:.75}
+.opt.sel{border-color:var(--brass);background:rgba(217,178,95,.14)}
+.chip{padding:6px 12px;border-radius:16px;border:1px solid rgba(217,178,95,.3);background:none;font-size:16px}
+.chip.sel{border-color:var(--brass);background:rgba(217,178,95,.18)}
+.sw{width:46px;height:46px;border-radius:50%;border:2px solid transparent;padding:0;position:relative}
+.sw.sel{border-color:var(--brass);box-shadow:0 0 12px rgba(217,178,95,.6)}
+.cuesw{width:100%;height:22px;border-radius:11px;border:2px solid transparent;padding:0;margin:3px 0;position:relative;text-align:right;font-size:13px}
+.cuesw.sel{border-color:var(--brass)}
+.cuesw span{position:absolute;right:8px;top:1px;color:#fff;text-shadow:0 1px 2px #000}
+input.nmi{font:inherit;font-size:18px;color:var(--ink);background:rgba(0,0,0,.35);border:1px solid rgba(217,178,95,.35);border-radius:10px;padding:7px 10px;width:100%}
+.go{display:block;width:100%;margin-top:18px;padding:12px;border-radius:14px;border:1px solid var(--brass);background:linear-gradient(#7a5a26,#4a3412);font-size:24px;font-weight:700;color:#fff3d6}
+.back{display:inline-block;margin-top:12px;color:var(--brass);opacity:.8;text-decoration:none}
+.cols{display:grid;grid-template-columns:1fr 1fr;gap:6px 18px}
+@media (max-width:600px){.cols{grid-template-columns:1fr}.card h1{font-size:34px}}
+.big{font-size:30px;text-align:center;margin:8px 0}
+.stats{display:grid;grid-template-columns:1fr auto auto;gap:4px 18px;font-size:18px;margin:10px auto;max-width:360px}
+#hint{position:absolute;left:50%;top:50%;transform:translate(-50%,-50%);font-size:22px;opacity:0;transition:opacity .4s;text-shadow:0 2px 6px #000;pointer-events:none;text-align:center}
+#hint.show{opacity:.95}
+@media (max-width:600px){#toolbar{top:max(64px,calc(env(safe-area-inset-top) + 58px));left:auto;right:10px;transform:none;flex-direction:column}.pl{min-width:0;max-width:48vw}#msg{top:max(110px,calc(env(safe-area-inset-top) + 104px))}}
+@media (max-height:420px){#power{height:56vh}.pl{min-width:0}.nm{font-size:15px}.av{width:30px;height:30px;font-size:16px}#spin{width:68px;height:68px}}
+</style>
+</head>
+<body>
+<canvas id="gl"></canvas>
+
+<div id="hud" class="hide">
+  <div class="pl left" id="p0"><div class="av">A</div><div class="info"><div class="nm">-</div><div class="grp"></div><div class="sub"></div></div></div>
+  <div class="pl right" id="p1"><div class="av">B</div><div class="info"><div class="nm">-</div><div class="grp"></div><div class="sub"></div></div></div>
+  <div id="toolbar">
+    <button class="tb" id="bView" title="Cambia visuale (V)">👁</button>
+    <button class="tb" id="bMenu" title="Menu">☰</button>
+  </div>
+  <div id="msg"></div>
+  <div id="tray"></div>
+  <div id="power"><div class="track"><div class="fill"></div></div><div class="stick"></div><div class="lab">Potenza</div></div>
+  <div id="spin"><div class="lab">Effetto</div><div class="dot"></div></div>
+  <div id="fine"><div class="lab">Mira fine</div></div>
+  <button id="place" class="hide">Fatto ✓</button>
+  <div id="hint"></div>
+</div>
+
+<div class="ov" id="menu">
+  <div class="card">
+    <h1>Biliardo</h1>
+    <div class="tag">Il Ridotto · la sala sul retro</div>
+    <h2>Modalità</h2>
+    <div class="row" id="modes">
+      <button class="opt sel" data-m="bot"><b>Contro il bot</b><span>Palla 8, tu contro la casa</span></button>
+      <button class="opt" data-m="duo"><b>Due giocatori</b><span>Sullo stesso schermo, a turno</span></button>
+      <button class="opt" data-m="free"><b>Allenamento</b><span>Senza regole, sposta la bianca quando vuoi</span></button>
+    </div>
+    <div class="cols">
+      <div><h2>Giocatori</h2>
+        <input class="nmi" id="n0" maxlength="14" placeholder="Il tuo nome">
+        <div id="n1wrap" style="margin-top:6px"><input class="nmi" id="n1" maxlength="14" placeholder="Secondo giocatore"></div>
+        <div id="lvwrap"><h2>Bravura del bot</h2><div class="row" id="levels">
+          <button class="chip" data-l="facile">Facile</button><button class="chip sel" data-l="medio">Medio</button><button class="chip" data-l="campione">Campione</button></div></div>
+        <h2>Linea di mira</h2><div class="row" id="guides">
+          <button class="chip" data-g="lunga">Lunga</button><button class="chip sel" data-g="corta">Corta</button><button class="chip" data-g="niente">Niente</button></div>
+      </div>
+      <div><h2>La tua stecca</h2><div id="cues"></div>
+        <h2>Palline</h2><div class="row" id="sets"></div>
+        <h2>Panno</h2><div class="row" id="felts"></div>
+      </div>
+    </div>
+    <button class="go" id="go">Gioca</button>
+    <div style="display:flex;justify-content:space-between;align-items:center"><a class="back" href="./">← Torna al Ridotto</a><button class="chip hide" id="resume">Riprendi la partita</button></div>
+  </div>
+</div>
+
+<div class="ov hide" id="over">
+  <div class="card" style="width:min(520px,94vw);text-align:center">
+    <h1 id="ovT">Partita finita</h1>
+    <div class="big" id="ovW"></div>
+    <div class="stats" id="ovS"></div>
+    <button class="go" id="again">Rivincita</button>
+    <button class="chip" id="toMenu" style="margin-top:12px">Menu</button>
+  </div>
+</div>
+
+<script type="importmap">{"imports":{"three":"./vendor/three.module.js","three/addons/":"./vendor/jsm/"}}</script>
+<script type="module" src="pool/game.js"></script>
+</body>
+</html>

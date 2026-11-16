@@ -13,7 +13,7 @@ Design: 8-ball in prima persona (stile 8 Ball Pool ma 3D), fisica vera (striscia
 alto/basso/laterale, sponde, bocche delle buche), linea di mira con palla fantasma, barra potenza, effetto,
 vista dall'alto, bot (3 livelli), 2 giocatori stesso schermo, allenamento, personalizzazione stecca/palline/panno.
 Dopo: online 1v1 (ognuno sul suo telefono), modalità "caos" con poteri.
-Stato: IN CORSO
+Stato: v1 PUBBLICATA (bot 3 livelli, 2 giocatori, allenamento, personalizzazione). Prossimo: online 1v1, modalità caos.
 
 ## 2. Bowling — da fare (telefono come telecomando, stile Switch Sports: tempismo, rotazione polso, piste speciali)
 ## 3. Ping pong — da fare (colpi: dritto, rovescio, taglio, pallonetto, schiacciata; tempismo)
