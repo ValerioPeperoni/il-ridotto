@@ -11,6 +11,11 @@ let color = store.get('ridotto-color') || COLORS[Math.floor(Math.random() * 6)];
 let game = 'bowling', net = null, myTurn = false, flipHook = store.get('ridotto-flip') === '1', fingerMode = false;
 
 // ---------- schermata di ingresso ----------
+function myLook() { try { const p = JSON.parse(store.get('ridotto-avatar') || 'null'); return p && p.look ? p.look : null; } catch (e) { return null; } }
+{ const prof = (() => { try { return JSON.parse(store.get('ridotto-avatar') || 'null'); } catch (e) { return null; } })();
+  $('#camLink').href = 'avatar.html?ret=' + encodeURIComponent('telecomando.html' + location.search);
+  if (prof && prof.look) $('#camT').textContent = 'Cambia personaggio';
+  if (prof && prof.name && !store.get('ridotto-me')) store.set('ridotto-me', prof.name); }
 $('#name').value = store.get('ridotto-me') || '';
 function drawCols() { $('#cols').innerHTML = COLORS.map(c => `<button class="col${c === color ? ' sel' : ''}" data-c="${c}" style="background:${c};color:${c}"></button>`).join(''); }
 drawCols();
@@ -22,7 +27,7 @@ $('#enter').onclick = async () => {
   await askMotion(); keepAwake();
   show('wait'); $('#waitT').textContent = 'Mi collego…';
   net = joinRoom(CODE, {
-    onState(s) { $('#netstate').textContent = s === 'open' ? 'Collegato' : s === 'noroom' ? 'Non trovo la sala: lo schermo è acceso?' : s === 'lost' ? 'Connessione persa, riprovo…' : 'Mi collego…'; if (s === 'open') net.send({ t: 'join', name, color, pid }); },
+    onState(s) { $('#netstate').textContent = s === 'open' ? 'Collegato' : s === 'noroom' ? 'Non trovo la sala: lo schermo è acceso?' : s === 'lost' ? 'Connessione persa, riprovo…' : 'Mi collego…'; if (s === 'open') net.send({ t: 'join', name, color, pid, look: myLook() }); },
     onMsg: onMsg,
   });
 };
@@ -40,7 +45,7 @@ function onMsg(m) {
   else if (m.t === 'turn') {
     myTurn = !!m.yours;
     if (myTurn) {
-      show('bowl'); aimX = m.x ?? aimX; aimA = m.a ?? 0; drawLane();
+      show('bowl'); aimX = m.x ?? aimX; aimA = m.a ?? 0; if (m.spin != null) { spin = m.spin; drawSpin(); } drawLane();
       $('#bTitle').textContent = 'Tocca a te!'; $('#bInfo').textContent = `Frame ${m.frame} · birilli in piedi: ${m.pins}` + (m.spec ? ' · ' + m.spec : '');
       vibrate(60);
     } else { show('wait'); $('#waitT').textContent = m.who ? `Tocca a ${m.who}` : 'Aspetta…'; }
@@ -87,8 +92,10 @@ $('#aL').onclick = () => { aimA = Math.max(-0.06, aimA - 0.004); drawLane(); sen
 $('#aR').onclick = () => { aimA = Math.min(0.06, aimA + 0.004); drawLane(); sendAim(); };
 let aimTimer = 0;
 function sendAim() { clearTimeout(aimTimer); aimTimer = setTimeout(() => net && net.send({ t: 'aim', x: aimX, a: aimA }), 40); }
-$('#flip').onclick = () => { flipHook = !flipHook; store.set('ridotto-flip', flipHook ? '1' : '0'); $('#flip').textContent = flipHook ? 'Effetto invertito ✓' : 'Inverti effetto'; };
-$('#flip').textContent = flipHook ? 'Effetto invertito ✓' : 'Inverti effetto';
+// effetto scelto coi tasti (come i tasti del Joy-Con): -1 tutto a sinistra … +1 tutto a destra
+let spin = 0;
+function drawSpin() { document.querySelectorAll('#spinRow [data-sp]').forEach(b => b.classList.toggle('sel', +b.dataset.sp === spin)); }
+$('#spinRow').onclick = e => { const b = e.target.closest('[data-sp]'); if (!b) return; spin = +b.dataset.sp; drawSpin(); vibrate(15); net && net.send({ t: 'spin', v: spin }); };
 $('#swMode').onclick = () => { fingerMode = !fingerMode; $('#pad').classList.toggle('hide', !fingerMode); $('#hold').classList.toggle('hide', fingerMode); $('#swMode').textContent = fingerMode ? 'Usa i sensori' : 'Senza sensori? Usa il dito'; };
 
 // ---------- lancio col movimento ----------
@@ -143,10 +150,10 @@ function release() {
   const tail = s.filter(x => x.t > tEnd - 0.15);
   const twist = tail.reduce((acc, x) => acc + dot(x.w, y), 0) / tail.length;
   const pull = tail.reduce((acc, x) => acc + dot(x.w, w), 0) / tail.length * a.sigma;
-  let hook = Math.max(-1, Math.min(1, twist / 6)); if (flipHook) hook = -hook;
+  const hook = spin; void twist;
   const msg = { t: 'throw', power: Math.min(1.25, peak / 9.5), hook, timing: a.th, pull: Math.max(-0.05, Math.min(0.05, pull * 0.006)) };
   net && net.send(msg); myTurn = false; vibrate(40);
-  $('#bInfo').textContent = `Potenza ${(msg.power * 100).toFixed(0)}% · effetto ${(hook * 100).toFixed(0)}`;
+  $('#bInfo').textContent = `Potenza ${(msg.power * 100).toFixed(0)}%`;
 }
 
 // ---------- lancio col dito ----------
@@ -157,7 +164,7 @@ pad.addEventListener('pointerup', e => {
   if (!pg) return; const h = pg.h, a = h[0], b = h[h.length - 1], dt = Math.max(0.016, (b.t - a.t) / 1000), H = innerHeight;
   const vy = -(b.y - a.y) / dt / H, vx = (b.x - a.x) / dt / H; const tm = -(e.clientY - pg.y0) / 160; pg = null;
   if (vy < 0.4) return;
-  net && net.send({ t: 'throw', power: Math.min(1.25, vy / 3.4), hook: Math.max(-1, Math.min(1, vx / 2.2)), timing: Math.min(tm, 0.5), pull: 0 }); myTurn = false;
+  void vx; net && net.send({ t: 'throw', power: Math.min(1.25, vy / 3.4), hook: spin, timing: Math.min(tm, 0.5), pull: 0 }); myTurn = false;
 });
 drawLane();
 

@@ -3,7 +3,7 @@
 <head>
 <meta charset="utf-8">
 <meta name="viewport" content="width=device-width,initial-scale=1,maximum-scale=1,user-scalable=no,viewport-fit=cover">
-<meta name="theme-color" content="#07060c">
+<meta name="theme-color" content="#bfe0ff">
 <title>Telecomando · Il Ridotto</title>
 <link rel="icon" href="favicon.svg" type="image/svg+xml">
 <link rel="stylesheet" href="fonts.css">
@@ -43,14 +43,38 @@ input{font:inherit;font-size:22px;color:var(--ink);background:rgba(0,0,0,.4);bor
 .links{display:flex;gap:14px;font-size:15px;opacity:.85}
 .links button{background:none;border:none;text-decoration:underline;padding:4px}
 #pad{width:min(80vw,320px);height:min(40vh,300px);border-radius:16px;border:1px dashed rgba(255,255,255,.4);display:grid;place-items:center;text-align:center;font-size:20px;padding:10px;touch-action:none}
+
+/* stile nuovo (cartoon) */
+:root{--neon:#3d7bff;--ink:#1d2340;--gold:#ff9f1c}
+html,body{background:linear-gradient(#bfe0ff,#eef6ff 60%);font-family:"Fredoka",system-ui,sans-serif;color:var(--ink)}
+h1{font-family:"Fredoka",sans-serif;font-weight:700;text-shadow:none;color:#3d7bff;font-size:38px}
+.sub{font-style:normal;opacity:.75}
+input{background:#fff;color:var(--ink);border:none;box-shadow:0 3px 0 rgba(0,0,0,.12);border-radius:999px}
+.big{border:none;background:#3d7bff;box-shadow:0 5px 0 #2650b8;border-radius:999px}
+.state{font-style:normal}
+#res{font-family:"Fredoka",sans-serif;font-weight:700;text-shadow:none;color:#ff5c9a}
+.score{color:#ff9f1c;font-weight:700}
+#lane{background:linear-gradient(90deg,#3a4478 0 12%,#e7b77a 12% 88%,#3a4478 88%);border:3px solid #fff;box-shadow:0 4px 0 rgba(0,0,0,.15)}
+.angrow button,.links button{color:var(--ink)}
+.angrow button{background:#fff;border:none;box-shadow:0 3px 0 rgba(0,0,0,.15)}
+#hold{border:6px solid #fff;box-shadow:0 8px 0 rgba(0,0,0,.18);text-shadow:0 2px 3px rgba(0,0,0,.35)}
+#meter{background:rgba(0,0,0,.1)}
+#pad{border:3px dashed #3d7bff;background:#fff8}
+.cam{display:flex;align-items:center;gap:10px;background:#fff;border-radius:999px;padding:6px 16px 6px 6px;box-shadow:0 3px 0 rgba(0,0,0,.12);text-decoration:none;color:var(--ink);font-weight:600}
+.cam i{font-style:normal;font-size:26px;width:40px;height:40px;border-radius:50%;background:#ffcf3a;display:grid;place-items:center}
+.spinrow{display:flex;gap:6px;align-items:center;font-weight:600}
+.spinrow span{margin-right:4px}
+.spinrow button{min-width:44px;height:42px;padding:0 8px;border-radius:12px;border:none;background:#fff;box-shadow:0 3px 0 rgba(0,0,0,.15);font-size:17px;font-weight:700}
+.spinrow button.sel{background:#3d7bff;color:#fff;box-shadow:0 3px 0 #2650b8}
 </style>
 </head>
 <body>
 <div class="scr" id="join">
   <h1>Telecomando</h1>
-  <div class="sub">Il tuo telefono diventa la palla (e presto la racchetta)</div>
+  <div class="sub">Il tuo telefono diventa il controller</div>
   <input id="name" maxlength="14" placeholder="Il tuo nome" autocomplete="off">
   <div class="cols" id="cols"></div>
+  <a class="cam" id="camLink" href="avatar.html"><i>👕</i><span id="camT">Scegli il tuo personaggio</span></a>
   <button class="big" id="enter">Entra</button>
   <div class="state" id="jstate"></div>
   <div class="sub" style="font-size:15px;margin-top:auto">Tieni il telefono ben stretto: lo muoverai come un braccio vero.<br>Meglio con il polso infilato nel laccio della cover, se c'è.</div>
@@ -67,10 +91,11 @@ input{font:inherit;font-size:22px;color:var(--ink);background:rgba(0,0,0,.4);bor
   <div class="top"><b id="bTitle">Tocca a te!</b><span class="state" id="bInfo"></span></div>
   <div id="lane"><div class="pins">• • • •<br>• • •<br>• •<br>•</div><svg viewBox="0 0 100 100" preserveAspectRatio="none"><line id="aimL" x1="50" y1="92" x2="50" y2="8" stroke="#fff" stroke-width="1" stroke-dasharray="3 3" vector-effect="non-scaling-stroke"/></svg><div class="ball"></div></div>
   <div class="angrow"><button id="aL">↶</button><span class="state">trascina la palla · angolo</span><button id="aR">↷</button></div>
+  <div class="spinrow" id="spinRow"><span>Effetto</span><button data-sp="-1">⟲⟲</button><button data-sp="-0.5">⟲</button><button data-sp="0" class="sel">dritta</button><button data-sp="0.5">⟳</button><button data-sp="1">⟳⟳</button></div>
   <div id="meter"><div class="ok"></div><i></i></div>
   <button id="hold">TIENI<br>PREMUTO<br><small style="font-weight:400;font-size:15px">braccio indietro, poi avanti,<br>e lascia</small></button>
-  <div id="pad" class="hide">Trascina giù e poi<br>su veloce, e lascia.<br><small>(di lato = effetto)</small></div>
-  <div class="links"><button id="swMode">Senza sensori? Usa il dito</button><button id="flip">Inverti effetto</button></div>
+  <div id="pad" class="hide">Trascina giù e poi<br>su veloce, e lascia.</div>
+  <div class="links"><button id="swMode">Senza sensori? Usa il dito</button></div>
 </div>
 
 <div class="scr hide" id="pong">

@@ -1,0 +1,143 @@
+<!doctype html>
+<html lang="it">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width,initial-scale=1,maximum-scale=1,user-scalable=no,viewport-fit=cover">
+<meta name="theme-color" content="#07060c">
+<title>Bowling · Il Ridotto</title>
+<link rel="icon" href="favicon.svg" type="image/svg+xml">
+<link rel="stylesheet" href="fonts.css">
+<style>
+:root{--neon:#ff3d9a;--cyan:#38e8ff;--ink:#f4ecff;--bg:#07060c;--gold:#ffd166}
+*{box-sizing:border-box;-webkit-tap-highlight-color:transparent}
+html,body{margin:0;height:100%;background:var(--bg);color:var(--ink);font-family:"Cormorant Garamond",Georgia,serif;overflow:hidden;touch-action:none;user-select:none;-webkit-user-select:none}
+canvas#gl{position:fixed;inset:0;width:100%;height:100%}
+button{font:inherit;color:inherit;cursor:pointer}
+.hide{display:none!important}
+#hud{position:fixed;inset:0;pointer-events:none}
+#who{position:absolute;top:max(10px,env(safe-area-inset-top));left:50%;transform:translateX(-50%);text-align:center;padding:6px 20px;border-radius:20px;background:rgba(10,6,20,.7);border:1px solid rgba(255,61,154,.45);box-shadow:0 0 18px rgba(255,61,154,.25)}
+#who b{font-size:22px;display:block;line-height:1.1}
+#who span{font-size:14px;opacity:.8;font-style:italic}
+#big{position:absolute;left:50%;top:38%;transform:translate(-50%,-50%) scale(.6);font-family:"IM Fell English SC",serif;font-size:min(16vw,120px);color:#fff;opacity:0;transition:opacity .25s,transform .35s cubic-bezier(.2,1.6,.4,1);text-shadow:0 0 12px var(--neon),0 0 34px var(--neon),0 0 60px #f0f;white-space:nowrap}
+#big.show{opacity:1;transform:translate(-50%,-50%) scale(1)}
+#big.cyan{text-shadow:0 0 12px var(--cyan),0 0 34px var(--cyan),0 0 60px #0ff}
+#replay{position:absolute;top:max(70px,calc(env(safe-area-inset-top) + 64px));right:max(14px,env(safe-area-inset-right));font:700 22px Arial,sans-serif;color:#ff3d9a;letter-spacing:3px;text-shadow:0 0 10px #f0f;animation:blink 1s steps(2) infinite}
+@keyframes blink{50%{opacity:.3}}
+#sheet{position:absolute;left:50%;bottom:max(8px,env(safe-area-inset-bottom));transform:translateX(-50%);background:rgba(8,6,16,.82);border:1px solid rgba(56,232,255,.3);border-radius:12px;padding:6px 8px;font-family:Arial,Helvetica,sans-serif;font-size:12px;max-width:98vw;overflow:auto}
+#sheet table{border-collapse:collapse}
+#sheet td{border:1px solid rgba(255,255,255,.12);text-align:center;min-width:30px;padding:1px 3px}
+#sheet td.nm{text-align:left;min-width:80px;font-weight:700;font-family:"Cormorant Garamond",serif;font-size:15px}
+#sheet tr.cur td.nm{color:var(--gold)}
+#sheet .r{font-size:11px;color:#bfe9ff;height:14px}
+#sheet .t{font-weight:700;font-size:14px;height:18px}
+#sheet td.tot{font-size:17px;font-weight:700;color:var(--gold);min-width:44px}
+#tip{position:absolute;left:50%;top:max(70px,calc(env(safe-area-inset-top) + 64px));transform:translateX(-50%);font-size:18px;padding:5px 16px;border-radius:16px;background:rgba(10,6,20,.6);white-space:nowrap;max-width:94vw;overflow:hidden;text-overflow:ellipsis}
+#aimbox{position:absolute;right:max(10px,env(safe-area-inset-right));top:50%;transform:translateY(-50%);width:110px;pointer-events:auto;touch-action:none}
+#aimlane{position:relative;width:110px;height:230px;border-radius:10px;background:linear-gradient(90deg,#222 0 12%,#c79a5b 12% 88%,#222 88%);border:1px solid rgba(255,255,255,.25);overflow:hidden}
+#aimlane .pins{position:absolute;top:8px;left:50%;transform:translateX(-50%);font-size:10px;line-height:8px;text-align:center;color:#fff;letter-spacing:2px}
+#aimlane .ball{position:absolute;bottom:14px;width:18px;height:18px;margin-left:-9px;border-radius:50%;background:radial-gradient(circle at 35% 30%,#ff8fd0,#7a0d55);box-shadow:0 0 8px #f0f}
+#aimlane svg{position:absolute;inset:0}
+#aimbox .lab{text-align:center;font-size:13px;opacity:.8;margin-top:3px}
+#aimbox .row{display:flex;gap:4px;margin-top:4px}
+#aimbox .row button{flex:1;padding:4px 0;border-radius:8px;border:1px solid rgba(255,255,255,.25);background:rgba(20,10,30,.8);font-size:16px}
+#menuBtn{position:absolute;top:max(10px,env(safe-area-inset-top));right:max(10px,env(safe-area-inset-right));pointer-events:auto;width:40px;height:40px;border-radius:50%;border:1px solid rgba(255,255,255,.3);background:rgba(10,6,20,.7)}
+/* lobby */
+.ov{position:fixed;inset:0;display:flex;align-items:center;justify-content:center;background:radial-gradient(ellipse at center,rgba(20,8,30,.55),rgba(5,3,10,.92));overflow:auto;padding:14px}
+.card{width:min(900px,97vw);max-height:95vh;overflow:auto;background:linear-gradient(#150c22,#0b0714);border:1px solid rgba(255,61,154,.45);border-radius:18px;padding:16px 20px 20px;box-shadow:0 0 40px rgba(255,61,154,.2),0 20px 60px #000}
+.card h1{margin:0;text-align:center;font-family:"IM Fell English SC",serif;font-weight:400;font-size:52px;color:#fff;text-shadow:0 0 10px var(--neon),0 0 30px var(--neon)}
+.card .tag{text-align:center;font-style:italic;opacity:.8}
+.card h2{margin:14px 0 8px;font-size:14px;letter-spacing:3px;text-transform:uppercase;color:var(--cyan);font-weight:600}
+.grid{display:grid;grid-template-columns:260px 1fr;gap:20px}
+@media (max-width:700px){.grid{grid-template-columns:1fr}.card h1{font-size:38px}}
+.qr{background:#fff;border-radius:12px;padding:8px;width:200px;height:200px;margin:0 auto}
+.qr svg{width:100%;height:100%}
+.code{text-align:center;font:700 34px Arial,sans-serif;letter-spacing:8px;margin-top:6px;color:var(--gold)}
+.url{text-align:center;font-size:13px;opacity:.7;word-break:break-all}
+.net{text-align:center;font-size:14px;opacity:.8;font-style:italic;margin-top:4px}
+.plist{display:flex;flex-direction:column;gap:6px;min-height:40px}
+.pp{display:flex;align-items:center;gap:10px;padding:6px 10px;border-radius:12px;background:rgba(255,255,255,.04);border:1px solid rgba(255,255,255,.1)}
+.pp .dot{width:24px;height:24px;border-radius:50%;flex:none}
+.pp b{font-size:19px;flex:1}
+.pp small{opacity:.7;font-style:italic}
+.pp button{border:none;background:none;font-size:18px;opacity:.6}
+.row{display:flex;gap:8px;flex-wrap:wrap}
+.opt{flex:1 1 150px;padding:9px 12px;border-radius:12px;border:1px solid rgba(255,255,255,.18);background:rgba(255,255,255,.03);text-align:left}
+.opt b{display:block;font-size:19px}.opt span{font-size:14px;opacity:.75}
+.opt.sel{border-color:var(--neon);background:rgba(255,61,154,.14);box-shadow:0 0 12px rgba(255,61,154,.25)}
+.chip{padding:6px 12px;border-radius:16px;border:1px solid rgba(255,255,255,.2);background:none;font-size:16px}
+.chip.sel{border-color:var(--cyan);background:rgba(56,232,255,.15)}
+.go{display:block;width:100%;margin-top:16px;padding:12px;border-radius:14px;border:1px solid var(--neon);background:linear-gradient(#a8146a,#5a0a3a);font-size:26px;font-weight:700;color:#fff;text-shadow:0 0 8px #f0f}
+.go:disabled{opacity:.4}
+.note{font-size:14px;opacity:.75;font-style:italic;margin:6px 0 0}
+a.back{color:var(--cyan);opacity:.85;text-decoration:none;display:inline-block;margin-top:10px}
+input.nmi{font:inherit;font-size:17px;color:var(--ink);background:rgba(0,0,0,.35);border:1px solid rgba(255,255,255,.2);border-radius:10px;padding:6px 10px;width:150px}
+.final{font-size:22px;text-align:center}
+.final .w{font-size:34px;color:var(--gold);text-shadow:0 0 12px #f90}
+</style>
+</head>
+<body>
+<canvas id="gl"></canvas>
+<div id="hud" class="hide">
+  <div id="who"><b>-</b><span></span></div>
+  <div id="tip"></div>
+  <div id="big"></div>
+  <div id="replay" class="hide">▶ REPLAY</div>
+  <div id="sheet"></div>
+  <div id="aimbox" class="hide">
+    <div id="aimlane"><div class="pins">• • • •<br>• • •<br>• •<br>•</div><svg viewBox="0 0 110 230"><line id="aimline" x1="55" y1="216" x2="55" y2="20" stroke="#fff" stroke-width="2" stroke-dasharray="5 5" opacity=".8"/></svg><div class="ball"></div></div>
+    <div class="lab">Trascina: posizione<br>Rotella / ◀ ▶: angolo</div>
+    <div class="row"><button id="angL">↶</button><button id="angR">↷</button></div>
+  </div>
+  <button id="menuBtn">☰</button>
+</div>
+
+<div class="ov" id="lobby">
+  <div class="card">
+    <h1>Bowling</h1>
+    <div class="tag">Il Ridotto · le piste al piano di sotto</div>
+    <div class="grid">
+      <div>
+        <h2>Telefono = palla</h2>
+        <div class="qr" id="qr"></div>
+        <div class="code" id="code"></div>
+        <div class="url" id="url"></div>
+        <div class="net" id="net">Apro la sala…</div>
+        <p class="note">Inquadra il codice: il telefono diventa la tua palla. Tieni premuto il pulsante, porta il braccio indietro, poi avanti, e lascia andare.</p>
+      </div>
+      <div>
+        <h2>Giocatori</h2>
+        <div class="plist" id="plist"></div>
+        <div class="row" style="margin-top:8px">
+          <input class="nmi" id="localName" maxlength="14" placeholder="Nome">
+          <button class="chip" id="addLocal">+ Gioco qui (mouse o dito)</button>
+          <button class="chip" id="addBot">+ Bot</button>
+        </div>
+        <h2>Pista</h2>
+        <div class="row" id="modes">
+          <button class="opt sel" data-m="classica"><b>Classica</b><span>Pista vera, olio davanti e secco in fondo</span></button>
+          <button class="opt" data-m="speciale"><b>Piste speciali</b><span>Gobbe, muri che ballano, salti, girandole</span></button>
+        </div>
+        <h2>Frame</h2>
+        <div class="row" id="frames"><button class="chip" data-f="3">3</button><button class="chip" data-f="5">5</button><button class="chip sel" data-f="10">10 (partita vera)</button></div>
+        <button class="go" id="start" disabled>Si gioca</button>
+        <a class="back" href="./">← Torna al Ridotto</a>
+      </div>
+    </div>
+  </div>
+</div>
+
+<div class="ov hide" id="end">
+  <div class="card" style="width:min(560px,94vw)">
+    <h1>Fine partita</h1>
+    <div class="final" id="final"></div>
+    <button class="go" id="again">Rivincita</button>
+    <button class="chip" id="toLobby" style="margin-top:10px">Torna alla sala</button>
+  </div>
+</div>
+
+<script src="vendor/qrcode.js"></script>
+<script src="vendor/peerjs.min.js"></script>
+<script type="importmap">{"imports":{"three":"./vendor/three.module.js","three/addons/":"./vendor/jsm/","cannon-es":"./vendor/cannon-es.js"}}</script>
+<script type="module" src="bowling/game.js"></script>
+</body>
+</html>

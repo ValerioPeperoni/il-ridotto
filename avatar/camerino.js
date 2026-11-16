@@ -77,3 +77,6 @@ function frame(now) {
   composer.render();
 }
 requestAnimationFrame(frame);
+
+// ritorno alla pagina di provenienza (es. il telecomando sul telefono)
+{ const ret = new URLSearchParams(location.search).get('ret'); if (ret && /^[\w.\-\/?=&%:]+$/.test(ret) && !ret.includes('//')) { const b = document.querySelector('#back'); b.href = ret; b.textContent = '← Indietro'; } }

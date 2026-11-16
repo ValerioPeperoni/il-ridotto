@@ -10,11 +10,11 @@ export function createDeck() {
   world.solver.iterations = 14;
   world.broadphase = new CANNON.SAPBroadphase(world);
   const mLane = new CANNON.Material('lane'), mPin = new CANNON.Material('pin'), mBall = new CANNON.Material('ball'), mWall = new CANNON.Material('wall');
-  world.addContactMaterial(new CANNON.ContactMaterial(mPin, mPin, { friction: 0.25, restitution: 0.55 }));
-  world.addContactMaterial(new CANNON.ContactMaterial(mPin, mLane, { friction: 0.3, restitution: 0.25 }));
-  world.addContactMaterial(new CANNON.ContactMaterial(mBall, mPin, { friction: 0.12, restitution: 0.65 }));
+  world.addContactMaterial(new CANNON.ContactMaterial(mPin, mPin, { friction: 0.3, restitution: 0.52 }));
+  world.addContactMaterial(new CANNON.ContactMaterial(mPin, mLane, { friction: 0.4, restitution: 0.15 }));
+  world.addContactMaterial(new CANNON.ContactMaterial(mBall, mPin, { friction: 0.12, restitution: 0.62 }));
   world.addContactMaterial(new CANNON.ContactMaterial(mBall, mLane, { friction: 0.2, restitution: 0.05 }));
-  world.addContactMaterial(new CANNON.ContactMaterial(mPin, mWall, { friction: 0.2, restitution: 0.5 }));
+  world.addContactMaterial(new CANNON.ContactMaterial(mPin, mWall, { friction: 0.3, restitution: 0.3 }));
   world.addContactMaterial(new CANNON.ContactMaterial(mBall, mWall, { friction: 0.1, restitution: 0.3 }));
   const fixed = (shape, x, y, z, mat) => { const b = new CANNON.Body({ mass: 0, material: mat }); b.addShape(shape); b.position.set(x, y, z); world.addBody(b); return b; };
   const deckLen = L.deckStart - L.deckEnd + 0.4, deckZ = (L.deckStart + L.deckEnd) / 2 + 0.2;
@@ -26,7 +26,7 @@ export function createDeck() {
   for (const s of [-1, 1]) fixed(new CANNON.Box(new CANNON.Vec3(0.03, 0.5, 2.0)), s * sideX, 0.3, L.deckEnd + 0.4, mWall); // sponde laterali
   fixed(new CANNON.Box(new CANNON.Vec3(1.5, 0.6, 0.05)), 0, 0.2, L.deckEnd - 1.6, mWall); // tenda in fondo
   const pins = pinSpots().map(sp => {
-    const b = new CANNON.Body({ mass: PIN.mass, material: mPin, allowSleep: true, sleepSpeedLimit: 0.08, sleepTimeLimit: 0.4, linearDamping: 0.05, angularDamping: 0.12 });
+    const b = new CANNON.Body({ mass: PIN.mass, material: mPin, allowSleep: true, sleepSpeedLimit: 0.08, sleepTimeLimit: 0.4, linearDamping: 0.03, angularDamping: 0.08 });
     const c = -PIN.com;
     b.addShape(new CANNON.Cylinder(0.058, 0.038, 0.12, 10), new CANNON.Vec3(0, 0.06 + c, 0));
     b.addShape(new CANNON.Cylinder(0.026, 0.058, 0.13, 10), new CANNON.Vec3(0, 0.185 + c, 0));

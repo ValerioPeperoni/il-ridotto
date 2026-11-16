@@ -3,141 +3,118 @@
 <head>
 <meta charset="utf-8">
 <meta name="viewport" content="width=device-width,initial-scale=1,maximum-scale=1,user-scalable=no,viewport-fit=cover">
-<meta name="theme-color" content="#07060c">
-<title>Bowling · Il Ridotto</title>
+<meta name="theme-color" content="#3d7bff">
+<title>Bowling</title>
 <link rel="icon" href="favicon.svg" type="image/svg+xml">
 <link rel="stylesheet" href="fonts.css">
 <style>
-:root{--neon:#ff3d9a;--cyan:#38e8ff;--ink:#f4ecff;--bg:#07060c;--gold:#ffd166}
+:root{--blue:#3d7bff;--yel:#ffcf3a;--pink:#ff5c9a;--ink:#1d2340;--card:#fff}
 *{box-sizing:border-box;-webkit-tap-highlight-color:transparent}
-html,body{margin:0;height:100%;background:var(--bg);color:var(--ink);font-family:"Cormorant Garamond",Georgia,serif;overflow:hidden;touch-action:none;user-select:none;-webkit-user-select:none}
+html,body{margin:0;height:100%;overflow:hidden;background:#cfe0ff;color:var(--ink);font-family:"Fredoka",system-ui,sans-serif;touch-action:none;user-select:none;-webkit-user-select:none}
 canvas#gl{position:fixed;inset:0;width:100%;height:100%}
-button{font:inherit;color:inherit;cursor:pointer}
+button{font:inherit;color:inherit;cursor:pointer;border:none}
 .hide{display:none!important}
 #hud{position:fixed;inset:0;pointer-events:none}
-#who{position:absolute;top:max(10px,env(safe-area-inset-top));left:50%;transform:translateX(-50%);text-align:center;padding:6px 20px;border-radius:20px;background:rgba(10,6,20,.7);border:1px solid rgba(255,61,154,.45);box-shadow:0 0 18px rgba(255,61,154,.25)}
-#who b{font-size:22px;display:block;line-height:1.1}
-#who span{font-size:14px;opacity:.8;font-style:italic}
-#big{position:absolute;left:50%;top:38%;transform:translate(-50%,-50%) scale(.6);font-family:"IM Fell English SC",serif;font-size:min(16vw,120px);color:#fff;opacity:0;transition:opacity .25s,transform .35s cubic-bezier(.2,1.6,.4,1);text-shadow:0 0 12px var(--neon),0 0 34px var(--neon),0 0 60px #f0f;white-space:nowrap}
-#big.show{opacity:1;transform:translate(-50%,-50%) scale(1)}
-#big.cyan{text-shadow:0 0 12px var(--cyan),0 0 34px var(--cyan),0 0 60px #0ff}
-#replay{position:absolute;top:max(70px,calc(env(safe-area-inset-top) + 64px));right:max(14px,env(safe-area-inset-right));font:700 22px Arial,sans-serif;color:#ff3d9a;letter-spacing:3px;text-shadow:0 0 10px #f0f;animation:blink 1s steps(2) infinite}
-@keyframes blink{50%{opacity:.3}}
-#sheet{position:absolute;left:50%;bottom:max(8px,env(safe-area-inset-bottom));transform:translateX(-50%);background:rgba(8,6,16,.82);border:1px solid rgba(56,232,255,.3);border-radius:12px;padding:6px 8px;font-family:Arial,Helvetica,sans-serif;font-size:12px;max-width:98vw;overflow:auto}
-#sheet table{border-collapse:collapse}
-#sheet td{border:1px solid rgba(255,255,255,.12);text-align:center;min-width:30px;padding:1px 3px}
-#sheet td.nm{text-align:left;min-width:80px;font-weight:700;font-family:"Cormorant Garamond",serif;font-size:15px}
-#sheet tr.cur td.nm{color:var(--gold)}
-#sheet .r{font-size:11px;color:#bfe9ff;height:14px}
-#sheet .t{font-weight:700;font-size:14px;height:18px}
-#sheet td.tot{font-size:17px;font-weight:700;color:var(--gold);min-width:44px}
-#tip{position:absolute;left:50%;top:max(70px,calc(env(safe-area-inset-top) + 64px));transform:translateX(-50%);font-size:18px;padding:5px 16px;border-radius:16px;background:rgba(10,6,20,.6);white-space:nowrap;max-width:94vw;overflow:hidden;text-overflow:ellipsis}
-#aimbox{position:absolute;right:max(10px,env(safe-area-inset-right));top:50%;transform:translateY(-50%);width:110px;pointer-events:auto;touch-action:none}
-#aimlane{position:relative;width:110px;height:230px;border-radius:10px;background:linear-gradient(90deg,#222 0 12%,#c79a5b 12% 88%,#222 88%);border:1px solid rgba(255,255,255,.25);overflow:hidden}
-#aimlane .pins{position:absolute;top:8px;left:50%;transform:translateX(-50%);font-size:10px;line-height:8px;text-align:center;color:#fff;letter-spacing:2px}
-#aimlane .ball{position:absolute;bottom:14px;width:18px;height:18px;margin-left:-9px;border-radius:50%;background:radial-gradient(circle at 35% 30%,#ff8fd0,#7a0d55);box-shadow:0 0 8px #f0f}
-#aimlane svg{position:absolute;inset:0}
-#aimbox .lab{text-align:center;font-size:13px;opacity:.8;margin-top:3px}
-#aimbox .row{display:flex;gap:4px;margin-top:4px}
-#aimbox .row button{flex:1;padding:4px 0;border-radius:8px;border:1px solid rgba(255,255,255,.25);background:rgba(20,10,30,.8);font-size:16px}
-#menuBtn{position:absolute;top:max(10px,env(safe-area-inset-top));right:max(10px,env(safe-area-inset-right));pointer-events:auto;width:40px;height:40px;border-radius:50%;border:1px solid rgba(255,255,255,.3);background:rgba(10,6,20,.7)}
-/* lobby */
-.ov{position:fixed;inset:0;display:flex;align-items:center;justify-content:center;background:radial-gradient(ellipse at center,rgba(20,8,30,.55),rgba(5,3,10,.92));overflow:auto;padding:14px}
-.card{width:min(900px,97vw);max-height:95vh;overflow:auto;background:linear-gradient(#150c22,#0b0714);border:1px solid rgba(255,61,154,.45);border-radius:18px;padding:16px 20px 20px;box-shadow:0 0 40px rgba(255,61,154,.2),0 20px 60px #000}
-.card h1{margin:0;text-align:center;font-family:"IM Fell English SC",serif;font-weight:400;font-size:52px;color:#fff;text-shadow:0 0 10px var(--neon),0 0 30px var(--neon)}
-.card .tag{text-align:center;font-style:italic;opacity:.8}
-.card h2{margin:14px 0 8px;font-size:14px;letter-spacing:3px;text-transform:uppercase;color:var(--cyan);font-weight:600}
-.grid{display:grid;grid-template-columns:260px 1fr;gap:20px}
-@media (max-width:700px){.grid{grid-template-columns:1fr}.card h1{font-size:38px}}
-.qr{background:#fff;border-radius:12px;padding:8px;width:200px;height:200px;margin:0 auto}
-.qr svg{width:100%;height:100%}
-.code{text-align:center;font:700 34px Arial,sans-serif;letter-spacing:8px;margin-top:6px;color:var(--gold)}
-.url{text-align:center;font-size:13px;opacity:.7;word-break:break-all}
-.net{text-align:center;font-size:14px;opacity:.8;font-style:italic;margin-top:4px}
-.plist{display:flex;flex-direction:column;gap:6px;min-height:40px}
-.pp{display:flex;align-items:center;gap:10px;padding:6px 10px;border-radius:12px;background:rgba(255,255,255,.04);border:1px solid rgba(255,255,255,.1)}
-.pp .dot{width:24px;height:24px;border-radius:50%;flex:none}
-.pp b{font-size:19px;flex:1}
-.pp small{opacity:.7;font-style:italic}
-.pp button{border:none;background:none;font-size:18px;opacity:.6}
-.row{display:flex;gap:8px;flex-wrap:wrap}
-.opt{flex:1 1 150px;padding:9px 12px;border-radius:12px;border:1px solid rgba(255,255,255,.18);background:rgba(255,255,255,.03);text-align:left}
-.opt b{display:block;font-size:19px}.opt span{font-size:14px;opacity:.75}
-.opt.sel{border-color:var(--neon);background:rgba(255,61,154,.14);box-shadow:0 0 12px rgba(255,61,154,.25)}
-.chip{padding:6px 12px;border-radius:16px;border:1px solid rgba(255,255,255,.2);background:none;font-size:16px}
-.chip.sel{border-color:var(--cyan);background:rgba(56,232,255,.15)}
-.go{display:block;width:100%;margin-top:16px;padding:12px;border-radius:14px;border:1px solid var(--neon);background:linear-gradient(#a8146a,#5a0a3a);font-size:26px;font-weight:700;color:#fff;text-shadow:0 0 8px #f0f}
+#sheet{position:absolute;top:max(10px,env(safe-area-inset-top));left:50%;transform:translateX(-50%);background:var(--card);border-radius:18px;padding:6px 8px;box-shadow:0 6px 0 rgba(29,35,64,.15),0 10px 30px rgba(29,35,64,.2);max-width:98vw;overflow:auto}
+#sheet table{border-collapse:separate;border-spacing:3px}
+#sheet td{min-width:30px;text-align:center;border-radius:8px;background:#eef3ff;padding:1px 3px;font-weight:600}
+#sheet td.nm{background:none;text-align:left;min-width:90px;font-size:16px;font-weight:700;white-space:nowrap}
+#sheet td.nm i{display:inline-block;width:12px;height:12px;border-radius:50%;margin-right:6px;vertical-align:-1px}
+#sheet .r{font-size:12px;color:#5a6390;height:16px}
+#sheet .t{font-size:15px;height:20px}
+#sheet td.tot{background:var(--ink);color:#fff;font-size:18px;min-width:46px}
+#sheet tr.cur td{background:#fff3c4}#sheet tr.cur td.nm{background:none;color:var(--blue)}#sheet tr.cur td.tot{background:var(--blue)}
+#who{position:absolute;left:max(14px,env(safe-area-inset-left));bottom:max(14px,env(safe-area-inset-bottom));background:var(--card);border-radius:18px;padding:8px 16px;box-shadow:0 5px 0 rgba(29,35,64,.15)}
+#who b{display:block;font-size:22px}#who span{font-size:14px;color:#5a6390}
+#tip{position:absolute;left:50%;bottom:max(16px,env(safe-area-inset-bottom));transform:translateX(-50%);background:rgba(29,35,64,.82);color:#fff;border-radius:999px;padding:8px 18px;font-size:17px;font-weight:500;white-space:nowrap;max-width:62vw;overflow:hidden;text-overflow:ellipsis}
+#big{position:absolute;left:50%;top:40%;transform:translate(-50%,-50%) scale(.4) rotate(-6deg);font-size:min(17vw,140px);font-weight:700;color:#fff;-webkit-text-stroke:6px var(--ink);paint-order:stroke fill;text-shadow:0 10px 0 var(--ink);opacity:0;transition:transform .35s cubic-bezier(.2,1.8,.4,1),opacity .2s;white-space:nowrap;letter-spacing:2px}
+#big.show{opacity:1;transform:translate(-50%,-50%) scale(1) rotate(-6deg)}
+#big.y{color:var(--yel)}#big.p{color:var(--pink)}#big.b{color:#9fd0ff}
+#aim{position:absolute;right:max(14px,env(safe-area-inset-right));bottom:max(14px,env(safe-area-inset-bottom));background:var(--card);border-radius:18px;padding:10px;box-shadow:0 5px 0 rgba(29,35,64,.15);pointer-events:auto;touch-action:none;width:170px}
+#aim .lane{position:relative;height:60px;border-radius:10px;background:linear-gradient(90deg,#5a6390 0 12%,#f3d9a8 12% 88%,#5a6390 88%)}
+#aim .ball{position:absolute;top:70%;width:22px;height:22px;margin:-11px 0 0 -11px;border-radius:50%;background:var(--blue);box-shadow:0 2px 0 rgba(0,0,0,.3)}
+#aim svg{position:absolute;inset:0;width:100%;height:100%}
+#aim .row{display:flex;gap:6px;margin-top:8px}
+#aim .row button{flex:1;padding:6px 0;border-radius:10px;background:#eef3ff;font-weight:700;font-size:18px}
+#aim .row button.sel{background:var(--blue);color:#fff}
+#aim #spinPC button{font-size:13px}
+#aim small{display:block;text-align:center;font-size:12px;color:#5a6390;margin-top:6px}
+#power{position:absolute;left:calc(50% + 120px);top:55%;transform:translateY(-50%);width:18px;height:190px;border-radius:9px;background:rgba(255,255,255,.6);box-shadow:0 0 0 3px #fff;overflow:hidden;opacity:0;transition:opacity .2s}
+#power.on{opacity:1}#power b{position:absolute;left:0;right:0;bottom:0;height:0;background:linear-gradient(0deg,var(--yel),var(--pink))}
+#menuBtn{position:absolute;top:max(10px,env(safe-area-inset-top));right:max(10px,env(safe-area-inset-right));pointer-events:auto;width:44px;height:44px;border-radius:50%;background:var(--card);font-size:20px;box-shadow:0 4px 0 rgba(29,35,64,.15)}
+.ov{position:fixed;inset:0;display:flex;align-items:center;justify-content:center;background:rgba(61,123,255,.35);backdrop-filter:blur(6px);-webkit-backdrop-filter:blur(6px);overflow:auto;padding:14px}
+.card{width:min(960px,97vw);max-height:95vh;overflow:auto;background:var(--card);border-radius:26px;padding:18px 22px 22px;box-shadow:0 10px 0 rgba(29,35,64,.15),0 20px 60px rgba(29,35,64,.35)}
+.card h1{margin:0;text-align:center;font-size:52px;color:var(--blue);letter-spacing:1px}
+.card .tag{text-align:center;color:#5a6390;margin-top:-4px}
+.card h2{margin:14px 0 8px;font-size:15px;letter-spacing:2px;text-transform:uppercase;color:#5a6390}
+.grid{display:grid;grid-template-columns:250px 1fr;gap:22px}
+@media (max-width:720px){.grid{grid-template-columns:1fr}.card h1{font-size:38px}#aim{width:140px}}
+.qr{background:#fff;border-radius:16px;padding:8px;width:200px;height:200px;margin:0 auto;box-shadow:0 0 0 3px #eef3ff}.qr svg{width:100%;height:100%}
+.code{text-align:center;font-size:34px;font-weight:700;letter-spacing:8px;color:var(--blue)}
+.url{text-align:center;font-size:12px;color:#8890b5;word-break:break-all}
+.net{text-align:center;font-size:14px;color:#5a6390;margin-top:4px}
+.plist{display:flex;flex-direction:column;gap:6px}
+.pp{display:flex;align-items:center;gap:10px;padding:8px 12px;border-radius:14px;background:#eef3ff}
+.pp i{width:22px;height:22px;border-radius:50%}.pp b{flex:1;font-size:19px}.pp small{color:#5a6390}.pp button{background:none;font-size:18px;color:#8890b5}
+.row{display:flex;gap:8px;flex-wrap:wrap;align-items:center}
+.chip{padding:8px 14px;border-radius:999px;background:#eef3ff;font-weight:600}
+.chip.sel{background:var(--blue);color:#fff}
+.opt{flex:1 1 180px;text-align:left;padding:10px 14px;border-radius:16px;background:#eef3ff}
+.opt b{display:block;font-size:19px}.opt span{font-size:14px;color:#5a6390}
+.opt.sel{background:var(--blue);color:#fff}.opt.sel span{color:#dfe8ff}
+input.nmi{font:inherit;font-size:17px;border:none;background:#eef3ff;border-radius:999px;padding:8px 14px;width:160px}
+.go{display:block;width:100%;margin-top:16px;padding:14px;border-radius:18px;background:var(--yel);font-size:26px;font-weight:700;box-shadow:0 6px 0 #d9a400}
 .go:disabled{opacity:.4}
-.note{font-size:14px;opacity:.75;font-style:italic;margin:6px 0 0}
-a.back{color:var(--cyan);opacity:.85;text-decoration:none;display:inline-block;margin-top:10px}
-input.nmi{font:inherit;font-size:17px;color:var(--ink);background:rgba(0,0,0,.35);border:1px solid rgba(255,255,255,.2);border-radius:10px;padding:6px 10px;width:150px}
-.final{font-size:22px;text-align:center}
-.final .w{font-size:34px;color:var(--gold);text-shadow:0 0 12px #f90}
+.note{font-size:14px;color:#5a6390;margin:6px 0 0}
+a.lnk{color:var(--blue);font-weight:600;text-decoration:none}
+.final{text-align:center;font-size:21px}.final .w{font-size:36px;color:var(--blue);font-weight:700}
+#load{position:fixed;inset:0;display:grid;place-items:center;background:#cfe0ff;font-size:22px;font-weight:600;z-index:5}
+#load i{display:block;width:240px;height:12px;border-radius:6px;background:#fff;margin-top:12px;overflow:hidden}#load b{display:block;height:100%;width:0;background:var(--blue)}
 </style>
 </head>
 <body>
 <canvas id="gl"></canvas>
+<div id="load"><div>Lucido le piste…<i><b id="bar"></b></i></div></div>
 <div id="hud" class="hide">
+  <div id="sheet"></div>
   <div id="who"><b>-</b><span></span></div>
   <div id="tip"></div>
+  <div id="power"><b></b></div>
   <div id="big"></div>
-  <div id="replay" class="hide">▶ REPLAY</div>
-  <div id="sheet"></div>
-  <div id="aimbox" class="hide">
-    <div id="aimlane"><div class="pins">• • • •<br>• • •<br>• •<br>•</div><svg viewBox="0 0 110 230"><line id="aimline" x1="55" y1="216" x2="55" y2="20" stroke="#fff" stroke-width="2" stroke-dasharray="5 5" opacity=".8"/></svg><div class="ball"></div></div>
-    <div class="lab">Trascina: posizione<br>Rotella / ◀ ▶: angolo</div>
-    <div class="row"><button id="angL">↶</button><button id="angR">↷</button></div>
-  </div>
+  <div id="aim" class="hide"><div class="lane"><svg viewBox="0 0 100 60" preserveAspectRatio="none"><line id="aimLine" x1="50" y1="42" x2="50" y2="2" stroke="#1d2340" stroke-width="1.5" stroke-dasharray="3 3" vector-effect="non-scaling-stroke"/></svg><div class="ball"></div></div><div class="row"><button id="mvL">◀</button><button id="angL">↶</button><button id="angR">↷</button><button id="mvR">▶</button></div><div class="row" id="spinPC"><button data-sp="-1">⟲⟲</button><button data-sp="-0.5">⟲</button><button data-sp="0">•</button><button data-sp="0.5">⟳</button><button data-sp="1">⟳⟳</button></div><small>posizione · angolo · effetto (frecce, Q/E, Z/C)</small></div>
   <button id="menuBtn">☰</button>
 </div>
-
-<div class="ov" id="lobby">
+<div class="ov hide" id="lobby">
   <div class="card">
     <h1>Bowling</h1>
-    <div class="tag">Il Ridotto · le piste al piano di sotto</div>
+    <div class="tag">Il telefono è la palla: braccio indietro, avanti, e lascia.</div>
     <div class="grid">
       <div>
-        <h2>Telefono = palla</h2>
+        <h2>Entra col telefono</h2>
         <div class="qr" id="qr"></div>
         <div class="code" id="code"></div>
         <div class="url" id="url"></div>
         <div class="net" id="net">Apro la sala…</div>
-        <p class="note">Inquadra il codice: il telefono diventa la tua palla. Tieni premuto il pulsante, porta il braccio indietro, poi avanti, e lascia andare.</p>
+        <p class="note">Il personaggio lo crei nel <a class="lnk" href="avatar.html" target="_blank">camerino</a> (anche dal telefono).</p>
       </div>
       <div>
         <h2>Giocatori</h2>
         <div class="plist" id="plist"></div>
-        <div class="row" style="margin-top:8px">
-          <input class="nmi" id="localName" maxlength="14" placeholder="Nome">
-          <button class="chip" id="addLocal">+ Gioco qui (mouse o dito)</button>
-          <button class="chip" id="addBot">+ Bot</button>
-        </div>
+        <div class="row" style="margin-top:8px"><input class="nmi" id="localName" maxlength="14" placeholder="Nome"><button class="chip" id="addLocal">+ Gioco qui col mouse</button><button class="chip" id="addBot">+ Computer</button></div>
         <h2>Pista</h2>
-        <div class="row" id="modes">
-          <button class="opt sel" data-m="classica"><b>Classica</b><span>Pista vera, olio davanti e secco in fondo</span></button>
-          <button class="opt" data-m="speciale"><b>Piste speciali</b><span>Gobbe, muri che ballano, salti, girandole</span></button>
-        </div>
+        <div class="row" id="modes"><button class="opt sel" data-m="classica"><b>Classica</b><span>Olio davanti, secco in fondo: l'effetto curva davvero</span></button><button class="opt" data-m="speciale"><b>Piste speciali</b><span>Gobbe, muri che ballano, salti, girandole</span></button></div>
         <h2>Frame</h2>
-        <div class="row" id="frames"><button class="chip" data-f="3">3</button><button class="chip" data-f="5">5</button><button class="chip sel" data-f="10">10 (partita vera)</button></div>
-        <button class="go" id="start" disabled>Si gioca</button>
-        <a class="back" href="./">← Torna al Ridotto</a>
+        <div class="row" id="frames"><button class="chip" data-f="3">3</button><button class="chip" data-f="5">5</button><button class="chip sel" data-f="10">10</button></div>
+        <button class="go" id="start" disabled>Giochiamo!</button>
+        <p class="note"><a class="lnk" href="./">← Torna alle sale</a></p>
       </div>
     </div>
   </div>
 </div>
-
-<div class="ov hide" id="end">
-  <div class="card" style="width:min(560px,94vw)">
-    <h1>Fine partita</h1>
-    <div class="final" id="final"></div>
-    <button class="go" id="again">Rivincita</button>
-    <button class="chip" id="toLobby" style="margin-top:10px">Torna alla sala</button>
-  </div>
-</div>
-
+<div class="ov hide" id="end"><div class="card" style="width:min(560px,94vw)"><h1>Fine partita</h1><div class="final" id="final"></div><button class="go" id="again">Rivincita</button><button class="chip" id="toLobby" style="margin-top:12px">Torna alla sala</button></div></div>
 <script src="vendor/qrcode.js"></script>
 <script src="vendor/peerjs.min.js"></script>
 <script type="importmap">{"imports":{"three":"./vendor/three.module.js","three/addons/":"./vendor/jsm/","cannon-es":"./vendor/cannon-es.js"}}</script>
-<script type="module" src="bowling/game.js"></script>
+<script type="module" src="bowling/main.js"></script>
 </body>
 </html>
