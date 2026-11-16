@@ -26,13 +26,14 @@ $('#enter').onclick = async () => {
     onMsg: onMsg,
   });
 };
-function show(id) { for (const s of ['join', 'wait', 'bowl', 'pong']) $('#' + s).classList.toggle('hide', s !== id); }
+function show(id) { for (const s of ['join', 'wait', 'bowl', 'pong', 'golf']) $('#' + s).classList.toggle('hide', s !== id); }
 let wake = null;
 async function keepAwake() { try { if (!wake && navigator.wakeLock) { wake = await navigator.wakeLock.request('screen'); wake.addEventListener('release', () => { wake = null; }); } } catch (e) { } }
 document.addEventListener('visibilitychange', () => { if (!document.hidden) keepAwake(); });
 
 function onMsg(m) {
   if (m.t === 'sync') { net && net.send({ t: 'sync', h: m.h }); return; }
+  if (m.t === 'golf') { game = 'golf'; golfState(m); return; }
   if (m.t === 'pong') { game = 'pong'; show('pong'); $('#pScore').textContent = `${m.score[0]} - ${m.score[1]}`; $('#pInfo').textContent = m.serving ? 'Tocca a te battere: colpisci quando la palla scende' : `contro ${m.vs}`; if (m.serving) vibrate(50); return; }
   if (m.t === 'hi') { game = m.game || 'bowling'; $('#waitT').textContent = `Ciao ${m.name}! Aspetta che parta la partita`; color = m.color || color; document.documentElement.style.setProperty('--me', color); }
   else if (m.t === 'full' || m.t === 'kicked') { $('#waitT').textContent = m.text || 'Sei stato tolto dalla sala'; }
@@ -200,3 +201,36 @@ pr.addEventListener('pointerup', () => {
   vibrate(20);
 });
 $('#pFinger').onclick = () => { $('#pRacket').innerHTML = 'Striscia il dito<br>sulla racchetta<br><small style="font-weight:400;font-size:15px">veloce = forte · verso l\'alto = carica</small>'; };
+
+
+// ---------- minigolf: fionda ----------
+let gCan = false, gHave = false;
+function golfState(m) {
+  show('golf');
+  $('#gTitle').textContent = m.phase === 'lobby' ? 'Minigolf' : `Buca ${m.hole} · ${m.name}`;
+  $('#gInfo').textContent = m.phase === 'lobby' ? 'Aspetta che parta la partita' : `Par ${m.par} · colpi ${m.strokes}`;
+  gCan = m.can;
+  $('#gState').textContent = m.phase === 'between' ? 'Prossima buca…' : m.holed ? 'In buca! 🎉' : m.frozen ? 'Congelato! 🧊' : m.can ? 'Tira!' : m.phase === 'play' ? 'La palla rotola…' : '';
+  $('#gState').style.color = m.can ? '#7cff6b' : '';
+  gHave = !!m.power;
+  $('#gUse').textContent = m.power ? `${m.power.icon} Usa: ${m.power.name}` : 'Nessun potere';
+  $('#gUse').style.opacity = m.power ? 1 : .35;
+  if (m.can) vibrate(15);
+}
+$('#gUse').onclick = () => { if (gHave && net) { net.send({ t: 'guse' }); vibrate([30, 30, 60]); } };
+const gPad = $('#gPad'); let gd = null, gLast = 0;
+function gVec(e) { const r = gPad.getBoundingClientRect(); const dx = e.clientX - gd.x, dy = e.clientY - gd.y, sc = 200 / r.width; const l = Math.hypot(dx, dy) * sc; const pow = Math.min(1, l / 90); return { dx: dx * sc, dy: dy * sc, l, pow, ang: Math.atan2(-dx, dy) }; }
+gPad.addEventListener('pointerdown', e => { gPad.setPointerCapture(e.pointerId); gd = { x: e.clientX, y: e.clientY }; });
+gPad.addEventListener('pointermove', e => {
+  if (!gd) return; const v = gVec(e), k = Math.min(1, 90 / Math.max(1, v.l));
+  $('#gBand').setAttribute('x2', v.dx * k); $('#gBand').setAttribute('y2', v.dy * k);
+  $('#gArrow').setAttribute('x2', -v.dx * k * 0.9); $('#gArrow').setAttribute('y2', -v.dy * k * 0.9);
+  $('#gArrow').setAttribute('stroke', `hsl(${120 - v.pow * 120},90%,55%)`);
+  const n = performance.now(); if (n - gLast > 60 && net) { gLast = n; net.send({ t: 'gaim', ang: v.ang, pow: v.pow }); }
+});
+gPad.addEventListener('pointerup', e => {
+  if (!gd) return; const v = gVec(e); gd = null;
+  for (const id of ['#gBand', '#gArrow']) { $(id).setAttribute('x2', 0); $(id).setAttribute('y2', 0); }
+  if (v.l < 8) return;
+  if (net) net.send({ t: 'gshot', ang: v.ang, pow: v.pow }); vibrate(30);
+});

@@ -1,0 +1,130 @@
+<!doctype html>
+<html lang="it">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width,initial-scale=1,maximum-scale=1,user-scalable=no,viewport-fit=cover">
+<meta name="theme-color" content="#0b0618">
+<title>Minigolf Delirio · Il Ridotto</title>
+<link rel="icon" href="favicon.svg" type="image/svg+xml">
+<link rel="stylesheet" href="fonts.css">
+<style>
+:root{--neon:#ff3d9a;--cyan:#38e8ff;--ink:#f4ecff;--bg:#0b0618;--gold:#ffd166}
+*{box-sizing:border-box;-webkit-tap-highlight-color:transparent}
+html,body{margin:0;height:100%;background:var(--bg);color:var(--ink);font-family:"Cormorant Garamond",Georgia,serif;overflow:hidden;touch-action:none;user-select:none;-webkit-user-select:none}
+canvas#gl{position:fixed;inset:0;width:100%;height:100%}
+button{font:inherit;color:inherit;cursor:pointer}
+.hide{display:none!important}
+#hud{position:fixed;inset:0;pointer-events:none}
+#title{position:absolute;top:max(10px,env(safe-area-inset-top));left:50%;transform:translateX(-50%);text-align:center;padding:5px 18px;border-radius:18px;background:rgba(12,6,24,.7);border:1px solid rgba(255,61,154,.4)}
+#title b{display:block;font-size:21px}#title span{font-size:14px;opacity:.8;font-style:italic}
+#timer{position:absolute;top:max(70px,calc(env(safe-area-inset-top) + 64px));left:50%;transform:translateX(-50%);font:700 22px Arial,sans-serif;color:var(--gold)}
+#side{position:absolute;left:max(10px,env(safe-area-inset-left));top:max(10px,env(safe-area-inset-top));display:flex;flex-direction:column;gap:4px}
+.sp{padding:3px 10px;border-radius:12px;background:rgba(12,6,24,.7);border-left:4px solid;font-size:16px}
+.sp span{opacity:.8;font-style:italic}.sp em{font-style:normal}
+#scores{position:absolute;right:max(10px,env(safe-area-inset-right));bottom:max(10px,env(safe-area-inset-bottom));background:rgba(12,6,24,.8);border:1px solid rgba(56,232,255,.3);border-radius:12px;padding:6px 8px;font:12px Arial,sans-serif;transition:.3s;transform-origin:bottom right}
+#scores.full{transform:scale(1.6)}
+#scores td,#scores th{padding:1px 5px;text-align:center}#scores th.cur{color:var(--gold)}#scores .nm{text-align:left;font-weight:700}#scores .tot{color:var(--gold);font-weight:700}#scores .par td{opacity:.6}
+#big{position:absolute;left:50%;top:40%;transform:translate(-50%,-50%) scale(.6);text-align:center;font-family:"IM Fell English SC",serif;font-size:min(13vw,96px);opacity:0;transition:opacity .25s,transform .35s cubic-bezier(.2,1.6,.4,1);text-shadow:0 0 12px var(--neon),0 0 34px var(--neon);white-space:nowrap;line-height:1}
+#big small{display:block;font-size:.45em;color:var(--gold);text-shadow:0 2px 10px #000}
+#big.show{opacity:1;transform:translate(-50%,-50%) scale(1)}
+#toasts{position:absolute;left:50%;bottom:max(14px,env(safe-area-inset-bottom));transform:translateX(-50%);display:flex;flex-direction:column-reverse;gap:6px;align-items:center}
+.toast{padding:5px 14px;border-radius:14px;background:rgba(12,6,24,.85);border:1px solid;font-size:17px;animation:tin .25s}
+@keyframes tin{from{opacity:0;transform:translateY(10px)}}
+#useBtn{position:absolute;left:50%;bottom:max(70px,calc(env(safe-area-inset-bottom) + 64px));transform:translateX(-50%);pointer-events:auto;padding:10px 22px;border-radius:22px;border:1px solid var(--gold);background:rgba(60,30,8,.9);font-size:20px}
+#menuBtn{position:absolute;top:max(10px,env(safe-area-inset-top));right:max(10px,env(safe-area-inset-right));pointer-events:auto;width:40px;height:40px;border-radius:50%;border:1px solid rgba(255,255,255,.3);background:rgba(12,6,24,.7)}
+#help{position:absolute;right:max(60px,calc(env(safe-area-inset-right) + 56px));top:max(14px,env(safe-area-inset-top));font-size:14px;opacity:.75;font-style:italic;max-width:38vw;text-align:right}
+.ov{position:fixed;inset:0;display:flex;align-items:center;justify-content:center;background:radial-gradient(ellipse at center,rgba(20,8,40,.55),rgba(5,3,12,.92));overflow:auto;padding:14px}
+.card{width:min(940px,97vw);max-height:95vh;overflow:auto;background:linear-gradient(#170c2a,#0b0716);border:1px solid rgba(255,61,154,.45);border-radius:18px;padding:16px 20px 20px;box-shadow:0 0 40px rgba(255,61,154,.2),0 20px 60px #000}
+.card h1{margin:0;text-align:center;font-family:"IM Fell English SC",serif;font-weight:400;font-size:50px;color:#fff;text-shadow:0 0 10px var(--neon),0 0 30px var(--neon)}
+.card .tag{text-align:center;font-style:italic;opacity:.8}
+.card h2{margin:14px 0 8px;font-size:14px;letter-spacing:3px;text-transform:uppercase;color:var(--cyan);font-weight:600}
+.grid{display:grid;grid-template-columns:260px 1fr;gap:20px}
+@media (max-width:700px){.grid{grid-template-columns:1fr}.card h1{font-size:36px}#help{display:none}}
+.qr{background:#fff;border-radius:12px;padding:8px;width:200px;height:200px;margin:0 auto}.qr svg{width:100%;height:100%}
+.code{text-align:center;font:700 34px Arial,sans-serif;letter-spacing:8px;margin-top:6px;color:var(--gold)}
+.url{text-align:center;font-size:13px;opacity:.7;word-break:break-all}
+.net{text-align:center;font-size:14px;opacity:.8;font-style:italic;margin-top:4px}
+.plist{display:flex;flex-direction:column;gap:6px}
+.pp{display:flex;align-items:center;gap:10px;padding:6px 10px;border-radius:12px;background:rgba(255,255,255,.04);border:1px solid rgba(255,255,255,.1)}
+.pp .dot{width:22px;height:22px;border-radius:50%}.pp b{font-size:19px;flex:1}.pp small{opacity:.7;font-style:italic}.pp button{border:none;background:none;font-size:18px;opacity:.6}
+.row{display:flex;gap:8px;flex-wrap:wrap;align-items:center}
+.chip{padding:6px 12px;border-radius:16px;border:1px solid rgba(255,255,255,.2);background:none;font-size:16px}
+.chip.sel{border-color:var(--neon);background:rgba(255,61,154,.16)}
+.go{display:block;width:100%;margin-top:16px;padding:12px;border-radius:14px;border:1px solid var(--neon);background:linear-gradient(#a8146a,#5a0a3a);font-size:26px;font-weight:700;color:#fff}
+.go:disabled{opacity:.4}
+.note{font-size:14px;opacity:.75;font-style:italic;margin:6px 0 0}
+.pw{display:grid;grid-template-columns:repeat(auto-fill,minmax(190px,1fr));gap:4px 12px;font-size:15px}
+a.back{color:var(--cyan);opacity:.85;text-decoration:none;display:inline-block;margin-top:10px}
+input.nmi{font:inherit;font-size:17px;color:var(--ink);background:rgba(0,0,0,.35);border:1px solid rgba(255,255,255,.2);border-radius:10px;padding:6px 10px;width:150px}
+.final{font-size:21px;text-align:center}.final .w{font-size:34px;color:var(--gold)}
+</style>
+</head>
+<body>
+<canvas id="gl"></canvas>
+<div id="hud" class="hide">
+  <div id="title"><b id="holeName">-</b><span id="holePar"></span></div>
+  <div id="timer" class="hide"></div>
+  <div id="side"></div>
+  <div id="help">Trascina all'indietro come una fionda e lascia. Spazio o E per usare il potere.</div>
+  <div id="scores"></div>
+  <div id="big"></div>
+  <div id="toasts"></div>
+  <button id="useBtn" class="hide">Usa</button>
+  <button id="menuBtn">☰</button>
+</div>
+
+<div class="ov" id="lobby">
+  <div class="card">
+    <h1>Minigolf Delirio</h1>
+    <div class="tag">Il Ridotto · il terrazzo sopra il casinò, sospeso nel vuoto</div>
+    <div class="grid">
+      <div>
+        <h2>Telefono = mazza</h2>
+        <div class="qr" id="qr"></div>
+        <div class="code" id="code"></div>
+        <div class="url" id="url"></div>
+        <div class="net" id="net">Apro la sala…</div>
+        <p class="note">Tutti tirano insieme, quando vogliono. Sul telefono trascini all'indietro come una fionda guardando lo schermo grande.</p>
+      </div>
+      <div>
+        <h2>Giocatori (fino a 6)</h2>
+        <div class="plist" id="plist"></div>
+        <div class="row" style="margin-top:8px">
+          <input class="nmi" id="localName" maxlength="14" placeholder="Nome">
+          <button class="chip" id="addLocal">+ Gioco qui (mouse o dito)</button>
+          <button class="chip" id="addBot">+ Bot</button>
+        </div>
+        <h2>Buche</h2>
+        <div class="row" id="nh"><button class="chip" data-n="3">3 (veloce)</button><button class="chip sel" data-n="6">Tutte e 6</button></div>
+        <h2>Poteri nelle scatole "?"</h2>
+        <div class="pw">
+          <div>💣 <b>Bomba</b>: esplode su chi è più vicino alla buca</div>
+          <div>⚡ <b>Raggio</b>: fulmina la palla più vicina</div>
+          <div>🧊 <b>Ghiaccio</b>: congela tutti gli altri</div>
+          <div>🍄 <b>Palloni</b>: gli altri diventano giganti</div>
+          <div>🧲 <b>Calamita</b>: la buca ti attira</div>
+          <div>🦘 <b>Molla</b>: il prossimo tiro salta</div>
+          <div>🌀 <b>Scambio</b>: rubi il posto al primo</div>
+        </div>
+        <button class="go" id="start" disabled>Si gioca</button>
+        <a class="back" href="./">← Torna al Ridotto</a>
+      </div>
+    </div>
+  </div>
+</div>
+
+<div class="ov hide" id="end">
+  <div class="card" style="width:min(560px,94vw)">
+    <h1>Classifica</h1>
+    <div class="final" id="final"></div>
+    <button class="go" id="again">Rivincita</button>
+    <button class="chip" id="toLobby" style="margin-top:10px">Torna alla sala</button>
+  </div>
+</div>
+
+<script src="vendor/qrcode.js"></script>
+<script src="vendor/peerjs.min.js"></script>
+<script type="importmap">{"imports":{"three":"./vendor/three.module.js","three/addons/":"./vendor/jsm/","cannon-es":"./vendor/cannon-es.js"}}</script>
+<script type="module" src="golf/game.js"></script>
+</body>
+</html>

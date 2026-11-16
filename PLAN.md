@@ -25,5 +25,9 @@ Pallina con Magnus/attrito/rimbalzi, personaggi del Ridotto, colpi: dritto, cari
 tempismo = direzione, forza = profondità (troppa = fuori), arbitro con regole vere (battuta, doppio rimbalzo, rete, a 11 ai vantaggi),
 computer a 3 livelli, 2 giocatori con vista TV, compensazione del ritardo del telefono.
 Stato: v1 PUBBLICATA. Da provare con telefoni veri (soglie del gesto). Idee: colpi speciali, tornei.
-## 4. Minigolf delirio — da fare (mappe 3D, avatar, poteri, colpi tra giocatori)
+## 4. Minigolf Delirio (minigolf.html, site/golf/*, telecomando.html modalità fionda)
+6 buche sospese nel vuoto a tema casinò (dadi, roulette che gira, salto, mulino, labirinto con blocchi mobili),
+tutti tirano insieme, palle con occhi e cappello, 7 poteri (bomba, raggio, ghiaccio, palloni giganti, calamita, molla, scambio),
+fino a 6 giocatori (telefoni, uno su schermo, bot), classifica a colpi.
+Stato: v1 PUBBLICATA. Idee: più buche, buche con salite a più piani, giro della morte, editor di buche, avatar del Ridotto accanto alla palla.
 ## 5. Liar's Bar rifatto — da fare (prima persona su ogni telefono, schermo = regia, modelli animati CC0)
