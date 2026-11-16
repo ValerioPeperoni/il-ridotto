@@ -1,3 +1,4 @@
+import { createGolfView } from './caos/phone-view.js';
 // Telefono come controller di movimento (bowling; in futuro ping pong).
 import { joinRoom } from './net.js';
 
@@ -9,6 +10,7 @@ const store = { get: k => { try { return localStorage.getItem(k); } catch (e) { 
 let pid = store.get('ridotto-pid'); if (!pid) { pid = Math.random().toString(36).slice(2, 10); store.set('ridotto-pid', pid); }
 let color = store.get('ridotto-color') || COLORS[Math.floor(Math.random() * 6)];
 let game = 'bowling', net = null, myTurn = false, flipHook = store.get('ridotto-flip') === '1', fingerMode = false;
+let golfView = null;
 
 // ---------- schermata di ingresso ----------
 function myLook() { try { const p = JSON.parse(store.get('ridotto-avatar') || 'null'); return p && p.look ? p.look : null; } catch (e) { return null; } }
@@ -27,23 +29,35 @@ $('#enter').onclick = async () => {
   await askMotion(); keepAwake();
   show('wait'); $('#waitT').textContent = 'Mi collego…';
   net = joinRoom(CODE, {
-    onState(s) { $('#netstate').textContent = s === 'open' ? 'Collegato' : s === 'noroom' ? 'Non trovo la sala: lo schermo è acceso?' : s === 'lost' ? 'Connessione persa, riprovo…' : 'Mi collego…'; if (s === 'open') net.send({ t: 'join', name, color, pid, look: myLook() }); },
+    onState(s) { $('#netstate').textContent = s === 'open' ? 'Collegato' : s === 'noroom' ? 'Non trovo la sala: lo schermo è acceso?' : s === 'lost' ? 'Connessione persa, riprovo…' : 'Mi collego…'; if (s === 'open') net.send({ t: 'join', name, color, pid, look: myLook(), wantView: true }); },
     onMsg: onMsg,
   });
 };
 function show(id) { for (const s of ['join', 'wait', 'bowl', 'pong', 'golf', 'caos']) $('#' + s).classList.toggle('hide', s !== id); }
+function destroyGolfView() {
+  if (golfView) { golfView.destroy(); golfView = null; }
+  $('#cBallArrow').style.display = 'none';
+  slingResetIfReady();
+}
+function slingResetIfReady() {
+  const line = $('#cSlingLine'), head = $('#cSlingHead');
+  if (line) { line.setAttribute('x2', 50); line.setAttribute('y2', 14); }
+  if (head) head.removeAttribute('transform');
+}
 let wake = null;
 async function keepAwake() { try { if (!wake && navigator.wakeLock) { wake = await navigator.wakeLock.request('screen'); wake.addEventListener('release', () => { wake = null; }); } } catch (e) { } }
 document.addEventListener('visibilitychange', () => { if (!document.hidden) keepAwake(); });
 
 function onMsg(m) {
   if (m.t === 'sync') { net && net.send({ t: 'sync', h: m.h }); return; }
-  if (m.t === 'golf') { game = 'golf'; golfState(m); return; }
+  if (m.t === 'golf') { destroyGolfView(); game = 'golf'; golfState(m); return; }
   if (m.t === 'caos') { game = 'caos'; caosState(m); return; }
-  if (m.t === 'pong') { game = 'pong'; show('pong'); $('#pScore').textContent = `${m.score[0]} - ${m.score[1]}`; $('#pInfo').textContent = m.serving ? 'Tocca a te battere: colpisci quando la palla scende' : `contro ${m.vs}`; if (m.serving) vibrate(50); return; }
+  if (m.t === 'caos-view') { game = 'caos'; show('caos'); const mine = (m.players || []).find(p => p.id === pid); lastCaos.yaw = mine?.cyaw ?? mine?.yaw ?? lastCaos.yaw; if (!golfView) golfView = createGolfView({ canvas: $('#cViewCanvas'), arrow: $('#cBallArrow'), readout: $('#cReadout') }); golfView.setState(m); return; }
+  if (m.t === 'pong') { destroyGolfView(); game = 'pong'; show('pong'); $('#pScore').textContent = `${m.score[0]} - ${m.score[1]}`; $('#pInfo').textContent = m.serving ? 'Tocca a te battere: colpisci quando la palla scende' : `contro ${m.vs}`; if (m.serving) vibrate(50); return; }
   if (m.t === 'hi') { game = m.game || 'bowling'; $('#waitT').textContent = `Ciao ${m.name}! Aspetta che parta la partita`; color = m.color || color; document.documentElement.style.setProperty('--me', color); }
   else if (m.t === 'full' || m.t === 'kicked') { $('#waitT').textContent = m.text || 'Sei stato tolto dalla sala'; }
   else if (m.t === 'turn') {
+    destroyGolfView();
     myTurn = !!m.yours;
     if (myTurn) {
       show('bowl'); aimX = m.x ?? aimX; aimA = m.a ?? 0; if (m.spin != null) { spin = m.spin; drawSpin(); } drawLane();
@@ -52,7 +66,7 @@ function onMsg(m) {
     } else { show('wait'); $('#waitT').textContent = m.who ? `Tocca a ${m.who}` : 'Aspetta…'; }
   }
   else if (m.t === 'res') { $('#res').textContent = m.text; $('#score').textContent = `Punti: ${m.score}`; if (/STRIKE|SPARE/.test(m.text)) vibrate([80, 60, 160]); }
-  else if (m.t === 'end') { show('wait'); $('#waitT').textContent = m.text; $('#score').textContent = `I tuoi punti: ${m.score}`; }
+  else if (m.t === 'end') { destroyGolfView(); show('wait'); $('#waitT').textContent = m.text; $('#score').textContent = `I tuoi punti: ${m.score}`; }
 }
 function vibrate(p) { try { navigator.vibrate && navigator.vibrate(p); } catch (e) { } }
 
@@ -269,7 +283,7 @@ gPad.addEventListener('pointerup', e => {
 });
 
 
-// ---------- Golf Caos: levetta + tasto + oggetto ----------
+// ---------- Golf Caos: visuale 3D + levetta + fionda ----------
 let joyV = { x: 0, y: 0 }, joySent = 0, lastCaos = {};
 const joy = $('#joy'), knob = joy.querySelector('i');
 function joyFrom(e) {
@@ -282,34 +296,52 @@ joy.addEventListener('pointerdown', e => { joy.setPointerCapture(e.pointerId); j
 joy.addEventListener('pointermove', e => { if (e.buttons || e.pointerType === 'touch') joyFrom(e); });
 const joyEnd = () => { joyV = { x: 0, y: 0 }; knob.style.transform = ''; sendJoy(true); };
 joy.addEventListener('pointerup', joyEnd); joy.addEventListener('pointercancel', joyEnd);
-setInterval(() => { if (game === 'caos' && (joyV.x || joyV.y)) sendJoy(true); }, 120);
-const cBtn = $('#cBtn'); let sl = null, slSent = 0;
-const aiming = () => lastCaos.near || lastCaos.state === 'addr' || lastCaos.state === 'charge';
+setInterval(() => { if (game === 'caos' && (joyV.x || joyV.y)) sendJoy(true); }, 100);
+const cBtn = $('#cBtn'), cBtnLabel = $('#cBtnLabel'), cSlingLine = $('#cSlingLine'), cSlingHead = $('#cSlingHead');
+let sl = null, slSent = 0;
+const aiming = () => !!(lastCaos.near || lastCaos.state === 'addr' || lastCaos.state === 'charge');
+function slingPreview(dx, dy) {
+  const len = Math.max(1, Math.hypot(dx, dy)), nx = dx / len, ny = dy / len;
+  const x = 50 - nx * 35, y = 50 - ny * 35;
+  cSlingLine.setAttribute('x2', x); cSlingLine.setAttribute('y2', y);
+  cSlingHead.setAttribute('transform', `translate(${x} ${y}) rotate(${Math.atan2(-ny, -nx) * 180 / Math.PI + 90}) translate(${-x} ${-y})`);
+}
+function slingReset() { cSlingLine.setAttribute('x2', 50); cSlingLine.setAttribute('y2', 14); cSlingHead.removeAttribute('transform'); }
 cBtn.addEventListener('pointerdown', e => {
   e.preventDefault(); cBtn.setPointerCapture(e.pointerId); cBtn.classList.add('on'); vibrate(15);
-  if (aiming()) { sl = { x: e.clientX, y: e.clientY }; net && net.send({ t: 'sling', on: true, dx: 0, pow: 0 }); }
+  if (aiming()) { sl = { x: e.clientX, y: e.clientY }; slingPreview(0, 0); net && net.send({ t: 'sling', on: true, yaw: Number(lastCaos.yaw) || 0, pow: 0 }); }
   else net && net.send({ t: 'btn', on: true });
 });
 cBtn.addEventListener('pointermove', e => {
-  if (!sl) return; const now = performance.now(); if (now - slSent < 45) return; slSent = now;
-  const dx = (e.clientX - sl.x) / 160, pow = Math.max(0, Math.min(1, (e.clientY - sl.y) / (innerHeight * 0.32)));
-  if (Math.round(pow * 10) !== sl.lastP) { sl.lastP = Math.round(pow * 10); vibrate(6); }
-  net && net.send({ t: 'sling', on: true, dx: +dx.toFixed(3), pow: +pow.toFixed(3) });
+  if (!sl) return;
+  const dx = e.clientX - sl.x, dy = e.clientY - sl.y, len = Math.hypot(dx, dy);
+  slingPreview(dx, dy);
+  const pow = Math.max(0, Math.min(1, len / 128));
+  // Il dito viene tirato all'indietro: la direzione di lancio è opposta al trascinamento.
+  const yaw = (Number(lastCaos.yaw) || 0) + Math.atan2(-dx, Math.max(1, dy));
+  const now = performance.now(); if (now - slSent < 35) return; slSent = now;
+  if (Math.round(pow * 20) !== sl.lastP) { sl.lastP = Math.round(pow * 20); vibrate(5); }
+  net && net.send({ t: 'sling', on: true, yaw: +yaw.toFixed(3), pow: +pow.toFixed(3) });
 });
-const cUp = () => { cBtn.classList.remove('on'); if (sl) { sl = null; net && net.send({ t: 'sling', on: false }); } else net && net.send({ t: 'btn', on: false }); };
+const cUp = () => { cBtn.classList.remove('on'); if (sl) { sl = null; slingReset(); net && net.send({ t: 'sling', on: false }); } else net && net.send({ t: 'btn', on: false }); };
 cBtn.addEventListener('pointerup', cUp); cBtn.addEventListener('pointercancel', cUp); cBtn.addEventListener('contextmenu', e => e.preventDefault());
 $('#cItem').onclick = () => { net && net.send({ t: 'use' }); vibrate(30); };
 function caosState(m) {
-  if (m.phase === 'lobby') { show('wait'); $('#waitT').textContent = 'Aspetta che parta la partita'; return; }
+  if (m.phase === 'lobby') { destroyGolfView(); show('wait'); $('#waitT').textContent = 'Aspetta che parta la partita'; lastCaos = { ...lastCaos, near: false, state: 'wait' }; cBtn.classList.remove('aiming', 'on'); cBtnLabel.textContent = 'MAZZATA'; return; }
   show('caos');
+  if (!golfView) golfView = createGolfView({ canvas: $('#cViewCanvas'), arrow: $('#cBallArrow'), readout: $('#cReadout') });
   document.documentElement.style.setProperty('--me', m.color || color);
-  $('#cTitle').textContent = `Buca ${m.hole}`;
+  $('#cTitle').textContent = `Golf Caos · Buca ${m.hole}`;
   $('#cInfo').textContent = `${m.strokes} colpi · ${m.score} punti`;
-  const st = { frozen: '❄️ Congelato!', ko: '💫 Sei a terra!', done: '⛳ In buca!', addr: 'Mira e tira', charge: 'Lascia per tirare!' }[m.state] || (m.near ? 'Sei alla palla' : '');
+  const st = { frozen: '❄️ Congelato!', ko: '💫 Sei a terra!', done: '⛳ In buca!', addr: 'Mira e tira', charge: 'Lascia per tirare!', swing: 'Bel colpo!' }[m.state] || (m.near ? 'Sei alla palla' : m.phase === 'intro' ? 'Preparati!' : 'Raggiungi la tua palla');
   $('#cState').textContent = st;
-  cBtn.innerHTML = m.near || m.state === 'addr' || m.state === 'charge' ? 'TIRA<br><small style="font-size:13px;font-weight:500">trascina giù<br>e lascia</small>' : 'MAZZATA';
+  $('#cState').style.color = (m.state === 'frozen' || m.state === 'ko') ? '#d34e82' : '#1d2340';
+  const canAim = m.near || m.state === 'addr' || m.state === 'charge';
+  cBtnLabel.textContent = canAim ? (m.state === 'charge' ? 'RILASCIA' : 'TIRA') : 'MAZZATA';
+  cBtn.classList.toggle('aiming', !!canAim);
   const it = $('#cItem'); it.textContent = m.item || 'nessun oggetto'; it.classList.toggle('on', !!m.item);
+  $('#cHint').textContent = m.near ? 'Trascina all’indietro per mirare e caricare · rilascia per tirare' : 'Corri con la levetta · l’indicatore giallo ti porta alla palla';
   if (m.item && !lastCaos.item) vibrate(60);
   if (m.state === 'ko' && lastCaos.state !== 'ko') vibrate([100, 50, 100]);
-  lastCaos = m;
+  lastCaos = { ...lastCaos, ...m };
 }

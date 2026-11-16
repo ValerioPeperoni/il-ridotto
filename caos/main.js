@@ -254,7 +254,7 @@ function onPhone(id, m) {
       if (m.color) p.color = m.color;
       G.players.push(p);
     }
-    p.conn = id; p.online = true; if (m.look) p.look = m.look;
+    p.conn = id; p.online = true; p.view = !!m.wantView; p.viewLookKey = undefined; if (m.look) p.look = m.look;
     NET.send(id, { t: 'hi', name: p.name, color: p.color, game: 'caos' });
     renderLobby(); sendState(p);
     return;
@@ -262,7 +262,7 @@ function onPhone(id, m) {
   const p = G.players.find(x => x.conn === id); if (!p) return;
   if (m.t === 'joy') { p.input.x = clamp(+m.x || 0, -1, 1); p.input.y = clamp(+m.y || 0, -1, 1); }
   else if (m.t === 'btn') { p.input.btn = !!m.on; }
-  else if (m.t === 'sling') { p.input.sling = m.on ? { dx: clamp(+m.dx || 0, -1.5, 1.5), pow: clamp(+m.pow || 0, 0, 1) } : null; }
+  else if (m.t === 'sling') { p.input.sling = m.on ? { dx: clamp(+m.dx || 0, -1.5, 1.5), yaw: Number.isFinite(+m.yaw) ? +m.yaw : null, pow: clamp(+m.pow || 0, 0, 1) } : null; }
   else if (m.t === 'use') { p.input.item = true; }
 }
 function sendState(p) {
@@ -312,7 +312,7 @@ function startHole() {
     p.ball = { pos: new THREE.Vector3(bx, heightAt(bx, bz) + BALL_R, bz), vel: new THREE.Vector3(), air: false, moving: false, last: null, inWater: false };
     p.ball.last = p.ball.pos.clone();
     p.pos = new THREE.Vector3(bx - Math.sin(yaw) * 1.2 - Math.cos(yaw) * 0.6, 0, bz - Math.cos(yaw) * 1.2 + Math.sin(yaw) * 0.6); p.pos.y = heightAt(p.pos.x, p.pos.z);
-    p.vel = new THREE.Vector3(); p.yaw = yaw; p.aimYaw = yaw; p.state = 'walk'; p.strokes = 0; p.done = false; p.item = null; p.ko = 0; p.frozen = 0; p.charge = 0; p.chargeT = 0; p.superShot = false; p.magnet = 0; p.swipeCd = 0; p.fly = null;
+    p.vel = new THREE.Vector3(); p.yaw = yaw; p.moveYaw = yaw; p.aimYaw = yaw; p.state = 'walk'; p.strokes = 0; p.done = false; p.item = null; p.ko = 0; p.frozen = 0; p.charge = 0; p.chargeT = 0; p.superShot = false; p.magnet = 0; p.swipeCd = 0; p.fly = null;
     p.av.root.visible = true; p.ballMesh.visible = true; p.ballRing.visible = true; p.ballPin.visible = true;
     p.av.play('Idle', { fade: 0.1 }); p.anim = 'Idle';
     unfreeze(p);
@@ -425,7 +425,7 @@ function updatePlayer(p, dt) {
     // fionda: trascini indietro, la direzione è la mira e la lunghezza la potenza; lasci e tiri
     if (inp.sling) {
       if (!p.slingOn) { p.slingOn = true; p.slingBase = p.aimYaw; p.state = 'charge'; p.slingMode = true; }
-      if (inp.sling.world) p.aimYaw = inp.sling.yaw; else p.aimYaw = p.slingBase - inp.sling.dx * 1.1;
+      if (inp.sling.world) p.aimYaw = inp.sling.yaw; else if (Number.isFinite(inp.sling.yaw)) p.aimYaw = inp.sling.yaw; else p.aimYaw = p.slingBase - inp.sling.dx * 1.1;
       p.charge = clamp(inp.sling.pow, 0, 1);
     } else if (p.slingOn) {
       p.slingOn = false; p.slingMode = false;
@@ -439,7 +439,7 @@ function updatePlayer(p, dt) {
     playAnim(p, p.state === 'charge' ? '1H_Ranged_Aiming' : 'Idle_B');
   } else if (!stunned && !p.done || (p.done && !stunned)) {
     // corsa
-    camAxes();
+    if (p.kind === 'phone') { const cy = p.moveYaw ?? p.yaw; _f.set(Math.sin(cy), 0, Math.cos(cy)); _r.set(Math.cos(cy), 0, -Math.sin(cy)); } else camAxes();
     const mx = _r.x * inp.x + _f.x * inp.y, mz = _r.z * inp.x + _f.z * inp.y, ml = Math.hypot(mx, mz);
     const s = surfAt(p.pos.x, p.pos.z), wet = s === S.WATER, sandy = s === S.SAND;
     const speed = (wet ? 2.5 : sandy ? 4.2 : 7.2) * Math.min(1, ml);
@@ -453,6 +453,7 @@ function updatePlayer(p, dt) {
     // mazzata a chi è vicino (lontano dalla palla)
     if (inp.btn && !p.btnWas && dBall > 3 && p.swipeCd <= 0 && G.phase === 'play' && G.holeT > 2) swipe(p);
   }
+  if (p.kind === 'phone' && !moveIn && p.state !== 'addr' && p.state !== 'charge') p.moveYaw = lerpAngle(p.moveYaw ?? p.yaw, p.yaw, Math.min(1, dt * 1.5));
   p.idleT = moveIn ? 0 : (p.idleT || 0) + dt;
   p.btnWas = inp.btn;
   // terreno, alberi, bordi
@@ -726,6 +727,37 @@ function updateCamera(dt) {
   placeSun(camLook, clamp(camPos.distanceTo(camLook) * 0.9, 25, 90));
 }
 
+// ---------- replica 3D sui telefoni (il PC resta arbitro della fisica) ----------
+let viewSyncAt = 0;
+function sendViewerSnapshots() {
+  // In lobby i giocatori non hanno ancora posizione e pallina: non esiste
+  // una scena di gara da replicare fino a quando parte la prima buca.
+  if (G.phase === 'lobby' || G.phase === 'loading' || G.time - viewSyncAt < 1 / 15) return;
+  const active = G.players.filter(p => p.pos && p.ball && p.ball.pos);
+  if (!active.length) return;
+  viewSyncAt = G.time;
+  const players = active.map(p => {
+    const lookKey = JSON.stringify(p.look || null);
+    const includeLook = lookKey !== p.viewLookKey;
+    p.viewLookKey = lookKey;
+    return {
+      id: p.pid || (p.kind + '-' + G.players.indexOf(p)), name: p.name, color: p.color,
+      ...(includeLook ? { look: p.look } : {}),
+      x: p.pos.x, y: p.pos.y, z: p.pos.z, yaw: p.yaw,
+      // In mira la camera del telefono salva la direzione del tiro; in corsa
+      // segue invece l'orientamento di movimento del personaggio.
+      cyaw: p.state === 'addr' || p.state === 'charge' ? p.aimYaw : (p.moveYaw ?? p.yaw),
+      bx: p.ball.pos.x, by: p.ball.pos.y, bz: p.ball.pos.z,
+      moving: !!p.ball.moving, done: !!p.done, charge: p.charge || 0,
+      state: p.frozen > 0 ? 'frozen' : p.ko > 0 ? 'ko' : (p.state || 'walk'),
+      anim: p.anim || 'Idle', item: p.item || ''
+    };
+  });
+  for (const p of active) if (p.kind === 'phone' && p.online && p.view && p.conn && NET) {
+    NET.send(p.conn, { t: 'caos-view', me: p.pid, phase: G.phase, hole: G.hole + 1, players });
+  }
+}
+
 // ---------- ciclo ----------
 let last = performance.now(), slow = 0, wasPhase = '';
 function frame(now) {
@@ -739,6 +771,7 @@ function frame(now) {
   for (const f of flags) { const fl = f.userData.flag, a = fl.geometry.attributes.position, base = f.userData.base; for (let i = 0; i < a.count; i++) { const x = base[i * 3]; a.setZ(i, Math.sin(G.time * 5 + x * 3) * 0.12 * x); } a.needsUpdate = true; }
   for (const bx of boxes) { bx.m.rotation.y += dt * 1.2; bx.m.position.y = heightAt(bx.x, bx.z) + 1.1 + Math.sin(G.time * 2 + bx.x) * 0.15; if (bx.gone > 0) { bx.gone -= dt; if (bx.gone <= 0) { bx.gone = 0; bx.m.visible = true; } } }
   for (let sub = 0; sub < SPEED; sub++) simStep(dt);
+  sendViewerSnapshots();
   for (const p of G.players) if (p.av) p.av.update(dt * SPEED);
   FX.updateFx(dt, camera);
   updateCamera(dt);
