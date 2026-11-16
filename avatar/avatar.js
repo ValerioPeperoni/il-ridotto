@@ -3,12 +3,13 @@
 import * as THREE from 'three';
 import { GLTFLoader } from 'three/addons/loaders/GLTFLoader.js';
 import * as SkeletonUtils from 'three/addons/utils/SkeletonUtils.js';
+import { COSTUMES, FUN_HATS } from './costumes.js';
 
 const BASE = new URL('../assets/avatar/', import.meta.url).href;
 export const SOURCES = ['Knight', 'Barbarian', 'Mage', 'Rogue', 'Rogue_Hooded', 'Skeleton_Minion', 'Skeleton_Mage', 'Skeleton_Rogue', 'Skeleton_Warrior'];
 export const NICE = { Knight: 'Cavaliere', Barbarian: 'Barbaro', Mage: 'Mago', Rogue: 'Furfante', Rogue_Hooded: 'Incappucciato', Skeleton_Minion: 'Scheletrino', Skeleton_Mage: 'Teschio mago', Skeleton_Rogue: 'Teschio ladro', Skeleton_Warrior: 'Teschio guerriero' };
 export const CATS = [
-  ['head', 'Testa'], ['body', 'Busto'], ['arms', 'Braccia'], ['legs', 'Gambe'], ['hat', 'Cappello'], ['cape', 'Mantello'], ['prop', 'In mano'], ['hue', 'Colore'],
+  ['costume', 'Costume'], ['head', 'Testa'], ['body', 'Busto'], ['arms', 'Braccia'], ['legs', 'Gambe'], ['hat', 'Cappello'], ['cape', 'Mantello'], ['prop', 'In mano'], ['hue', 'Colore'],
 ];
 export const HUES = [0, 0.08, 0.16, 0.33, 0.5, 0.62, 0.75, 0.88];
 const PROP_NICE = { Mug: 'Boccale', '1H_Sword': 'Spada', '1H_Axe': 'Ascia', '1H_Wand': 'Bacchetta', '2H_Staff': 'Bastone', Spellbook_open: 'Libro', Knife: 'Pugnale', '1H_Crossbow': 'Balestra', Round_Shield: 'Scudo', Throwable: 'Bomba' };
@@ -45,8 +46,10 @@ export async function loadAvatarLibrary(onProgress) {
 export function optionsFor(cat) {
   if (!LIB) return [];
   if (cat === 'hue') return HUES.map((h, i) => [i, '']);
+  if (cat === 'costume') return [['none', 'Niente'], ...Object.entries(COSTUMES).map(([k, c]) => [k, c.name])];
   const keys = Object.keys(LIB.parts[cat]);
   const opts = keys.map(k => [k, cat === 'prop' ? PROP_NICE[k] || k : NICE[k] || k]);
+  if (cat === 'hat') opts.push(...Object.entries(FUN_HATS).map(([k, h]) => ['fun:' + k, h.name]));
   if (cat === 'hat' || cat === 'cape' || cat === 'prop') opts.unshift(['none', 'Niente']);
   return opts;
 }
@@ -57,9 +60,10 @@ export function randomLook(rand = Math.random) {
   for (const [c] of CATS) { const o = optionsFor(c); L[c] = o.length ? pick(o)[0] : 'none'; }
   // un po' di coerenza: spesso testa e cappello dallo stesso personaggio
   if (rand() < 0.4 && LIB && LIB.parts.hat[L.head]) L.hat = L.head;
+  if (rand() < 0.5) L.costume = 'none';
   return L;
 }
-export const DEFAULT_LOOK = { head: 'Knight', body: 'Knight', arms: 'Knight', legs: 'Knight', hat: 'none', cape: 'Knight', prop: 'none', hue: 0 };
+export const DEFAULT_LOOK = { costume: 'none', head: 'Knight', body: 'Knight', arms: 'Knight', legs: 'Knight', hat: 'none', cape: 'Knight', prop: 'none', hue: 0 };
 
 // colore degli abiti: rotazione della tinta nel materiale
 function hueMaterial(mat, h) {
@@ -111,12 +115,25 @@ export function makeAvatar(look = DEFAULT_LOOK, opts = {}) {
     }
   }
   av.setLook = (look) => {
-    for (const m of added) { m.parent && m.parent.remove(m); m.material.dispose(); }
+    for (const m of added) { m.parent && m.parent.remove(m); m.traverse(o => { if (o.material) o.material.dispose(); }); }
     added.length = 0;
     av.look = { ...DEFAULT_LOOK, ...look };
     const h = HUES[av.look.hue | 0] || 0;
-    for (const [c] of CATS) { if (c === 'hue') continue; const k = av.look[c]; if (k && k !== 'none') attach(c, k, h); }
+    const cos = COSTUMES[av.look.costume];
+    const hidden = new Set(cos ? cos.hides : []);
+    av.spinners = [];
+    for (const [c] of CATS) {
+      if (c === 'hue' || c === 'costume' || hidden.has(c)) continue; const k = av.look[c]; if (!k || k === 'none') continue;
+      if (c === 'hat' && k.startsWith('fun:')) { const f = FUN_HATS[k.slice(4)]; if (f) addBuilt('head', f.build()); continue; }
+      attach(c, k, h);
+    }
+    if (cos) for (const part of cos.parts) addBuilt(part.bone, part.build());
   };
+  function addBuilt(bone, g) {
+    (bones[bone] || rig).add(g); g.traverse(o => { if (o.isMesh) { o.castShadow = true; o.frustumCulled = false; } });
+    if (g.userData.spin) av.spinners.push(g.userData.spin);
+    added.push(g);
+  }
   av.play = (name, o = {}) => {
     const clip = LIB.clips[name]; if (!clip) return null;
     const a = mixer.clipAction(clip);
@@ -126,8 +143,8 @@ export function makeAvatar(look = DEFAULT_LOOK, opts = {}) {
     if (o.once && o.then) { const h = e => { if (e.action === a) { mixer.removeEventListener('finished', h); av.play(o.then, { fade: 0.3 }); } }; mixer.addEventListener('finished', h); }
     return a;
   };
-  av.update = dt => mixer.update(dt);
-  av.dispose = () => { for (const m of added) m.material.dispose(); root.parent && root.parent.remove(root); };
+  av.update = dt => { mixer.update(dt); for (const p of av.spinners || []) p.rotation.y += dt * 14; };
+  av.dispose = () => { for (const m of added) m.traverse(o => { if (o.material) o.material.dispose(); }); root.parent && root.parent.remove(root); };
   av.setLook(av.look);
   av.play(opts.idle || 'Idle');
   return av;
