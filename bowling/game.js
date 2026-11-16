@@ -10,6 +10,7 @@ import { L, SPECIALS, newBall, step as laneStep, pinSpots, heightAt } from './la
 import * as Pins from './pins.js';
 import * as Sc from './score.js';
 import { hostRoom, randomCode } from '../net.js';
+import { makeCharacter, updateArms, disposeCharacter, randomLook, BOTS } from '../chars.js';
 
 const Q = new URLSearchParams(location.search);
 const DEBUG = Q.has('debug'), FAST = Q.has('fast');
@@ -244,7 +245,7 @@ function onPhone(id, m) {
     if (!p) {
       if (G.phase !== 'lobby') { NET.send(id, { t: 'full', text: 'Partita in corso: aspetta la prossima' }); return; }
       if (G.players.length >= 6) { NET.send(id, { t: 'full', text: 'Sala piena' }); return; }
-      p = { kind: 'phone', pid: m.pid, name: (m.name || 'Telefono').slice(0, 14), color: m.color || COLORS[G.players.length % 6], sheet: null };
+      p = { kind: 'phone', pid: m.pid, name: (m.name || 'Telefono').slice(0, 14), color: m.color || COLORS[G.players.length % 6], sheet: null, look: randomLook() };
       G.players.push(p);
     }
     p.conn = id; p.online = true; if (m.name) p.name = m.name.slice(0, 14); if (m.color) p.color = m.color;
@@ -284,8 +285,8 @@ document.addEventListener('click', e => {
   if (b.dataset.m) { G.mode = b.dataset.m; document.querySelectorAll('#modes .opt').forEach(x => x.classList.toggle('sel', x === b)); }
   if (b.dataset.f) { G.nFrames = +b.dataset.f; document.querySelectorAll('#frames .chip').forEach(x => x.classList.toggle('sel', x === b)); }
 });
-$('#addLocal').onclick = () => { const n = $('#localName').value.trim() || 'Giocatore ' + (G.players.length + 1); G.players.push({ kind: 'local', name: n.slice(0, 14), color: COLORS[G.players.length % 6] }); $('#localName').value = ''; ac(); renderLobby(); };
-$('#addBot').onclick = () => { const used = G.players.map(p => p.name); const n = BOT_NAMES.find(x => !used.includes(x)) || 'Bot'; G.players.push({ kind: 'bot', name: n, color: COLORS[G.players.length % 6] }); renderLobby(); };
+$('#addLocal').onclick = () => { const n = $('#localName').value.trim() || 'Giocatore ' + (G.players.length + 1); G.players.push({ kind: 'local', name: n.slice(0, 14), color: COLORS[G.players.length % 6], look: randomLook() }); $('#localName').value = ''; ac(); renderLobby(); };
+$('#addBot').onclick = () => { const used = G.players.map(p => p.name); const n = BOT_NAMES.find(x => !used.includes(x)) || 'Bot'; G.players.push({ kind: 'bot', name: n, color: COLORS[G.players.length % 6], look: BOTS[G.players.length % BOTS.length].look }); renderLobby(); };
 $('#start').onclick = () => { ac(); startGame(); };
 $('#again').onclick = () => { $('#end').classList.add('hide'); startGame(); };
 $('#toLobby').onclick = () => { $('#end').classList.add('hide'); $('#hud').classList.add('hide'); $('#lobby').classList.remove('hide'); G.phase = 'lobby'; buildSpecial(null); G.spec = null; sendTurns(); };
@@ -306,7 +307,7 @@ function nextThrow(newFrame) {
   const want = G.mode === 'speciale' ? SPEC_ORDER[(fi + G.cur) % SPEC_ORDER.length] : null;
   if (want !== G.spec) { G.spec = want; buildSpecial(want); }
   G.aimX = p.lastX ?? 0.18; G.aimA = 0; G.swing = 0; G.ball = null; G.phase = 'aim'; G.aimT = 0;
-  setBallColor(p.color);
+  setBallColor(p.color); setAvatar(p);
   $('#who b').textContent = p.name; $('#who span').textContent = `Frame ${fi + 1} di ${p.sheet.frames.length}` + (G.spec ? ' · ' + SPECIALS[G.spec].name : '');
   const k = p.sheet.frames[fi].length;
   tip(p.kind === 'local' ? (MOBILE ? 'Premi sulla pista, trascina giù e poi su veloce, e lascia' : 'Clicca, tira giù il mouse e poi su veloce: lascia per lanciare') : p.kind === 'phone' ? `${p.name}: tieni premuto sul telefono e lancia` : `${p.name} si prepara…`);
@@ -475,6 +476,33 @@ function endGame() {
   for (const p of G.players) send(p, { t: 'end', text: `${rank[0].name} vince`, score: Sc.total(p.sheet) });
 }
 
+// ---------- il personaggio che lancia ----------
+let avatar = null, avatarOf = null;
+function setAvatar(p) {
+  if (avatarOf === p && avatar) return;
+  if (avatar) disposeCharacter(avatar);
+  avatar = makeCharacter(p.look || randomLook(), { standing: true }); avatarOf = p;
+  avatar.group.traverse(o => { if (o.isMesh) o.castShadow = true; });
+  scene.add(avatar.group);
+}
+function updateAvatar(dt) {
+  if (!avatar) return;
+  const g = avatar.group, aim = G.phase === 'aim' || G.phase === 'idle';
+  g.visible = G.phase !== 'lobby';
+  if (aim) { g.position.x += (G.aimX - 0.03 - g.position.x) * Math.min(1, dt * 8); g.position.z = 0.95; G.follow = 0; }
+  else { G.follow = Math.min(1, (G.follow || 0) + dt * 3); }
+  const R = avatar.arms[1], Lh = avatar.arms[0];
+  if (aim) {
+    const b = ballMesh.position; R.hand.set(b.x - g.position.x, b.y - g.position.y + 0.06, b.z - g.position.z);
+    Lh.hand.set(-0.32, 0.95 + Math.max(0, -G.swing) * 0.15, -0.25 - Math.max(0, -G.swing) * 0.15);
+    g.rotation.x = -Math.max(0, -G.swing) * 0.08 + Math.max(0, G.swing) * 0.12;
+  } else {
+    const k = G.follow; R.hand.set(0.2, 0.8 + 0.55 * k, -0.4 - 0.25 * k); Lh.hand.set(-0.4, 0.95, -0.15); g.rotation.x = 0.12 * (1 - k);
+  }
+  avatar.head.rotation.y = Math.sin(G.time * 0.8) * 0.05;
+  updateArms(avatar);
+}
+
 // ---------- ciclo ----------
 const _v = new THREE.Vector3(), _w = new THREE.Vector3(), _q = new THREE.Quaternion(), _ax = new THREE.Vector3();
 let last = performance.now(), acc = 0;
@@ -527,13 +555,14 @@ function frame(now) {
     const th = G.swing, sx = G.aimX + 0.2, sy = 1.25, sz = 0.9;
     ballMesh.position.set(sx, sy - Math.cos(th) * 0.68, sz - Math.sin(th) * 0.68);
   }
+  updateAvatar(dt);
   updateCamera(dt);
   composer.render();
 }
 function updateCamera(dt) {
   const pos = _v, look = _w;
   if (G.phase === 'lobby') { const t = G.time * 0.1; pos.set(Math.sin(t) * 1.5, 1.6, 3.5); look.set(0, 0.4, -18); }
-  else if (G.phase === 'aim' || G.phase === 'idle') { pos.set(G.aimX * 0.85 + 0.05, 1.55, 2.3); look.set(G.aimX * 0.3 + Math.tan(G.aimA) * 18, 0.1, -18.5); }
+  else if (G.phase === 'aim' || G.phase === 'idle') { pos.set(G.aimX * 0.8 - 0.9, 1.95, 2.95); look.set(G.aimX * 0.3 + Math.tan(G.aimA) * 18, 0.1, -18.5); }
   else if (G.phase === 'roll') { const b = G.ball; const z = Math.max(-14.5, b.z + 2.6); pos.set(b.x * 0.6, 0.75 + Math.max(0, b.y) * 0.5, z); look.set(b.x * 0.4, 0.2 + b.y * 0.5, b.z - 4); }
   else { pos.set(0.7, 1.05, -15.6); look.set(0, 0.12, -18.7); }
   const k = 1 - Math.exp(-dt * (G.phase === 'roll' ? 8 : 3));
@@ -546,6 +575,6 @@ buildAlley(); Pins.resetPins(deck); setBallColor(COLORS[0]); renderLobby(); resi
 if (DEBUG) { window.__G = G; window.__deck = deck; window.__throw = throwBall; window.__start = startGame; }
 if (Q.has('auto')) {
   G.mode = Q.get('auto') === 'speciale' ? 'speciale' : 'classica'; G.nFrames = +(Q.get('frames') || 3);
-  G.players.push({ kind: 'bot', name: 'Birillo', color: COLORS[0] }, { kind: 'bot', name: 'La Contessa', color: COLORS[1] });
+  G.players.push({ kind: 'bot', name: 'Birillo', color: COLORS[0], look: BOTS[2].look }, { kind: 'bot', name: 'La Contessa', color: COLORS[1], look: BOTS[1].look });
   startGame();
 }

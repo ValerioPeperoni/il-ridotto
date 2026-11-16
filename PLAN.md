@@ -33,7 +33,7 @@ Stato: v1 PUBBLICATA. Idee: più buche, buche con salite a più piani, giro dell
 ## 5. Liar's Bar rifatto — da fare (prima persona su ogni telefono, schermo = regia, modelli animati CC0)
 
 ## Prossimi ritocchi (in ordine, uno per sessione)
-1. Bowling: personaggio del Ridotto che lancia sull'approccio (animazione col braccio), replay dello strike.
+1. FATTO: personaggio che lancia nel bowling. Resta: replay dello strike.
 2. Minigolf: 3 buche nuove (giro della morte, due piani con tubo, flipper), personaggio accanto alla palla.
 3. Ping pong: colpi speciali (fiammata con la barra carica), torneo a eliminazione.
 4. Biliardo: partita online 1 contro 1 (ognuno sul suo telefono).
