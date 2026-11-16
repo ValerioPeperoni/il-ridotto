@@ -1,3 +1,17 @@
+## Aggiornamento operativo — 16/11/2026 (ChatGPT)
+
+Questo aggiornamento prevale sulle istruzioni di branch e sulle priorità precedenti riportate più sotto.
+
+- Ordine concordato: **Golf Caos → Ping pong → Bowling → Biliardo**. Non iniziare Liar's Bar senza parlarne prima con Valerio.
+- Branch di lavoro attuale: `ai/golf-caos-phone-view`. `dev` è il successivo ramo d'integrazione; `main` e `gh-pages` restano pubblici e non vanno modificati senza approvazione esplicita.
+- Golf Caos: è stata aggiunta la replica 3D individuale sui telefoni, con camera in terza persona dietro il proprio avatar, pallina/indicatore, snapshot dal PC a circa 15 Hz e fionda touch con direzione e potenza esplicite. Il PC resta autorità per la fisica.
+- Sono stati corretti interpolazione e orientamento della camera, gestione delle risorse WebGL e chiusura della vista al cambio gioco/lobby. L'orientamento e il look vengono sincronizzati; il look è reinviato solo quando cambia.
+- Verifiche locali: `node --check` sui moduli JavaScript, `python -m compileall` sui test Python, controllo statico degli import relativi, degli asset della scena telefono e degli ID HTML usati dal controller: superati.
+- Limite non risolto: Chromium/Playwright in questo ambiente blocca la navigazione locale con `net::ERR_BLOCKED_BY_ADMINISTRATOR`. Non sono stati verificati screenshot, gameplay end-to-end o telefoni reali. Non dichiarare il gioco pronto finché questi test non sono eseguiti.
+- Nessuna modifica a `main` o `gh-pages`; il sito pubblico non è stato aggiornato.
+
+---
+
 # Il Ridotto: istruzioni per chi continua il lavoro (umano o AI)
 
 Ultimo aggiornamento: 16/11/2026, scritto da Claude per poter passare il lavoro ad altre AI (ChatGPT, Qwen, ecc.).
@@ -12,7 +26,7 @@ Leggi tutto prima di toccare il codice. Rispondi a Valerio **in italiano**.
 ## 2. Che cos'è il progetto
 Una raccolta di giochi da festa nel browser. Il **PC o la TV** è lo schermo comune, i **telefoni** fanno da controller e si collegano inquadrando un QR. Niente account, niente installazioni.
 - Sito: https://valeriopeperoni.github.io/il-ridotto/
-- Repository: https://github.com/ValerioPeperoni/il-ridotto (rami: `dev` per il lavoro, `main` e `gh-pages` per la versione pubblica; GitHub Pages pubblica `gh-pages`).
+- Repository: https://github.com/ValerioPeperoni/il-ridotto (branch ChatGPT: `ai/golf-caos-phone-view`; `dev` per integrazione; `main` e `gh-pages` per la versione pubblica. GitHub Pages pubblica `gh-pages`).
 - Sito statico **senza passaggio di build**: HTML + moduli JS ES, three.js locale in `vendor/` con importmap (`three` → `vendor/three.module.js`, `three/addons/` → `vendor/jsm/`). three.js r160, cannon-es 0.20, PeerJS 1.5.4, qrcode.js.
 
 ### Pubblicare

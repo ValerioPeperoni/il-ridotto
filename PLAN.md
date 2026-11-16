@@ -1,3 +1,20 @@
+# Piano di lavoro — Il Ridotto (priorità correnti)
+
+**Aggiornamento: 16 novembre 2026.** Questo ordine sostituisce quello del piano storico conservato più sotto.
+
+1. **Golf Caos:** completare visuale individuale e comandi sui telefoni; validare camera, freccia, mira/potenza, sincronizzazione e prestazioni su browser e dispositivi reali. Poi effetti/oggetti dinamici e animazioni più curate.
+2. **Ping pong:** rework dell'esperienza in prima persona e della palestra, stabilità dell'avversario, battuta chiara e controlli touch calibrati. Conservare la fisica esistente dove funziona.
+3. **Bowling:** rifinitura di illuminazione, materiali, dettagli e animazioni; verifica del gesto e dell'effetto su telefoni reali.
+4. **Biliardo:** successivamente, colori/luci, bomba piazzabile, poteri, regole delle buche centrali e modalità a squadre.
+
+**Direzione grafica:** qualità cartoon curata da gioco indie commerciale, riferimenti Nintendo Switch Sports, Super Battle Golf, Golf With Your Friends, Fall Guys e Among Us. Interfaccia Fredoka e palette Ridotto (blu `#3d7bff`, giallo `#ffcf3a`, rosa `#ff5c9a`, inchiostro `#1d2340`). Luci morbide e non sature. Obiettivo circa 60 FPS su Intel Iris Xe e telefoni stabili.
+
+**Git e rilascio:** il lavoro attivo è sul branch `ai/golf-caos-phone-view`; in seguito si propone l'integrazione in `dev`. Non modificare `main` o `gh-pages` e non pubblicare finché i controlli browser, screenshot, partita completa e prova su telefoni non sono superati e Valerio non approva. Non iniziare Liar's Bar senza averne parlato con Valerio.
+
+---
+
+## Piano storico precedente (riferimento secondario)
+
 # Piano di lavoro (aggiornato da Claude)
 
 Ordine concordato con Valerio (16/11/2026): biliardo → bowling → ping pong → minigolf → (poi) Liar's Bar rifatto. Rissa: in pausa.
