@@ -5,7 +5,6 @@ import { RenderPass } from 'three/addons/postprocessing/RenderPass.js';
 import { UnrealBloomPass } from 'three/addons/postprocessing/UnrealBloomPass.js';
 import { OutputPass } from 'three/addons/postprocessing/OutputPass.js';
 import { GLTFLoader } from 'three/addons/loaders/GLTFLoader.js';
-import { RGBELoader } from 'three/addons/loaders/RGBELoader.js';
 import { L, SPECIALS, newBall, step as laneStep, pinSpots, heightAt } from './lane.js';
 import * as Pins from './pins.js';
 import * as Sc from './score.js';
@@ -24,10 +23,9 @@ const esc = s => String(s).replace(/[&<>"]/g, c => ({ '&': '&amp;', '<': '&lt;',
 // ---------- renderer ----------
 const renderer = new THREE.WebGLRenderer({ canvas: $('#gl'), antialias: true, powerPreference: 'high-performance' });
 let PR = Math.min(devicePixelRatio, MOBILE ? 1.5 : 1.75); renderer.setPixelRatio(PR);
-renderer.outputColorSpace = THREE.SRGBColorSpace; renderer.toneMapping = THREE.ACESFilmicToneMapping; renderer.toneMappingExposure = 0.9;
+renderer.outputColorSpace = THREE.SRGBColorSpace; renderer.toneMapping = THREE.ACESFilmicToneMapping; renderer.toneMappingExposure = 1.0;
 renderer.shadowMap.enabled = true; renderer.shadowMap.type = THREE.PCFSoftShadowMap;
 const scene = new THREE.Scene(); scene.background = new THREE.Color(0x0b0d1c); scene.fog = new THREE.Fog(0x0b0d1c, 30, 60);
-new RGBELoader().load('assets/hdr/ferndale_studio_04_1k.hdr', t => { const pm = new THREE.PMREMGenerator(renderer); scene.environment = pm.fromEquirectangular(t).texture; t.dispose(); });
 const camera = new THREE.PerspectiveCamera(50, 1, 0.05, 90);
 const composer = new EffectComposer(renderer);
 composer.addPass(new RenderPass(scene, camera));
@@ -128,12 +126,12 @@ function buildHall() {
   monitor = new THREE.Mesh(new THREE.BoxGeometry(1.8, 0.75, 0.1), [darkWood, darkWood, darkWood, darkWood, new THREE.MeshBasicMaterial({ map: monitorTex }), darkWood]);
   monitor.position.set(0, 3.7, -1.2); monitor.rotation.x = 0.3; scene.add(monitor);
   // luci: poca luce d'ambiente, piste illuminate dall'alto, birilli in piena luce
-  scene.add(new THREE.HemisphereLight(0x9fb4ff, 0x1a1530, 0.35));
+  scene.add(new THREE.HemisphereLight(0x9fb4ff, 0x2a2440, 0.6));
   const key = new THREE.DirectionalLight(0xffe6c8, 1.5); key.position.set(2.5, 7, 5); key.target.position.set(0, 0, -1); key.castShadow = true;
   Object.assign(key.shadow.camera, { left: -4, right: 4, top: 4, bottom: -6, near: 1, far: 20 }); key.shadow.mapSize.set(MOBILE ? 1024 : 2048, MOBILE ? 1024 : 2048); key.shadow.bias = -0.0005; key.shadow.normalBias = 0.02;
   scene.add(key, key.target);
   const laneFill = new THREE.DirectionalLight(0xfff0dd, 0.75); laneFill.position.set(-1, 6, -6); laneFill.target.position.set(0, 0, -12); scene.add(laneFill, laneFill.target);
-  const pinLight = new THREE.SpotLight(0xfff1e0, 4, 7, 0.8, 0.8, 1.3); pinLight.position.set(0, 2.2, -18.4); pinLight.target.position.set(0, 0, -18.9); pinLight.castShadow = true; pinLight.shadow.mapSize.set(1024, 1024); scene.add(pinLight, pinLight.target);
+  const pinLight = new THREE.SpotLight(0xfff1e0, 6, 7, 0.8, 0.8, 1.3); pinLight.position.set(0, 2.2, -18.4); pinLight.target.position.set(0, 0, -18.9); pinLight.castShadow = true; pinLight.shadow.mapSize.set(1024, 1024); scene.add(pinLight, pinLight.target);
   const lounge = new THREE.PointLight(0xffb070, 4, 9, 1.6); lounge.position.set(0, 2.8, 7); scene.add(lounge);
 }
 function maskTex(i) {
@@ -145,10 +143,85 @@ function maskTex(i) {
     g.globalAlpha = 1; g.fillStyle = col; g.font = '700 150px Fredoka, Arial'; g.textAlign = 'center'; g.textBaseline = 'middle'; g.fillText(String(i + 1), w / 2, h / 2 + 8);
   });
 }
+// ---------- dettagli della sala ----------
+function buildDetails() {
+  const metal = new THREE.MeshStandardMaterial({ color: 0x2a2f4a, metalness: 0.6, roughness: 0.4 });
+  // travi del soffitto
+  const beamG = new THREE.BoxGeometry(15, 0.22, 0.18), beams = new THREE.InstancedMesh(beamG, metal, 10);
+  for (let i = 0; i < 10; i++) beams.setMatrixAt(i, new THREE.Matrix4().makeTranslation(0, 4.85, 9 - i * 3.3));
+  scene.add(beams);
+  const railG = new THREE.BoxGeometry(0.12, 0.12, 34), rails = new THREE.InstancedMesh(railG, metal, 4);
+  [-5.5, -1.8, 1.8, 5.5].forEach((x, i) => rails.setMatrixAt(i, new THREE.Matrix4().makeTranslation(x, 4.7, -6)));
+  scene.add(rails);
+  // monitor sopra ogni pista (come nelle sale vere)
+  LANES_X.forEach((x, i) => {
+    if (x === 0) return;
+    const scr = new THREE.Mesh(new THREE.BoxGeometry(1.2, 0.5, 0.06), [metal, metal, metal, metal, new THREE.MeshBasicMaterial({ map: laneScreen(i), color: 0xb0b0b0 }), metal]);
+    scr.position.set(x, 3.5, -1.2); scr.rotation.x = 0.3; scene.add(scr);
+    const rod = new THREE.Mesh(new THREE.CylinderGeometry(0.015, 0.015, 1.2), metal); rod.position.set(x, 4.2, -1.3); scene.add(rod);
+  });
+  // colonne con anelli luminosi tra le piste e le pareti
+  const colM = new THREE.MeshStandardMaterial({ color: 0x1a1e38, roughness: 0.5 });
+  for (const x of [-6.6, 6.6]) for (const z of [3, -5, -13]) {
+    const c = new THREE.Mesh(new THREE.CylinderGeometry(0.28, 0.28, 5, 20), colM); c.position.set(x, 2.5, z); c.receiveShadow = true; scene.add(c);
+    for (const y of [0.4, 4.5]) { const r = new THREE.Mesh(new THREE.TorusGeometry(0.29, 0.02, 6, 28), neon('#c9a46a', 0.9)); r.rotation.x = Math.PI / 2; r.position.set(x, y, z); scene.add(r); }
+  }
+  // quadri alle pareti: manifesti disegnati
+  const posters = ['STRIKE', 'SPARE', '300', 'TURKEY', 'BOWL'];
+  for (const s of [-1, 1]) for (let k = 0; k < 5; k++) {
+    const pz = 1 - k * 4.2, txt = posters[(k + (s > 0 ? 2 : 0)) % 5];
+    const fr = new THREE.Mesh(new THREE.BoxGeometry(0.05, 1.5, 1.1), metal); fr.position.set(s * 7.35, 2.3, pz); scene.add(fr);
+    const pl = new THREE.Mesh(new THREE.PlaneGeometry(0.98, 1.38), new THREE.MeshStandardMaterial({ map: posterTex(txt, k), roughness: 0.7 })); pl.position.set(s * 7.32, 2.3, pz); pl.rotation.y = -s * Math.PI / 2; scene.add(pl);
+    const lamp = new THREE.Mesh(new THREE.CylinderGeometry(0.05, 0.12, 0.12, 16), new THREE.MeshBasicMaterial({ color: new THREE.Color(1.1, 0.95, 0.75), toneMapped: false })); lamp.position.set(s * 7.2, 3.2, pz); scene.add(lamp);
+  }
+  // rastrelliere con le palle da casa, sui due lati vicino al salotto
+  const ballG = new THREE.SphereGeometry(L.R, 20, 14);
+  const cols = [0xd9435e, 0x3f7fe0, 0x2e9e6a, 0xe0a030, 0x8a5cd0, 0x2bb3c0, 0xe46a2e, 0x444a66];
+  for (const s of [-1, 1]) {
+    const rack = new THREE.Group(); rack.position.set(s * 6.6, 0, 6.5); rack.rotation.y = -s * Math.PI / 2; scene.add(rack);
+    for (let lvl = 0; lvl < 3; lvl++) {
+      const shelf = new THREE.Mesh(new THREE.BoxGeometry(2.6, 0.04, 0.32), metal); shelf.position.set(0, 0.3 + lvl * 0.42, 0); rack.add(shelf);
+      for (let k = 0; k < 10; k++) {
+        const b = new THREE.Mesh(ballG, new THREE.MeshPhysicalMaterial({ color: cols[(k * 3 + lvl * 5) % cols.length], roughness: 0.15, clearcoat: 1 }));
+        b.position.set(-1.17 + k * 0.26, 0.3 + lvl * 0.42 + L.R + 0.02, 0); b.castShadow = true; rack.add(b);
+      }
+    }
+    for (const x of [-1.3, 1.3]) { const leg = new THREE.Mesh(new THREE.BoxGeometry(0.05, 1.3, 0.3), metal); leg.position.set(x, 0.65, 0); rack.add(leg); }
+  }
+  // balaustra tra approccio e salotto
+  const rail = new THREE.Mesh(new THREE.BoxGeometry(11, 0.05, 0.05), new THREE.MeshStandardMaterial({ color: 0xc9a46a, metalness: 0.8, roughness: 0.3 })); rail.position.set(0, 0.9, 5.4); scene.add(rail);
+  const glass = new THREE.Mesh(new THREE.PlaneGeometry(11, 0.85), new THREE.MeshPhysicalMaterial({ color: 0x9fb4ff, transparent: true, opacity: 0.12, roughness: 0.05 })); glass.position.set(0, 0.45, 5.4); scene.add(glass);
+  for (const x of [-3, 3]) { const gap = new THREE.Mesh(new THREE.BoxGeometry(0.06, 0.9, 0.06), metal); gap.position.set(x, 0.45, 5.4); scene.add(gap); }
+}
+function laneScreen(i) {
+  return ctex(256, 112, (g, w, h) => { g.fillStyle = '#0d1230'; g.fillRect(0, 0, w, h); g.fillStyle = '#' + new THREE.Color(MASK_COLORS[i]).getHexString(); g.fillRect(0, 0, w, 26); g.fillStyle = '#fff'; g.font = '600 18px Fredoka, Arial'; g.fillText('PISTA ' + (i + 1), 10, 19); g.fillStyle = '#c8d0ff'; g.font = '600 15px Fredoka, Arial'; for (let r = 0; r < 3; r++) { g.fillText(['Anna', 'Leo', 'Marta', 'Gigi', 'Sara', 'Teo'][(i + r) % 6], 10, 50 + r * 22); for (let f = 0; f < 6; f++) { g.strokeStyle = '#3a4478'; g.strokeRect(80 + f * 28, 36 + r * 22, 26, 18); } } });
+}
+function posterTex(txt, k) {
+  const pal = [['#20264f', '#e8a35c'], ['#3b1d4f', '#e86f8f'], ['#12324a', '#6fc8d8'], ['#2b2340', '#d9c46a'], ['#1f3a33', '#7fd0a0']][k % 5];
+  return ctex(256, 360, (g, w, h) => {
+    g.fillStyle = pal[0]; g.fillRect(0, 0, w, h);
+    g.strokeStyle = pal[1]; g.lineWidth = 6; g.strokeRect(12, 12, w - 24, h - 24);
+    g.fillStyle = pal[1]; g.globalAlpha = 0.25; for (let i = 0; i < 6; i++) { g.beginPath(); g.arc(w / 2, h * 0.42, 30 + i * 22, 0, 7); g.stroke(); } g.globalAlpha = 1;
+    // birillo stilizzato
+    g.fillStyle = '#f4f0e8'; g.beginPath(); g.ellipse(w / 2, h * 0.47, 34, 62, 0, 0, 7); g.fill(); g.beginPath(); g.ellipse(w / 2, h * 0.28, 18, 24, 0, 0, 7); g.fill(); g.fillRect(w / 2 - 11, h * 0.3, 22, 40);
+    g.fillStyle = '#d9435e'; g.fillRect(w / 2 - 12, h * 0.355, 24, 6); g.fillRect(w / 2 - 12, h * 0.375, 24, 4);
+    g.fillStyle = pal[1]; g.font = '700 46px Fredoka, Arial'; g.textAlign = 'center'; g.fillText(txt, w / 2, h * 0.86);
+  });
+}
+// riflessi presi dalla sala stessa (niente luci da studio fotografico che fanno da "faro")
+function bakeEnvironment() {
+  const pm = new THREE.PMREMGenerator(renderer);
+  const hidden = []; scene.traverse(o => { if (o.isSkinnedMesh || o === ballMesh) { hidden.push(o); o.visible = false; } });
+  const rt = pm.fromScene(scene, 0.03, 0.1, 60);
+  hidden.forEach(o => o.visible = true);
+  scene.environment = rt.texture; pm.dispose();
+}
 function muralTex() {
   return ctex(2048, 512, (g, w, h) => {
     const gr = g.createLinearGradient(0, 0, 0, h); gr.addColorStop(0, '#1b1446'); gr.addColorStop(0.45, '#6b2c7a'); gr.addColorStop(0.75, '#e2577a'); gr.addColorStop(1, '#ffb36b'); g.fillStyle = gr; g.fillRect(0, 0, w, h);
-    g.fillStyle = 'rgba(255,240,200,.9)'; g.beginPath(); g.arc(w * 0.5, h * 0.78, 120, 0, 7); g.fill();
+    const sg = g.createRadialGradient(w * 0.5, h * 0.74, 10, w * 0.5, h * 0.74, 230); sg.addColorStop(0, 'rgba(255,230,180,.95)'); sg.addColorStop(0.25, 'rgba(255,200,150,.55)'); sg.addColorStop(1, 'rgba(255,160,120,0)'); g.fillStyle = sg; g.fillRect(0, 0, w, h);
+    g.fillStyle = 'rgba(255,236,200,.9)'; g.beginPath(); g.arc(w * 0.5, h * 0.74, 55, 0, 7); g.fill();
+    g.fillStyle = 'rgba(60,30,90,.55)'; for (let k = 0; k < 4; k++) g.fillRect(w * 0.5 - 70, h * 0.7 + k * 12, 140, 5);
     for (let i = 0; i < 120; i++) { g.fillStyle = `rgba(255,255,255,${Math.random() * 0.7})`; g.fillRect(Math.random() * w, Math.random() * h * 0.4, 2, 2); }
     // colline e skyline stilizzati
     g.fillStyle = '#2a1650'; g.beginPath(); g.moveTo(0, h); for (let x = 0; x <= w; x += 40) g.lineTo(x, h * 0.8 - Math.sin(x / 210) * 40 - Math.sin(x / 90) * 12); g.lineTo(w, h); g.fill();
@@ -166,7 +239,7 @@ function drawMonitor(name, line, color) {
 }
 function ballReturn(x) {
   const g = new THREE.Group(); g.position.set(x, 0, 3.4);
-  const body = new THREE.Mesh(new THREE.CapsuleGeometry(0.28, 0.9, 6, 16), new THREE.MeshPhysicalMaterial({ color: 0x3d7bff, roughness: 0.3, clearcoat: 1 }));
+  const body = new THREE.Mesh(new THREE.CapsuleGeometry(0.28, 0.9, 6, 16), new THREE.MeshPhysicalMaterial({ color: 0x3a4a80, roughness: 0.3, clearcoat: 1 }));
   body.rotation.x = Math.PI / 2; body.position.y = 0.42; body.scale.set(1, 1, 0.8); body.castShadow = true; g.add(body);
   const rail = new THREE.Mesh(new THREE.BoxGeometry(0.34, 0.06, 1.1), new THREE.MeshStandardMaterial({ color: 0xc8d0e8, metalness: 0.6, roughness: 0.3 })); rail.position.set(0, 0.68, 0.1); g.add(rail);
   [0x2ec27e, 0xff5c9a, 0xffb02e].forEach((c, k) => { const b = new THREE.Mesh(new THREE.SphereGeometry(L.R, 24, 16), new THREE.MeshPhysicalMaterial({ map: ballTex('#' + new THREE.Color(c).getHexString()), roughness: 0.15, clearcoat: 1 })); b.position.set(0, 0.8, -0.32 + k * 0.23); b.castShadow = true; g.add(b); });
@@ -648,7 +721,8 @@ const _p = new THREE.Vector3(), _l = new THREE.Vector3();
 function updateCamera(dt) {
   const p = G.players[G.cur], av = p && p.av;
   let k = 3;
-  if (G.phase === 'lobby' || G.phase === 'loading') { const t = G.time * 0.08; _p.set(Math.sin(t) * 3, 2.6, 7.5); _l.set(0, 0.6, -10); }
+  if (G.still) { _p.set(...G.still.slice(0, 3)); _l.set(...G.still.slice(3)); k = 100; }
+  else if (G.phase === 'lobby' || G.phase === 'loading') { const t = G.time * 0.08; _p.set(Math.sin(t) * 3, 2.6, 7.5); _l.set(0, 0.6, -10); }
   else if ((G.phase === 'aim' || G.phase === 'idle') && av) { const x = av.root.position.x; _p.set(x + 1.15, 2.35, av.root.position.z + 4.4); _l.set(G.aimX * 0.3 + Math.tan(G.aimA) * 14 - 0.15, 0.2, -12); k = 5; }
   else if (G.phase === 'roll') { const b = G.ball; const z = Math.max(-14.6, b.z + 3); _p.set(b.x * 0.6 - 0.7 * clamp((b.z + 7) / 7, 0, 1), 0.95 + clamp((b.z + 7) / 7, 0, 1) * 1.3 + Math.max(0, b.y) * 0.5, z); _l.set(b.x * 0.4, 0.2 + b.y * 0.5, b.z - 4); k = 7; }
   else if (G.phase === 'replay') { const a = 0.9 - G.repT * 0.25; _p.set(Math.sin(a) * 1.3, 0.3, -18.6 + Math.cos(a) * 1.3); _l.set(0, 0.18, -18.7); k = 6; }
@@ -659,11 +733,12 @@ function updateCamera(dt) {
 }
 
 // ---------- avvio ----------
-buildHall(); Pins.resetPins(deck); setBallColor(COLORS[0]); renderLobby(); resize(); drawMonitor('Bowling', 'Pronti?');
+buildHall(); buildDetails(); Pins.resetPins(deck); setBallColor(COLORS[0]); renderLobby(); resize(); drawMonitor('Bowling', 'Pronti?');
 requestAnimationFrame(frame);
 Promise.all([loadAvatarLibrary(p => { $('#bar').style.width = (p * 90) + '%'; }), loadFurniture()]).then(() => {
-  $('#load').classList.add('hide'); $('#lobby').classList.remove('hide'); G.phase = 'lobby';
+  bakeEnvironment(); $('#load').classList.add('hide'); $('#lobby').classList.remove('hide'); G.phase = 'lobby';
   if (DEBUG) { window.__G = G; window.__deck = deck; window.__throw = throwBall; window.__start = startGame; }
+  if (Q.has('cam')) { G.still = Q.get('cam').split(',').map(Number); $('#lobby').classList.add('hide'); G.camSnap = true; }
   if (Q.has('auto')) {
     G.mode = Q.get('auto') === 'speciale' ? 'speciale' : 'classica'; G.nFrames = +(Q.get('frames') || 3);
     G.players.push({ kind: 'bot', name: 'Birillo', color: COLORS[0], look: randomLook() }, { kind: 'bot', name: 'Contessa', color: COLORS[1], look: { costume: 'banana', head: 'Mage', body: 'Mage', arms: 'Mage', legs: 'Mage', hat: 'none', cape: 'none', prop: 'none', hue: 2 } });
