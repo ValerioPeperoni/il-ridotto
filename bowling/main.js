@@ -132,6 +132,7 @@ function buildHall() {
   scene.add(key, key.target);
   const laneFill = new THREE.DirectionalLight(0xfff0dd, 0.75); laneFill.position.set(-1, 6, -6); laneFill.target.position.set(0, 0, -12); scene.add(laneFill, laneFill.target);
   const pinLight = new THREE.SpotLight(0xfff1e0, 6, 7, 0.8, 0.8, 1.3); pinLight.position.set(0, 2.2, -18.4); pinLight.target.position.set(0, 0, -18.9); pinLight.castShadow = true; pinLight.shadow.mapSize.set(1024, 1024); scene.add(pinLight, pinLight.target);
+  G.flashLight = new THREE.PointLight(0xffd88a, 0, 6, 2); G.flashLight.position.set(0, 1.4, -18.2); scene.add(G.flashLight);
   const lounge = new THREE.PointLight(0xffb070, 4, 9, 1.6); lounge.position.set(0, 2.8, 7); scene.add(lounge);
 }
 function maskTex(i) {
@@ -590,8 +591,8 @@ function finishThrow() {
   Sc.addRoll(p.sheet, n);
   G.standing = G.standing.filter(x => !down.includes(x));
   let text = '', cls = '', mood = 'meh';
-  if (wasFresh && n === 10) { text = 'STRIKE!'; cls = 'y'; snd('strike'); mood = 'great'; }
-  else if (!wasFresh && G.standing.length === 0) { text = 'SPARE!'; cls = 'p'; snd('spare'); mood = 'great'; }
+  if (wasFresh && n === 10) { text = 'STRIKE!'; cls = 'y'; snd('strike'); mood = 'great'; celebrate(true); }
+  else if (!wasFresh && G.standing.length === 0) { text = 'SPARE!'; cls = 'p'; snd('spare'); mood = 'great'; celebrate(false); }
   else if (G.ball && G.ball.fell) { text = 'Nel vuoto!'; snd('boo'); mood = 'bad'; }
   else if (G.ball && G.ball.back) { text = 'Torna indietro!'; snd('boo'); mood = 'bad'; }
   else if (n === 0) { text = G.ball && G.ball.gutter ? 'Canale…' : 'Zero'; snd('boo'); mood = 'bad'; }
@@ -639,6 +640,28 @@ function endGame() {
   $('#end').classList.remove('hide'); snd('strike');
   const w = rank[0]; if (w.av) { w.av.root.position.set(0, 0, 1.25); w.av.root.rotation.y = 0; w.av.play('Cheer', { once: false }); }
   for (const p of G.players) send(p, { t: 'end', text: `${rank[0].name} vince`, score: Sc.total(p.sheet) });
+}
+
+// ---------- festa per strike e spare: scintille e coriandoli sul fondo pista, lampo sul mascherone ----------
+const parts = [];
+const sparkTex = ctex(32, 32, (g) => { const gr = g.createRadialGradient(16, 16, 0, 16, 16, 15); gr.addColorStop(0, 'rgba(255,255,255,1)'); gr.addColorStop(0.4, 'rgba(255,255,255,.7)'); gr.addColorStop(1, 'rgba(255,255,255,0)'); g.fillStyle = gr; g.fillRect(0, 0, 32, 32); });
+function burst(pos, color, n, sp, size, life, g = 6) {
+  for (let i = 0; i < n; i++) {
+    const m = new THREE.Sprite(new THREE.SpriteMaterial({ map: sparkTex, color, transparent: true, depthWrite: false, blending: THREE.AdditiveBlending, toneMapped: false }));
+    m.position.copy(pos); m.scale.setScalar(size); scene.add(m);
+    const v = new THREE.Vector3(Math.random() - .5, Math.random() * 0.9 + 0.3, Math.random() - .5).normalize().multiplyScalar(sp * (0.5 + Math.random()));
+    parts.push({ m, v, t: 0, life: life * (0.6 + Math.random() * 0.6), g, size });
+  }
+}
+function celebrate(strike) {
+  const c = new THREE.Vector3(0, 0.5, -18.6);
+  const cols = strike ? [0xffcf3a, 0xff5c9a, 0x5fb8d8, 0xffffff] : [0xff5c9a, 0xffffff];
+  cols.forEach(col => burst(c, new THREE.Color(col).multiplyScalar(1.3), strike ? 28 : 16, strike ? 5 : 3.5, 0.12, 1.4));
+  G.flash = 1;
+}
+function updateParts(dt) {
+  for (let i = parts.length - 1; i >= 0; i--) { const p = parts[i]; p.t += dt; const k = p.t / p.life; if (k >= 1) { scene.remove(p.m); p.m.material.dispose(); parts.splice(i, 1); continue; } p.v.y -= p.g * dt; p.v.multiplyScalar(1 - dt * 0.8); p.m.position.addScaledVector(p.v, dt); p.m.material.opacity = 1 - k * k; p.m.scale.setScalar(p.size * (1 - k * 0.5)); }
+  if (G.flash > 0) { G.flash = Math.max(0, G.flash - dt * 1.5); if (G.flashLight) G.flashLight.intensity = G.flash * 8; }
 }
 
 // ---------- ciclo ----------
@@ -714,6 +737,7 @@ function frame(now) {
     if (t > 1.7) { rake.visible = false; ballMesh.visible = true; afterSweep(); }
   }
   if (G.phase !== 'replay') deck.pins.forEach((q, i) => { const m = pinMeshes[i]; m.visible = !q.removed; m.position.copy(q.position); m.quaternion.copy(q.quaternion); });
+  updateParts(dt);
   updateCamera(dt);
   composer.render();
 }

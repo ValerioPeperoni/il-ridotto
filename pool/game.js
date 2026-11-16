@@ -1,6 +1,5 @@
 // Biliardo del Ridotto: grafica, comandi, turni.
 import * as THREE from 'three';
-import { RoomEnvironment } from 'three/addons/environments/RoomEnvironment.js';
 import { EffectComposer } from 'three/addons/postprocessing/EffectComposer.js';
 import { RenderPass } from 'three/addons/postprocessing/RenderPass.js';
 import { UnrealBloomPass } from 'three/addons/postprocessing/UnrealBloomPass.js';
@@ -19,7 +18,7 @@ const MOBILE = matchMedia('(pointer:coarse)').matches;
 const $ = s => document.querySelector(s);
 
 // ---------- impostazioni salvate ----------
-const CFG = Object.assign({ caos: false, mode: 'bot', level: 'medio', guide: 'corta', cue: 'classica', set: 'classiche', felt: 'verde', n0: '', n1: '' },
+const CFG = Object.assign({ caos: false, casa: false, mode: 'bot', level: 'medio', guide: 'corta', cue: 'classica', set: 'classiche', felt: 'verde', n0: '', n1: '' },
   (() => { try { return JSON.parse(localStorage.getItem('ridotto-pool')) || {}; } catch (e) { return {}; } })());
 const saveCfg = () => { try { localStorage.setItem('ridotto-pool', JSON.stringify(CFG)); } catch (e) { } };
 
@@ -28,12 +27,12 @@ const canvas = $('#gl');
 const renderer = new THREE.WebGLRenderer({ canvas, antialias: true, powerPreference: 'high-performance' });
 renderer.setPixelRatio(Math.min(devicePixelRatio, MOBILE ? 1.6 : 2));
 renderer.shadowMap.enabled = true; renderer.shadowMap.type = THREE.PCFSoftShadowMap;
-renderer.toneMapping = THREE.ACESFilmicToneMapping; renderer.toneMappingExposure = 0.95;
+renderer.toneMapping = THREE.ACESFilmicToneMapping; renderer.toneMappingExposure = 0.88;
 const scene = new THREE.Scene();
 scene.background = new THREE.Color(0x0a0705);
 scene.fog = new THREE.Fog(0x0a0705, 6, 14);
 const pmrem = new THREE.PMREMGenerator(renderer);
-scene.environment = pmrem.fromScene(new RoomEnvironment(), 0.04).texture;
+// riflessi presi dalla sala stessa (vedi fondo del file): niente luci da studio che fanno aloni
 const camera = new THREE.PerspectiveCamera(50, 1, 0.02, 40);
 const composer = new EffectComposer(renderer);
 composer.addPass(new RenderPass(scene, camera));
@@ -41,7 +40,7 @@ composer.addPass(new RenderPass(scene, camera));
 composer.addPass(new ShaderPass({ uniforms: { tDiffuse: { value: null } },
   vertexShader: 'varying vec2 vUv; void main(){ vUv = uv; gl_Position = projectionMatrix * modelViewMatrix * vec4(position,1.0); }',
   fragmentShader: 'uniform sampler2D tDiffuse; varying vec2 vUv; void main(){ vec4 c = texture2D(tDiffuse, vUv); if (!(c.r == c.r) || !(c.g == c.g) || !(c.b == c.b)) c = vec4(0.0,0.0,0.0,1.0); gl_FragColor = vec4(clamp(c.rgb, 0.0, 60.0), 1.0); }' }));
-const bloom = new UnrealBloomPass(new THREE.Vector2(256, 256), 0.32, 0.45, 0.97);
+const bloom = new UnrealBloomPass(new THREE.Vector2(256, 256), 0.14, 0.35, 1.0);
 composer.addPass(bloom);
 composer.addPass(new OutputPass());
 
@@ -223,11 +222,11 @@ function buildRoom() {
   for (const x of [-0.8, 0.8]) { const ch = new THREE.Mesh(new THREE.CylinderGeometry(0.004, 0.004, 1.9), brass); ch.position.set(x, 1.25, 0); lamp.add(ch); }
   lamp.position.set(0, 1.9, 0); scene.add(lamp); lampObj = lamp;
   for (const x of [-0.62, 0, 0.62]) {
-    const s = new THREE.SpotLight(0xffe6bf, 5.2, 4, 0.95, 0.75, 1.4);
+    const s = new THREE.SpotLight(0xffe6bf, 4.0, 4, 0.95, 0.85, 1.4);
     s.position.set(x, 2.0, 0); s.target.position.set(x, 0.8, 0); scene.add(s, s.target);
     if (x !== 0) { s.castShadow = true; s.shadow.mapSize.set(MOBILE ? 1024 : 2048, MOBILE ? 1024 : 2048); s.shadow.bias = -0.0004; s.shadow.radius = 4; s.shadow.camera.near = 0.5; s.shadow.camera.far = 3; }
   }
-  scene.add(new THREE.HemisphereLight(0x6b4a3a, 0x0a0705, 0.35));
+  scene.add(new THREE.HemisphereLight(0x8a6a58, 0x1a1210, 0.55));
   // lampade a muro
   for (const [x, z] of [[-5.9, -3], [-5.9, 3], [5.9, 2.6], [-2, -4.95], [2, -4.95]]) {
     const l = new THREE.PointLight(0xffb36b, 1.4, 3.5, 2); l.position.set(x, 2.3, z); scene.add(l);
@@ -341,7 +340,7 @@ function newGame(remote) {
   G.players = [{ name: names[0], bot: false }, { name: names[1], bot: !online && CFG.mode === 'bot' }];
   if (online) G.players[1 - G.net.local].remote = true;
   if (online && G.net.role === 'host') netSend({ t: 'start', names, balls: balls.map(b => ({ id: b.id, x: b.x, z: b.z })) });
-  G.match = Ru.newMatch(names, { practice: CFG.mode === 'free', first: 0 });
+  G.match = Ru.newMatch(names, { practice: CFG.mode === 'free', first: 0, casa: !!CFG.casa });
   G.potLog = []; G.spinA = G.spinB = 0; G.power = 0;
   clearTokens(); G.held = [[], []]; G.dizzy = [0, 0]; G.mods = null; if (CFG.caos && CFG.mode !== 'free' && !online) for (let i = 0; i < 3; i++) spawnToken();
   syncBallMeshes(); setCue(CFG.cue);
@@ -397,6 +396,7 @@ function endShot() {
   const m = G.match, ev = G.events;
   const r = Ru.judge(m, balls, ev);
   for (const id of r.potted || []) if (id !== 0) G.potLog.push(id);
+  for (const id of r.respot || []) { const e = balls.find(b => b.id === id); if (!e || e.on) continue; e.on = true; e.x = T.L / 4; e.z = 0; while (!P.freeSpot(balls, e.x, e.z, e)) e.x += 0.012; ballMeshes.get(id).visible = true; ballMeshes.get(id).position.set(e.x, R, e.z); G.potLog = G.potLog.filter(x => x !== id); }
   if (r.respot8) { const e = balls.find(b => b.id === 8); e.on = true; e.x = T.L / 4; e.z = 0; while (!P.freeSpot(balls, e.x, e.z, e)) e.x += 0.01; ballMeshes.get(8).visible = true; ballMeshes.get(8).position.set(e.x, R, e.z); }
   if (r.msg) say(r.msg, r.foul);
   if (r.foul) snd('foul');
@@ -839,7 +839,7 @@ function openMenu(inGame) {
 }
 function fillMenu() {
   const sel = (sel, attr, val) => document.querySelectorAll(sel).forEach(b => b.classList.toggle('sel', b.dataset[attr] === val));
-  sel('#modes .opt', 'm', CFG.mode); const cz = $('#caosBtn'); if (cz) { cz.classList.toggle('sel', CFG.caos); cz.classList.toggle('hide', CFG.mode === 'free'); } sel('#levels .chip', 'l', CFG.level); sel('#guides .chip', 'g', CFG.guide);
+  sel('#modes .opt', 'm', CFG.mode); const cz = $('#caosBtn'); if (cz) { cz.classList.toggle('sel', CFG.caos); cz.classList.toggle('hide', CFG.mode === 'free'); } const ca = $('#casaBtn'); if (ca) { ca.classList.toggle('sel', CFG.casa); ca.classList.toggle('hide', CFG.mode === 'free'); } sel('#levels .chip', 'l', CFG.level); sel('#guides .chip', 'g', CFG.guide);
   $('#n1wrap').classList.toggle('hide', CFG.mode !== 'duo'); $('#onlineBox').classList.toggle('hide', CFG.mode !== 'online'); $('#go').classList.toggle('hide', CFG.mode === 'online'); $('#lvwrap').classList.toggle('hide', CFG.mode !== 'bot');
   $('#n0').value = CFG.n0; $('#n1').value = CFG.n1;
   $('#cues').innerHTML = CUES.map(c => `<button class="cuesw${c.id === CFG.cue ? ' sel' : ''}" data-c="${c.id}" style="background:${c.css}"><span>${c.name}</span></button>`).join('');
@@ -855,6 +855,7 @@ document.addEventListener('click', e => {
   else if (t.dataset.s) { CFG.set = t.dataset.s; syncBallMeshes(); updateHud(); }
   else if (t.dataset.f) { CFG.felt = t.dataset.f; applyFelt(); }
   else if (t.dataset.caos != null) { CFG.caos = !CFG.caos; }
+  else if (t.dataset.casa != null) { CFG.casa = !CFG.casa; }
   else return;
   saveCfg(); fillMenu();
 });
@@ -871,6 +872,13 @@ $('#toMenu').onclick = () => { $('#over').classList.add('hide'); $('#hud').class
 // ---------- avvio ----------
 applyFelt(); buildTable(); buildRoom();
 balls = P.rack(); syncBallMeshes(); setCue(CFG.cue);
+{ // riflessi morbidi: una stanza scura con due lampade calde sopra il tavolo (niente softbox da studio)
+  const es = new THREE.Scene();
+  es.add(new THREE.Mesh(new THREE.BoxGeometry(12, 6, 12), new THREE.MeshBasicMaterial({ color: 0x2a1c14, side: THREE.BackSide })));
+  for (const x of [-0.9, 0.9]) { const l = new THREE.Mesh(new THREE.PlaneGeometry(1.0, 0.5), new THREE.MeshBasicMaterial({ color: new THREE.Color(2.2, 1.7, 1.1), side: THREE.DoubleSide })); l.position.set(x, 2.2, 0); l.rotation.x = Math.PI / 2; es.add(l); }
+  const floorL = new THREE.Mesh(new THREE.PlaneGeometry(12, 12), new THREE.MeshBasicMaterial({ color: 0x120c08 })); floorL.rotation.x = -Math.PI / 2; floorL.position.y = -1.5; es.add(floorL);
+  scene.environment = pmrem.fromScene(es, 0.04).texture;
+}
 fillMenu(); resize(); requestAnimationFrame(frame);
 G.camPos.set(3, 2, 2);
 
@@ -881,6 +889,6 @@ if (DEBUG) {
 }
 if (Q.has('auto')) {
   // test: entrambi i giocatori sono bot
-  CFG.mode = Q.get('auto') || 'bot'; CFG.level = 'campione'; CFG.caos = Q.has('caos');
+  CFG.mode = Q.get('auto') || 'bot'; CFG.level = 'campione'; CFG.caos = Q.has('caos'); CFG.casa = Q.has('casa');
   newGame(); G.players[0].bot = true; G.players[1].bot = CFG.mode !== 'free'; startTurn(true);
 }

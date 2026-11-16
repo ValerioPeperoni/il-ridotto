@@ -47,6 +47,7 @@ Alla fine dei messaggi di commit Claude aggiungeva le righe di attribuzione; usa
 ## 4. Stato di ogni gioco e cosa vuole Valerio
 
 ### Biliardo (riferimento: 8 Ball Pool, ma in 3D)
+**16/11 notte:** luci più morbide (riflessi da una stanza scura con due lampade calde invece di RoomEnvironment, bloom 0.14 soglia 1.0, esposizione 0.88), colori delle palle meno saturi, opzione "Regole della casa" (`CFG.casa`, rules.js): 8 e 15 solo nelle buche centrali (pocket 1 e 4), l'1 per ultima tra le piene, palle rimesse sul dischetto se sbagliate. Interpretazione di Claude delle regole di Valerio: da confermare con lui. Il bot non conosce ancora queste regole.
 Funziona: bot a 3 livelli, 2 giocatori, allenamento, online 1 contro 1, modalità Caos. È il gioco che gli piace di più.
 Da fare:
 1. Luci e colori meno saturi e meno forti.
@@ -85,7 +86,7 @@ Feedback del 16/11 e prossimi passi, **in ordine**:
 5. Più caos alla Super Battle Golf: golf cart, oggetti nuovi, buche a tema, ostacoli che si muovono.
 
 ### Ping pong (riferimento: Switch Sports / Wii Sports Resort)
-**FATTO 16/11 sera (Claude, screenshot controllati):** palazzetto chiaro senza pubblico (parquet, campo azzurro, transenne blu PING PONG, vetrate), tavolo e rete nuovi, racchette rifatte, avversario = avatar del camerino (KayKit) con racchetta in mano, animazioni di spostamento laterale morbide e colpo; il giocatore vicino in prima persona con la racchetta davanti alla telecamera; interfaccia Fredoka chiara. Prova: `pingpong.html?debug&auto&fp` (prima persona coi bot) o `&auto=tv`. Restano: battuta più chiara, gesti del telefono, racchetta dell'avversario da orientare meglio, scia più bella.
+**FATTO 16/11 sera (Claude, screenshot controllati):** palazzetto chiaro senza pubblico (parquet, campo azzurro, transenne blu PING PONG, vetrate), tavolo e rete nuovi, racchette rifatte, avversario = avatar del camerino (KayKit) con racchetta in mano, animazioni di spostamento laterale morbide e colpo; il giocatore vicino in prima persona con la racchetta davanti alla telecamera; interfaccia Fredoka chiara. Prova: `pingpong.html?debug&auto&fp` (prima persona coi bot) o `&auto=tv`. Aggiunti dopo: scia a nastro che si assottiglia, palla che gira davvero (texture), ombra della palla sul tavolo, anello sul rimbalzo, racchetta in mano orientata come le armi KayKit (lama lungo +y dell'osso handslotr, rotazione y=π), avversario più alto (2.05) in posa 'Block'. Restano: battuta più chiara, gesti del telefono.
 Vecchie note:
 Da fare:
 - Prima persona, senza spettatori.

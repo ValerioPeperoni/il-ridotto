@@ -10,7 +10,7 @@ export const FELTS = [
   { id: 'nero', name: 'Nero', c: '#1d1d22' },
 ];
 
-const CL = ['#ffffff', '#f2c014', '#1a4fc4', '#d62a1e', '#5b2a86', '#f07c13', '#127a3a', '#7a1c1c', '#121212'];
+const CL = ['#ffffff', '#e3b52a', '#2a55b0', '#c23a2c', '#5a3482', '#dc7a2a', '#1f7a45', '#7a2a2a', '#141414'];
 const full = a => { const o = {}; for (let i = 0; i <= 15; i++) o[i] = a[i <= 8 ? i : i - 8]; o[0] = a[0]; return o; };
 export const SETS = [
   { id: 'classiche', name: 'Classiche', base: '#f6f1e3', num: '#111', colors: full(CL) },

@@ -102,11 +102,41 @@ function makeRacket(color) {
 }
 
 // ---------- palla ----------
-const ballMesh = new THREE.Mesh(new THREE.SphereGeometry(T.r, 20, 14), new THREE.MeshStandardMaterial({ color: 0xffffff, emissive: 0xffa060, emissiveIntensity: 0.25, roughness: 0.4 }));
+// palla con una cucitura disegnata, così si vede girare; scia a nastro che si assottiglia; ombra sul tavolo
+const ballTex = ctex(128, 64, (g, w, h) => { g.fillStyle = '#fbfbf6'; g.fillRect(0, 0, w, h); g.strokeStyle = '#f2a33a'; g.lineWidth = 5; g.beginPath(); for (let x = 0; x <= w; x += 2) g.lineTo(x, h / 2 + Math.sin(x / w * Math.PI * 4) * 10); g.stroke(); g.fillStyle = '#e8243c'; g.font = '700 16px Fredoka, Arial'; g.fillText('R', 20, 18); });
+const ballMesh = new THREE.Mesh(new THREE.SphereGeometry(T.r * 1.25, 24, 16), new THREE.MeshStandardMaterial({ map: ballTex, emissive: 0xffa060, emissiveIntensity: 0.12, roughness: 0.35 }));
 ballMesh.castShadow = true; scene.add(ballMesh);
-const TRAIL = 18, trailGeo = new THREE.BufferGeometry(); trailGeo.setAttribute('position', new THREE.BufferAttribute(new Float32Array(TRAIL * 3), 3));
-const trail = new THREE.Line(trailGeo, new THREE.LineBasicMaterial({ color: 0xffd0a0, transparent: true, opacity: 0.55 })); trail.frustumCulled = false; scene.add(trail);
+const shadowTex = ctex(64, 64, (g) => { const gr = g.createRadialGradient(32, 32, 1, 32, 32, 30); gr.addColorStop(0, 'rgba(0,0,0,.55)'); gr.addColorStop(1, 'rgba(0,0,0,0)'); g.fillStyle = gr; g.fillRect(0, 0, 64, 64); });
+const ballShadow = new THREE.Mesh(new THREE.PlaneGeometry(0.12, 0.12), new THREE.MeshBasicMaterial({ map: shadowTex, transparent: true, depthWrite: false })); ballShadow.rotation.x = -Math.PI / 2; scene.add(ballShadow);
+const TRAIL = 22;
+const trailGeo = new THREE.BufferGeometry();
+trailGeo.setAttribute('position', new THREE.BufferAttribute(new Float32Array(TRAIL * 2 * 3), 3));
+trailGeo.setAttribute('color', new THREE.BufferAttribute(new Float32Array(TRAIL * 2 * 3), 3));
+{ const idx = []; for (let i = 0; i < TRAIL - 1; i++) { const a = i * 2; idx.push(a, a + 1, a + 2, a + 1, a + 3, a + 2); } trailGeo.setIndex(idx); }
+const trail = new THREE.Mesh(trailGeo, new THREE.MeshBasicMaterial({ vertexColors: true, transparent: true, blending: THREE.AdditiveBlending, depthWrite: false, side: THREE.DoubleSide, toneMapped: false }));
+trail.frustumCulled = false; scene.add(trail);
 const trailPts = [];
+const _tv = new THREE.Vector3(), _td = new THREE.Vector3(), _ts = new THREE.Vector3();
+function drawTrail(color) {
+  const pos = trailGeo.attributes.position.array, col = trailGeo.attributes.color.array, n = trailPts.length / 3;
+  for (let i = 0; i < TRAIL; i++) {
+    const j = Math.min(i, n - 1); if (j < 0) break;
+    const x = trailPts[j * 3], y = trailPts[j * 3 + 1], z = trailPts[j * 3 + 2];
+    const k = n > 1 ? j / (n - 1) : 1; // 0 = coda, 1 = palla
+    const jn = Math.min(n - 1, j + 1), jp = Math.max(0, j - 1);
+    _td.set(trailPts[jn * 3] - trailPts[jp * 3], trailPts[jn * 3 + 1] - trailPts[jp * 3 + 1], trailPts[jn * 3 + 2] - trailPts[jp * 3 + 2]);
+    _tv.set(x, y, z).sub(camera.position); _ts.crossVectors(_td, _tv).normalize().multiplyScalar(T.r * 0.75 * k);
+    pos.set([x + _ts.x, y + _ts.y, z + _ts.z, x - _ts.x, y - _ts.y, z - _ts.z], i * 6);
+    const c = k * k * 0.9; col.set([color.r * c, color.g * c, color.b * c, color.r * c, color.g * c, color.b * c], i * 6);
+  }
+  trailGeo.attributes.position.needsUpdate = true; trailGeo.attributes.color.needsUpdate = true; trailGeo.setDrawRange(0, Math.max(0, (Math.min(n, TRAIL) - 1) * 6));
+}
+// piccolo anello sul tavolo quando la palla rimbalza
+const hitRings = [];
+function bounceRing(x, y, z, color = 0xffffff) {
+  const m = new THREE.Mesh(new THREE.RingGeometry(0.02, 0.035, 24), new THREE.MeshBasicMaterial({ color, transparent: true, depthWrite: false })); m.rotation.x = -Math.PI / 2; m.position.set(x, y + 0.002, z); scene.add(m); hitRings.push({ m, t: 0 });
+}
+function updateRings(dt) { for (let i = hitRings.length - 1; i >= 0; i--) { const r = hitRings[i]; r.t += dt; r.m.scale.setScalar(1 + r.t * 9); r.m.material.opacity = Math.max(0, 0.9 - r.t * 2.2); if (r.t > 0.45) { scene.remove(r.m); hitRings.splice(i, 1); } } }
 const fireLight = new THREE.PointLight(0xff5a00, 3, 1.5, 2); fireLight.visible = false; scene.add(fireLight);
 function updateCharge() { const c = G.charge || [0, 0]; for (const [i, id] of [[0, '#chA'], [1, '#chB']]) { const el = document.querySelector(id); if (el) { el.style.width = (c[i] * 100) + '%'; el.parentElement.classList.toggle('full', c[i] >= 1); } } }
 
@@ -145,13 +175,13 @@ function setupAvatars() {
   for (const a of avatars) a.av.dispose();
   avatars.length = 0;
   G.players.forEach((p, i) => {
-    const av = makeAvatar({ ...(p.look || randomLook()), prop: 'none' }, { height: 1.75 });
+    const av = makeAvatar({ ...(p.look || randomLook()), prop: "none" }, { height: 2.05 });
     av.root.traverse(o => { if (o.isMesh) o.castShadow = true; });
     av.root.rotation.y = i === 0 ? Math.PI : 0;
     av.root.position.set(0.3 * (i ? -1 : 1), 0, sideZ(i) * (T.L / 2 + 0.65));
     scene.add(av.root);
     const racket = makeRacket(i === 0 ? 0xe8243c : 0x2a5fd6); const hand = av.bones.handslotr || av.bones.wristr;
-    hand.add(racket); racket.scale.setScalar(2.45 / 1.75); racket.rotation.set(Math.PI / 2, 0, 0); racket.position.set(0, 0.02, 0);
+    hand.add(racket); racket.scale.setScalar(2.45 / 2.05 * 1.5); racket.rotation.set(0, Math.PI, 0); racket.position.set(0, 0.04, 0);
     av.play('Idle_B');
     avatars.push({ av, racket, x: av.root.position.x, vx: 0, swingT: -1, swingDir: 1, anim: 'Idle_B' });
   });
@@ -171,7 +201,7 @@ function animateAvatars(dt) {
     a.vx += (want - a.vx) * Math.min(1, dt * 8); a.x += a.vx * dt;
     a.av.root.position.set(a.x, 0, s * (T.L / 2 + 0.65));
     // animazioni
-    let anim = 'Idle_B';
+    let anim = window.__idle || 'Block';
     if (a.swingT >= 0) { a.swingT += dt; if (a.swingT > 0.55) a.swingT = -1; }
     else if (Math.abs(a.vx) > 0.6) anim = (a.vx * (i === 0 ? -1 : 1)) > 0 ? 'Running_Strafe_Right' : 'Running_Strafe_Left';
     if (a.swingT < 0 && anim !== a.anim) { a.anim = anim; a.av.play(anim, { fade: 0.15 }); }
@@ -385,7 +415,7 @@ function planReceive() {
 function onEvent(e) {
   const b = G.ball; if (DEBUG) (G.log = G.log || []).push(`${G.time.toFixed(2)} ev ${e.t}${e.side ?? ''} z=${(e.z ?? b.z).toFixed(2)} lh=${G.lastHitter} b=${G.bounces.join('')} srv=${G.serving}`);
   if (e.t === 'table') {
-    snd('table');
+    snd('table'); bounceRing(e.x, T.H, e.z, G.fire ? 0xff7a2a : 0xffffff);
     const owner = e.side > 0 ? 0 : 1;
     G.bounces.push(owner);
     if (G.serving) {
@@ -484,18 +514,23 @@ function frame(now) {
       if (G.cpuSwing && G.time >= G.cpuSwing.at) { const c = G.cpuSwing; G.cpuSwing = null; swing(c.who, { ...c.sw, time: G.time, yaw: 1 }); }
     }
     ballMesh.position.set(b.x, b.y, b.z); ballMesh.visible = true;
-    ballMesh.material.emissive.setHex(G.fire ? 0xff4400 : 0xffa060); ballMesh.material.emissiveIntensity = G.fire ? 2.2 : 0.25; trail.material.color.setHex(G.fire ? 0xff6a00 : 0xffd0a0);
+    ballMesh.material.emissive.setHex(G.fire ? 0xff4400 : 0xffa060); ballMesh.material.emissiveIntensity = G.fire ? 1.6 : 0.12;
     fireLight.visible = !!G.fire; fireLight.position.copy(ballMesh.position);
-    trailPts.push(b.x, b.y, b.z); if (trailPts.length > TRAIL * 3) trailPts.splice(0, 3);
-    const arr = trailGeo.attributes.position.array; for (let i = 0; i < TRAIL * 3; i++) arr[i] = trailPts[Math.min(i, trailPts.length - 1)] ?? 0;
-    trailGeo.attributes.position.needsUpdate = true; trailGeo.setDrawRange(0, trailPts.length / 3);
-  } else ballMesh.visible = false;
+    // la palla gira davvero con la sua rotazione
+    const wl = Math.hypot(b.wx, b.wy, b.wz); if (wl > 0.1) { ballMesh.rotateOnWorldAxis(_tv.set(b.wx / wl, b.wy / wl, b.wz / wl), Math.min(wl * dt * 0.25, 0.9)); }
+    const over = Math.abs(b.x) <= T.W / 2 && Math.abs(b.z) <= T.L / 2 && b.y > T.H - 0.01, gy = over ? T.H + 0.002 : 0.004;
+    ballShadow.visible = !b.held; ballShadow.position.set(b.x, gy, b.z); const hgt = Math.max(0, b.y - gy); ballShadow.scale.setScalar(0.6 + hgt * 1.2); ballShadow.material.opacity = Math.max(0.15, 1 - hgt * 1.5);
+    if (!b.held) { trailPts.push(b.x, b.y, b.z); if (trailPts.length > TRAIL * 3) trailPts.splice(0, 3); }
+    drawTrail(G.fire ? new THREE.Color(1.4, 0.55, 0.1) : new THREE.Color(0.75, 0.9, 1.25)); trail.visible = Math.hypot(b.vx, b.vy, b.vz) > 2.5 && !b.held;
+  } else { ballMesh.visible = false; ballShadow.visible = false; trail.visible = false; }
+  updateRings(dt);
   animateAvatars(dt);
   updateCamera(dt);
   composer.render();
 }
 function updateCamera(dt) {
   const b = G.ball;
+  if (Q.has('cam')) { const c = Q.get('cam').split(',').map(Number); camera.position.set(c[0], c[1], c[2]); camera.lookAt(c[3], c[4], c[5]); return; }
   if (G.phase === 'lobby') { const t = G.time * 0.12; _p.set(Math.sin(t) * 4.2, 2.2, Math.cos(t) * 4.2); _l.set(0, 0.8, 0); }
   else if (G.view === 'tv') { _p.set(3.4, 2.3, (b ? b.z : 0) * 0.15); _l.set(0, 0.85, (b ? b.z : 0) * 0.25); }
   else { // prima persona: occhi del giocatore vicino, segue un po' la palla
@@ -509,10 +544,11 @@ function updateCamera(dt) {
 
 renderLobby(); resize(); requestAnimationFrame(frame);
 await loadAvatarLibrary(); $('#start').dataset.ready = '1';
-if (DEBUG) { window.__G = G; window.__swing = swing; window.__start = startMatch; }
+if (DEBUG) { window.__G = G; window.__swing = swing; window.__start = startMatch; window.__av = avatars; }
 if (Q.has('auto')) {
   // prova: due computer
   G.players = [{ kind: 'cpu', name: 'Topspin', look: randomLook() }, { kind: 'cpu', name: 'La Contessa', look: randomLook() }];
+  if (Q.has('nocos')) G.players.forEach(p => { p.look.costume = 'none'; });
   G.target = +(Q.get('pts') || 5);
   const orig = startMatch;
   G.players.forEach(p => p.kind = 'cpu');

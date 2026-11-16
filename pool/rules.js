@@ -6,7 +6,7 @@ export const groupOf = id => isSolid(id) ? 'piene' : isStripe(id) ? 'rigate' : i
 export function newMatch(names, opts = {}) {
   return {
     names, turn: opts.first ?? 0, groups: [null, null], open: true, breakShot: true,
-    ballInHand: true, kitchen: true, winner: null, shots: 0, fouls: [0, 0], practice: !!opts.practice,
+    ballInHand: true, kitchen: true, winner: null, shots: 0, fouls: [0, 0], practice: !!opts.practice, casa: !!opts.casa,
   };
 }
 
@@ -44,6 +44,17 @@ export function judge(m, balls, events) {
   else if (!legal.includes(first)) { foul = true; reason = first === 8 ? 'Hai colpito prima l\'8' : 'Hai colpito prima una palla dell\'avversario'; }
   else if (!wasBreak && potted.length === 0 && !railAfter) { foul = true; reason = 'Nessuna palla in buca e nessuna sponda dopo il tocco'; }
 
+  // regole della casa: l'8 e la 15 solo nelle buche centrali; l'1 è l'ultima delle piene
+  const respot = [];
+  if (m.casa && !wasBreak) {
+    const side = id => events.some(e => e.t === 'pot' && e.a === id && (e.pocket === 1 || e.pocket === 4));
+    if (potted.includes(15) && !side(15)) { respot.push(15); if (!foul) { foul = true; reason = 'La 15 va nelle buche centrali'; } }
+    if (potted.includes(1)) {
+      const othersBefore = balls.filter(b => (b.on || potted.includes(b.id)) && b.id >= 2 && b.id <= 7 && !potted.includes(b.id)).length;
+      if (othersBefore > 0) { respot.push(1); if (!foul) { foul = true; reason = "L'1 va imbucata per ultima tra le piene"; } }
+    }
+    if (potted.includes(8) && !side(8) && clearedBefore && !foul) { m.winner = o; m.shots++; return { foul: true, keep: false, potted, end: true, msg: `L'8 va nelle buche centrali: vince ${m.names[o]}` }; }
+  }
   m.shots++; m.breakShot = false; m.kitchen = false;
   // l'8 in buca
   if (potted.includes(8)) {
@@ -72,5 +83,5 @@ export function judge(m, balls, events) {
   let msg = '';
   if (foul) msg = `Fallo: ${reason}. Palla in mano a ${m.names[o]}`;
   else if (assigned) msg = `${m.names[p]} gioca le ${assigned}`;
-  return { foul, reason, keep, potted, end: false, msg, assigned };
+  return { foul, reason, keep, potted, end: false, msg, assigned, respot };
 }
