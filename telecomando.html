@@ -66,6 +66,8 @@ input{background:#fff;color:var(--ink);border:none;box-shadow:0 3px 0 rgba(0,0,0
 .spinrow span{margin-right:4px}
 .spinrow button{min-width:44px;height:42px;padding:0 8px;border-radius:12px;border:none;background:#fff;box-shadow:0 3px 0 rgba(0,0,0,.15);font-size:17px;font-weight:700}
 .spinrow button.sel{background:#3d7bff;color:#fff;box-shadow:0 3px 0 #2650b8}
+.hint{font-size:14px;text-align:center;opacity:.75}
+.links{flex-wrap:wrap;justify-content:center;font-size:13px}
 </style>
 </head>
 <body>
@@ -90,12 +92,13 @@ input{background:#fff;color:var(--ink);border:none;box-shadow:0 3px 0 rgba(0,0,0
 <div class="scr hide" id="bowl">
   <div class="top"><b id="bTitle">Tocca a te!</b><span class="state" id="bInfo"></span></div>
   <div id="lane"><div class="pins">• • • •<br>• • •<br>• •<br>•</div><svg viewBox="0 0 100 100" preserveAspectRatio="none"><line id="aimL" x1="50" y1="92" x2="50" y2="8" stroke="#fff" stroke-width="1" stroke-dasharray="3 3" vector-effect="non-scaling-stroke"/></svg><div class="ball"></div></div>
-  <div class="angrow"><button id="aL">↶</button><span class="state">trascina la palla · angolo</span><button id="aR">↷</button></div>
-  <div class="spinrow" id="spinRow"><span>Effetto</span><button data-sp="-1">⟲⟲</button><button data-sp="-0.5">⟲</button><button data-sp="0" class="sel">dritta</button><button data-sp="0.5">⟳</button><button data-sp="1">⟳⟳</button></div>
+  <div class="angrow"><button id="aL">◀</button><span class="state">spostati sulla pista</span><button id="aR">▶</button></div>
+  <div class="spinrow hide" id="spinRow"><span>Effetto</span><button data-sp="-1">⟲⟲</button><button data-sp="-0.5">⟲</button><button data-sp="0" class="sel">dritta</button><button data-sp="0.5">⟳</button><button data-sp="1">⟳⟳</button></div>
   <div id="meter"><div class="ok"></div><i></i></div>
-  <button id="hold">TIENI<br>PREMUTO<br><small style="font-weight:400;font-size:15px">braccio indietro, poi avanti,<br>e lascia</small></button>
+  <button id="hold">TIENI<br>PREMUTO<br><small style="font-weight:400;font-size:15px">e lancia come al bowling:<br>la palla parte da sola</small></button>
   <div id="pad" class="hide">Trascina giù e poi<br>su veloce, e lascia.</div>
-  <div class="links"><button id="swMode">Senza sensori? Usa il dito</button></div>
+  <div class="hint">Braccio un po' a sinistra o a destra = palla di lì.<br>Ruota il polso mentre lanci = effetto.</div>
+  <div class="links"><button id="swMode">Senza sensori? Usa il dito</button><button id="flipD"></button><button id="flip"></button></div>
 </div>
 
 <div class="scr hide" id="pong">

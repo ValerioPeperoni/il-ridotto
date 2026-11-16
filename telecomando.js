@@ -69,7 +69,7 @@ async function askMotion() {
     motionOK = true;
     const k = Math.PI / 180;
     // alpha: asse z (perpendicolare allo schermo), beta: asse x, gamma: asse y (lungo il telefono)
-    buf.push({ t: performance.now() / 1000, w: [r.beta * k, r.gamma * k, r.alpha * k] });
+    const la = e.acceleration; buf.push({ t: performance.now() / 1000, w: [r.beta * k, r.gamma * k, r.alpha * k], a: la && la.x != null ? [la.x, la.y, la.z] : null });
     while (buf.length && buf[0].t < buf[buf.length - 1].t - 3) buf.shift();
     if (holding) liveSwing();
     if (game === 'pong') pongMotion(e);
@@ -88,21 +88,25 @@ const fromEv = e => { const r = lane.getBoundingClientRect(); aimX = Math.max(-0
 lane.addEventListener('pointerdown', e => { lane.setPointerCapture(e.pointerId); dragL = true; fromEv(e); });
 lane.addEventListener('pointermove', e => { if (dragL) fromEv(e); });
 lane.addEventListener('pointerup', () => dragL = false);
-$('#aL').onclick = () => { aimA = Math.max(-0.06, aimA - 0.004); drawLane(); sendAim(); };
-$('#aR').onclick = () => { aimA = Math.min(0.06, aimA + 0.004); drawLane(); sendAim(); };
+$('#aL').onclick = () => { aimX = Math.max(-0.44, aimX - 0.04); aimA = 0; drawLane(); sendAim(); vibrate(10); };
+$('#aR').onclick = () => { aimX = Math.min(0.44, aimX + 0.04); aimA = 0; drawLane(); sendAim(); vibrate(10); };
 let aimTimer = 0;
 function sendAim() { clearTimeout(aimTimer); aimTimer = setTimeout(() => net && net.send({ t: 'aim', x: aimX, a: aimA }), 40); }
 // effetto scelto coi tasti (come i tasti del Joy-Con): -1 tutto a sinistra … +1 tutto a destra
 let spin = 0;
 function drawSpin() { document.querySelectorAll('#spinRow [data-sp]').forEach(b => b.classList.toggle('sel', +b.dataset.sp === spin)); }
 $('#spinRow').onclick = e => { const b = e.target.closest('[data-sp]'); if (!b) return; spin = +b.dataset.sp; drawSpin(); vibrate(15); net && net.send({ t: 'spin', v: spin }); };
-$('#swMode').onclick = () => { fingerMode = !fingerMode; $('#pad').classList.toggle('hide', !fingerMode); $('#hold').classList.toggle('hide', fingerMode); $('#swMode').textContent = fingerMode ? 'Usa i sensori' : 'Senza sensori? Usa il dito'; };
+$('#swMode').onclick = () => { fingerMode = !fingerMode; $('#pad').classList.toggle('hide', !fingerMode); $('#hold').classList.toggle('hide', fingerMode); $('#spinRow').classList.toggle('hide', !fingerMode); $('#meter').classList.toggle('hide', fingerMode); $('#swMode').textContent = fingerMode ? 'Usa i sensori' : 'Senza sensori? Usa il dito'; };
 
-// ---------- lancio col movimento ----------
-let holding = false, holdT0 = 0, lastSend = 0;
+// ---------- lancio col movimento (tutto manuale) ----------
+// Tieni premuto, braccio indietro e poi avanti: la palla parte da sola nel punto più basso del braccio
+// (o quando alzi il dito). Se il braccio va un po' a sinistra o a destra la palla va di lì;
+// se ruoti il polso mentre lanci la palla prende l'effetto.
+let holding = false, holdT0 = 0, lastSend = 0, thrown = false;
+let flipDir = store.get('ridotto-flipdir') === '1';
 const hold = $('#hold');
-hold.addEventListener('pointerdown', e => { e.preventDefault(); if (!myTurn) return; hold.setPointerCapture(e.pointerId); holding = true; holdT0 = performance.now() / 1000; hold.classList.add('on'); vibrate(20); if (!motionOK) { $('#bInfo').textContent = 'Non sento i sensori: usa il dito (link qui sotto)'; } });
-hold.addEventListener('pointerup', e => { if (!holding) return; holding = false; hold.classList.remove('on'); release(); });
+hold.addEventListener('pointerdown', e => { e.preventDefault(); if (!myTurn) return; hold.setPointerCapture(e.pointerId); holding = true; thrown = false; holdT0 = performance.now() / 1000; hold.classList.add('on'); vibrate(20); if (!motionOK) { $('#bInfo').textContent = 'Non sento i sensori: usa il dito (link qui sotto)'; } });
+hold.addEventListener('pointerup', () => { if (!holding) return; holding = false; hold.classList.remove('on'); if (!thrown) release(true); });
 hold.addEventListener('pointercancel', () => { holding = false; hold.classList.remove('on'); });
 hold.addEventListener('contextmenu', e => e.preventDefault());
 
@@ -120,41 +124,61 @@ function principalAxis(samples) {
 function analyse(samples) {
   if (samples.length < 6) return null;
   const u = principalAxis(samples);
-  let th = 0, sigma = 0, prev = samples[0].t; const th_t = [];
+  let th = 0, sigma = 0, prev = samples[0].t, minTh = 0; const rates = [];
   for (const s of samples) {
     const r = dot(s.w, u);
     if (!sigma && Math.abs(r) > 1.5) sigma = -Math.sign(r); // il primo movimento è all'indietro
-    th += r * (s.t - prev); prev = s.t; th_t.push({ t: s.t, r, th });
+    th += r * (s.t - prev); prev = s.t; rates.push({ t: s.t, r, th, w: s.w, a: s.a });
   }
   if (!sigma) sigma = 1;
-  return { u, sigma, th: th * sigma, rates: th_t.map(x => ({ t: x.t, r: x.r * sigma, th: x.th * sigma })) };
+  for (const x of rates) { x.r *= sigma; x.th *= sigma; minTh = Math.min(minTh, x.th); }
+  return { u: u.map(c => c * sigma), th: th * sigma, minTh, rates };
 }
 function liveSwing() {
+  if (thrown) return;
   const now = performance.now() / 1000;
   const a = analyse(buf.filter(s => s.t >= holdT0));
   if (!a) return;
   const m = $('#meter i'); m.style.left = (50 + Math.max(-48, Math.min(48, a.th * 30))) + '%';
   if (now - lastSend > 0.05) { lastSend = now; net && net.send({ t: 'swing', th: a.th }); }
+  // rilascio automatico: dopo essere andato indietro, il braccio torna giù andando avanti veloce
+  const last = a.rates[a.rates.length - 1];
+  if (a.minTh < -0.35 && a.th > -0.05 && last.r > 3) release(false);
 }
-function release() {
+function release(byFinger) {
   const s = buf.filter(x => x.t >= holdT0);
   const a = analyse(s);
   if (!a || !myTurn) { if (motionOK) $('#bInfo').textContent = 'Non ho sentito il movimento: riprova'; return; }
   const tEnd = s[s.length - 1].t;
-  const lastR = a.rates.filter(x => x.t > tEnd - 0.25);
+  const lastR = a.rates.filter(x => x.t > tEnd - 0.2);
   const peak = Math.max(0, ...lastR.map(x => x.r));
-  if (peak < 1.2) { $('#bInfo').textContent = 'Troppo piano: porta il braccio indietro e poi avanti, e lascia mentre vai avanti'; net && net.send({ t: 'swing', th: 0 }); return; }
-  // effetto (rotazione del polso attorno al telefono) e deviazione laterale
-  const y = norm([0, 1, 0].map((v, i) => v - a.u[i] * a.u[1]));
-  const w = norm(cross(a.u, y));
-  const tail = s.filter(x => x.t > tEnd - 0.15);
-  const twist = tail.reduce((acc, x) => acc + dot(x.w, y), 0) / tail.length;
-  const pull = tail.reduce((acc, x) => acc + dot(x.w, w), 0) / tail.length * a.sigma;
-  const hook = spin; void twist;
-  const msg = { t: 'throw', power: Math.min(1.25, peak / 9.5), hook, timing: a.th, pull: Math.max(-0.05, Math.min(0.05, pull * 0.006)) };
+  if (peak < 1.2) { $('#bInfo').textContent = 'Troppo piano: braccio indietro e poi avanti, deciso'; net && net.send({ t: 'swing', th: 0 }); return; }
+  thrown = true;
+  // asse del braccio: l'accelerazione centripeta punta verso la spalla (sensori senza gravità);
+  // se non c'è, prendiamo l'asse lungo del telefono
+  let arm = [0, 0, 0], n = 0;
+  for (const x of a.rates) if (x.a && x.r > 2.5) { const l = Math.hypot(...x.a); if (l > 3) { arm = arm.map((c, i) => c + x.a[i] / l); n++; } }
+  arm = n >= 3 ? norm(arm) : [0, 1, 0];
+  arm = norm(arm.map((c, i) => c - a.u[i] * dot(arm, a.u))); // perpendicolare all'asse di oscillazione
+  const side = norm(cross(a.u, arm)); // rotazione attorno a questo asse = braccio che va di lato
+  const tail = a.rates.filter(x => x.t > tEnd - 0.14);
+  const avg = f => tail.reduce((acc, x) => acc + f(x), 0) / tail.length;
+  const main = avg(x => dot(x.w, a.u)), lat = avg(x => dot(x.w, side)), twist = avg(x => dot(x.w, arm));
+  let dir = Math.atan2(lat, Math.max(1, main)); if (flipDir) dir = -dir;      // radianti: + = destra
+  let hook = Math.max(-1, Math.min(1, twist / 7)); if (flipHook) hook = -hook;
+  if (Math.abs(hook) < 0.12) hook = 0;
+  const timing = byFinger ? a.th : 0.1; // rilascio automatico = momento giusto
+  const msg = { t: 'throw', power: Math.min(1.25, peak / 9.5), hook, timing, pull: Math.max(-0.05, Math.min(0.05, dir * 0.12)) };
   net && net.send(msg); myTurn = false; vibrate(40);
-  $('#bInfo').textContent = `Potenza ${(msg.power * 100).toFixed(0)}%`;
+  const dTxt = Math.abs(dir) < 0.05 ? 'dritta' : dir < 0 ? 'verso sinistra' : 'verso destra';
+  const hTxt = hook === 0 ? 'senza effetto' : hook < 0 ? 'effetto a sinistra' : 'effetto a destra';
+  $('#bInfo').textContent = `Potenza ${(msg.power * 100).toFixed(0)}% · ${dTxt} · ${hTxt}`;
+  holding = false; hold.classList.remove('on');
 }
+$('#flip').onclick = () => { flipHook = !flipHook; store.set('ridotto-flip', flipHook ? '1' : '0'); drawFlips(); };
+$('#flipD').onclick = () => { flipDir = !flipDir; store.set('ridotto-flipdir', flipDir ? '1' : '0'); drawFlips(); };
+function drawFlips() { $('#flip').textContent = flipHook ? 'Effetto invertito ✓' : 'Effetto al contrario?'; $('#flipD').textContent = flipDir ? 'Direzione invertita ✓' : 'Direzione al contrario?'; }
+drawFlips();
 
 // ---------- lancio col dito ----------
 const pad = $('#pad'); let pg = null;
@@ -164,7 +188,7 @@ pad.addEventListener('pointerup', e => {
   if (!pg) return; const h = pg.h, a = h[0], b = h[h.length - 1], dt = Math.max(0.016, (b.t - a.t) / 1000), H = innerHeight;
   const vy = -(b.y - a.y) / dt / H, vx = (b.x - a.x) / dt / H; const tm = -(e.clientY - pg.y0) / 160; pg = null;
   if (vy < 0.4) return;
-  void vx; net && net.send({ t: 'throw', power: Math.min(1.25, vy / 3.4), hook: spin, timing: Math.min(tm, 0.5), pull: 0 }); myTurn = false;
+  net && net.send({ t: 'throw', power: Math.min(1.25, vy / 3.4), hook: spin, timing: Math.min(tm, 0.5), pull: Math.max(-0.05, Math.min(0.05, vx / 2.2 * 0.05)) }); myTurn = false;
 });
 drawLane();
 

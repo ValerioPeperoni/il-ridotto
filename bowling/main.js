@@ -24,14 +24,14 @@ const esc = s => String(s).replace(/[&<>"]/g, c => ({ '&': '&amp;', '<': '&lt;',
 // ---------- renderer ----------
 const renderer = new THREE.WebGLRenderer({ canvas: $('#gl'), antialias: true, powerPreference: 'high-performance' });
 let PR = Math.min(devicePixelRatio, MOBILE ? 1.5 : 1.75); renderer.setPixelRatio(PR);
-renderer.outputColorSpace = THREE.SRGBColorSpace; renderer.toneMapping = THREE.ACESFilmicToneMapping; renderer.toneMappingExposure = 1.0;
+renderer.outputColorSpace = THREE.SRGBColorSpace; renderer.toneMapping = THREE.ACESFilmicToneMapping; renderer.toneMappingExposure = 0.9;
 renderer.shadowMap.enabled = true; renderer.shadowMap.type = THREE.PCFSoftShadowMap;
 const scene = new THREE.Scene(); scene.background = new THREE.Color(0x0b0d1c); scene.fog = new THREE.Fog(0x0b0d1c, 30, 60);
 new RGBELoader().load('assets/hdr/ferndale_studio_04_1k.hdr', t => { const pm = new THREE.PMREMGenerator(renderer); scene.environment = pm.fromEquirectangular(t).texture; t.dispose(); });
 const camera = new THREE.PerspectiveCamera(50, 1, 0.05, 90);
 const composer = new EffectComposer(renderer);
 composer.addPass(new RenderPass(scene, camera));
-composer.addPass(new UnrealBloomPass(new THREE.Vector2(256, 256), 0.45, 0.35, 1.0));
+composer.addPass(new UnrealBloomPass(new THREE.Vector2(256, 256), 0.22, 0.3, 1.0));
 composer.addPass(new OutputPass());
 function resize() { const w = innerWidth, h = innerHeight; renderer.setSize(w, h, false); composer.setSize(w, h); camera.aspect = w / h; camera.fov = w < h ? 68 : 50; camera.updateProjectionMatrix(); }
 addEventListener('resize', resize);
@@ -67,9 +67,9 @@ function ballTex(color) {
 
 // ---------- sala ----------
 const LANES_X = [-4.4, -2.2, 0, 2.2, 4.4];
-const MASK_COLORS = [0x2ec27e, 0xff5c9a, 0x3d7bff, 0xffb02e, 0x9a5cff];
+const MASK_COLORS = [0x4fae80, 0xd9739f, 0x5b86d6, 0xd9a24f, 0x8f74cf];
 let mainLaneMesh = null;
-function neon(color, k = 2.2) { return new THREE.MeshBasicMaterial({ color: new THREE.Color(color).multiplyScalar(k), toneMapped: false, fog: false }); }
+function neon(color, k = 1.25) { return new THREE.MeshBasicMaterial({ color: new THREE.Color(color).multiplyScalar(k), toneMapped: false, fog: false }); }
 function buildHall() {
   const darkWood = new THREE.MeshStandardMaterial({ color: 0x1c2140, roughness: 0.55, metalness: 0.1 });
   for (const [i, lx] of LANES_X.entries()) {
@@ -78,10 +78,10 @@ function buildHall() {
     if (lx === 0) mainLaneMesh = lane;
     const deckM = new THREE.Mesh(new THREE.BoxGeometry(L.W, 0.06, 1.6), laneMat); deckM.position.set(0, -0.03, -20.2); deckM.receiveShadow = true; grp.add(deckM);
     for (const s of [-1, 1]) {
-      const gut = new THREE.Mesh(new THREE.CylinderGeometry(L.gutter / 2, L.gutter / 2, 20.2, 20, 1, true, -Math.PI / 2, Math.PI), new THREE.MeshPhysicalMaterial({ color: 0x2a3160, roughness: 0.25, metalness: 0.3, clearcoat: 1, side: THREE.DoubleSide }));
+      const gut = new THREE.Mesh(new THREE.CylinderGeometry(L.gutter / 2, L.gutter / 2, 20.2, 20, 1, true, -Math.PI / 2, Math.PI), new THREE.MeshPhysicalMaterial({ color: 0x2a2f4a, roughness: 0.35, metalness: 0.05, clearcoat: 0.6, side: THREE.DoubleSide }));
       gut.rotation.x = Math.PI / 2; gut.position.set(s * (L.half + L.gutter / 2), -0.005, -9.7); gut.receiveShadow = true; grp.add(gut);
       const cap = new THREE.Mesh(new THREE.BoxGeometry(0.1, 0.08, 21), darkWood); cap.position.set(s * (L.half + L.gutter + 0.05), 0.0, -10); cap.receiveShadow = true; grp.add(cap);
-      const strip = new THREE.Mesh(new THREE.BoxGeometry(0.018, 0.012, 21), neon(MASK_COLORS[i], 1.6)); strip.position.set(s * (L.half + L.gutter + 0.05), 0.046, -10); grp.add(strip);
+      const strip = new THREE.Mesh(new THREE.BoxGeometry(0.018, 0.012, 21), neon(MASK_COLORS[i], 0.9)); strip.position.set(s * (L.half + L.gutter + 0.05), 0.046, -10); grp.add(strip);
     }
     const pit = new THREE.Mesh(new THREE.BoxGeometry(L.W + 2 * L.gutter + 0.2, 0.6, 1.4), new THREE.MeshStandardMaterial({ color: 0x07080f })); pit.position.set(0, -0.32, -21.7); grp.add(pit);
     // mascherone: pannello scuro con cornice luminosa e numero
@@ -92,7 +92,7 @@ function buildHall() {
     for (const s of [-1, 1]) { const side = new THREE.Mesh(new THREE.BoxGeometry(0.06, 0.45, 2.4), darkWood); side.position.set(s * (L.half + L.gutter + 0.12), 0.2, -19.7); grp.add(side); }
     if (lx !== 0) for (const sp of pinSpots()) { const p = new THREE.Mesh(pinGeo, pinMat); p.position.set(sp.x, Pins.PIN.com, sp.z); p.castShadow = true; grp.add(p); }
     const appr = new THREE.Mesh(new THREE.BoxGeometry(2.2, 0.06, 5), new THREE.MeshPhysicalMaterial({ map: laneTex, color: 0xf2dcc0, roughness: 0.3, clearcoat: 0.8 })); appr.position.set(0, -0.031, 2.5); appr.receiveShadow = true; grp.add(appr);
-    const foul = new THREE.Mesh(new THREE.BoxGeometry(L.W + 2 * L.gutter, 0.004, 0.025), neon('#ff3355', 1.4)); foul.position.set(0, 0.002, 0); grp.add(foul);
+    const foul = new THREE.Mesh(new THREE.BoxGeometry(L.W + 2 * L.gutter, 0.004, 0.025), neon('#e04a5c', 1.0)); foul.position.set(0, 0.002, 0); grp.add(foul);
     if (i < 4) grp.add(ballReturn(1.1));
     // luce del birillaio: pannello luminoso sotto il cappello
     const glow = new THREE.Mesh(new THREE.PlaneGeometry(L.W + 0.3, 1.6), new THREE.MeshBasicMaterial({ color: 0xbfb8aa })); glow.rotation.x = Math.PI / 2; glow.position.set(0, 2.29, -19.2); grp.add(glow);
@@ -110,18 +110,18 @@ function buildHall() {
   const wallM = new THREE.MeshStandardMaterial({ map: wallTex, roughness: 0.9 });
   for (const s of [-1, 1]) {
     const w = new THREE.Mesh(new THREE.PlaneGeometry(40, 8), wallM); w.position.set(s * 7.4, 4, -4); w.rotation.y = -s * Math.PI / 2; scene.add(w);
-    for (const [y, c] of [[0.9, '#38d6ff'], [3.3, '#ff4fa0']]) { const st = new THREE.Mesh(new THREE.BoxGeometry(0.03, 0.04, 40), neon(c)); st.position.set(s * 7.37, y, -4); scene.add(st); }
+    for (const [y, c] of [[0.9, '#5fb8d8'], [3.3, '#c97aa6']]) { const st = new THREE.Mesh(new THREE.BoxGeometry(0.03, 0.04, 40), neon(c)); st.position.set(s * 7.37, y, -4); scene.add(st); }
   }
   // parete di fondo: un murale al tramonto con il cartello al neon
   const back = new THREE.Mesh(new THREE.PlaneGeometry(30, 8), new THREE.MeshBasicMaterial({ map: muralTex() })); back.position.set(0, 3.2, -22.5); scene.add(back);
-  const sign = new THREE.Mesh(new THREE.PlaneGeometry(6, 1.5), new THREE.MeshBasicMaterial({ map: ctex(1024, 256, (g, w, h) => { g.font = '700 170px Fredoka, Arial'; g.textAlign = 'center'; g.textBaseline = 'middle'; g.shadowColor = '#ff4fa0'; g.shadowBlur = 30; g.fillStyle = '#ffd1ea'; g.fillText('STRIKE', w / 2, h / 2 + 10); g.shadowBlur = 10; g.fillText('STRIKE', w / 2, h / 2 + 10); }), transparent: true, toneMapped: false, fog: false, color: new THREE.Color(2, 2, 2) }));
+  const sign = new THREE.Mesh(new THREE.PlaneGeometry(6, 1.5), new THREE.MeshBasicMaterial({ map: ctex(1024, 256, (g, w, h) => { g.font = '700 170px Fredoka, Arial'; g.textAlign = 'center'; g.textBaseline = 'middle'; g.shadowColor = '#ff4fa0'; g.shadowBlur = 30; g.fillStyle = '#ffd1ea'; g.fillText('STRIKE', w / 2, h / 2 + 10); g.shadowBlur = 10; g.fillText('STRIKE', w / 2, h / 2 + 10); }), transparent: true, toneMapped: false, fog: false, color: new THREE.Color(1.1, 1.1, 1.1) }));
   sign.position.set(0, 4.3, -22.45); scene.add(sign);
   const front = new THREE.Mesh(new THREE.PlaneGeometry(30, 8), wallM); front.position.set(0, 4, 16); front.rotation.y = Math.PI; scene.add(front);
   const ceil = new THREE.Mesh(new THREE.PlaneGeometry(30, 40), new THREE.MeshStandardMaterial({ color: 0x0c0f22 })); ceil.rotation.x = Math.PI / 2; ceil.position.set(0, 5, -4); scene.add(ceil);
   // faretti tondi sul soffitto (caldi) e due "onde" luminose sopra le piste
-  const spotM = new THREE.MeshBasicMaterial({ color: new THREE.Color(2.2, 1.9, 1.5), toneMapped: false });
+  const spotM = new THREE.MeshBasicMaterial({ color: new THREE.Color(1.15, 1.05, 0.9), toneMapped: false });
   for (let i = 0; i < 8; i++) for (const x of [-5.5, -3.3, -1.1, 1.1, 3.3, 5.5]) { const d = new THREE.Mesh(new THREE.CircleGeometry(0.13, 20), spotM); d.rotation.x = Math.PI / 2; d.position.set(x, 4.98, 8 - i * 3.6); scene.add(d); }
-  for (const [z, c] of [[-4, '#38d6ff'], [-10, '#8a5cff'], [-15, '#ff4fa0']]) {
+  for (const [z, c] of [[-4, '#5fb8d8'], [-10, '#8d80d0'], [-15, '#c97aa6']]) {
     const pts = []; for (let k = 0; k <= 40; k++) { const x = -7 + k * 0.35; pts.push(new THREE.Vector3(x, 4.6 + Math.sin(k * 0.5) * 0.12, z)); }
     const tube = new THREE.Mesh(new THREE.TubeGeometry(new THREE.CatmullRomCurve3(pts), 80, 0.025, 6), neon(c)); scene.add(tube);
   }
@@ -129,12 +129,12 @@ function buildHall() {
   monitor.position.set(0, 3.7, -1.2); monitor.rotation.x = 0.3; scene.add(monitor);
   // luci: poca luce d'ambiente, piste illuminate dall'alto, birilli in piena luce
   scene.add(new THREE.HemisphereLight(0x9fb4ff, 0x1a1530, 0.35));
-  const key = new THREE.DirectionalLight(0xffe6c8, 2.0); key.position.set(2.5, 7, 5); key.target.position.set(0, 0, -1); key.castShadow = true;
+  const key = new THREE.DirectionalLight(0xffe6c8, 1.5); key.position.set(2.5, 7, 5); key.target.position.set(0, 0, -1); key.castShadow = true;
   Object.assign(key.shadow.camera, { left: -4, right: 4, top: 4, bottom: -6, near: 1, far: 20 }); key.shadow.mapSize.set(MOBILE ? 1024 : 2048, MOBILE ? 1024 : 2048); key.shadow.bias = -0.0005; key.shadow.normalBias = 0.02;
   scene.add(key, key.target);
-  const laneFill = new THREE.DirectionalLight(0xfff0dd, 1.1); laneFill.position.set(-1, 6, -6); laneFill.target.position.set(0, 0, -12); scene.add(laneFill, laneFill.target);
-  const pinLight = new THREE.SpotLight(0xfff4e6, 9, 7, 0.8, 0.7, 1.3); pinLight.position.set(0, 2.2, -18.4); pinLight.target.position.set(0, 0, -18.9); pinLight.castShadow = true; pinLight.shadow.mapSize.set(1024, 1024); scene.add(pinLight, pinLight.target);
-  const lounge = new THREE.PointLight(0xffb070, 6, 9, 1.6); lounge.position.set(0, 2.8, 7); scene.add(lounge);
+  const laneFill = new THREE.DirectionalLight(0xfff0dd, 0.75); laneFill.position.set(-1, 6, -6); laneFill.target.position.set(0, 0, -12); scene.add(laneFill, laneFill.target);
+  const pinLight = new THREE.SpotLight(0xfff1e0, 4, 7, 0.8, 0.8, 1.3); pinLight.position.set(0, 2.2, -18.4); pinLight.target.position.set(0, 0, -18.9); pinLight.castShadow = true; pinLight.shadow.mapSize.set(1024, 1024); scene.add(pinLight, pinLight.target);
+  const lounge = new THREE.PointLight(0xffb070, 4, 9, 1.6); lounge.position.set(0, 2.8, 7); scene.add(lounge);
 }
 function maskTex(i) {
   const col = '#' + new THREE.Color(MASK_COLORS[i]).getHexString();
