@@ -71,7 +71,7 @@ Feedback del 16/11 e prossimi passi, **in ordine**:
 1. **Vista sul telefono:** ogni telefono mostra la SUA telecamera, in terza persona dietro il suo avatar, con una freccia o un segnalino che porta alla sua palla. Il PC resta la vista comune che segue l'azione.
    - Implementazione consigliata: il telefono carica la stessa scena (moduli `caos/*`) in qualità bassa e riceve dal PC lo stato a ~15-20 Hz: posizioni, rotazioni e animazione di giocatori e palle, oggetti, esplosioni. Il PC resta l'arbitro della fisica.
    - Sul telefono: interpolazione tra gli stati ricevuti; la telecamera segue il proprio giocatore.
-2. **Mira e tiro più intuitivi:** fionda. Vicino alla palla trascini il dito (o il mouse) all'indietro: la direzione del trascinamento è la mira, la lunghezza è la potenza, e rilasciando tiri. Durante il trascinamento si vedono una grande freccia a terra e un cerchio sul punto di atterraggio previsto. Sul putt, una linea corta. Togliere la barra che va su e giù.
+2. **FATTO (16/11 sera):** mira a fionda col mouse (clic sulla palla e trascina indietro: freccia a terra + puntini della traiettoria + cerchio d'atterraggio) e col telefono (tasto TIRA: trascina giù = potenza, di lato = mira). Preset grafica Leggera/Media/Bella nella sala (localStorage `ridotto-gfx`). Idea originale: fionda. Vicino alla palla trascini il dito (o il mouse) all'indietro: la direzione del trascinamento è la mira, la lunghezza è la potenza, e rilasciando tiri. Durante il trascinamento si vedono una grande freccia a terra e un cerchio sul punto di atterraggio previsto. Sul putt, una linea corta. Togliere la barra che va su e giù.
 3. **Lag:** preset di qualità (bassa, media, alta) salvato in localStorage:
    - meno erba e fiori;
    - niente bloom;

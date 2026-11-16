@@ -13,6 +13,9 @@ import { loadAvatarLibrary, makeAvatar, randomLook, savedProfile } from '../avat
 const Q = new URLSearchParams(location.search);
 const DEBUG = Q.has('debug');
 const MOBILE = matchMedia('(pointer:coarse)').matches, LITE = Q.has('lite'), SPEED = +(Q.get('speed') || 1);
+// qualità grafica: bassa / media / alta (si sceglie nella sala, ricarica la pagina)
+let GFX = (() => { try { return localStorage.getItem('ridotto-gfx'); } catch (e) { return null; } })() || (MOBILE ? 'bassa' : 'media');
+const QL = { bassa: { pr: 1, shadow: 0, bloom: false, plants: 0.35, trees: 0.55, step: 2 }, media: { pr: 1.25, shadow: 1024, bloom: false, plants: 0.65, trees: 0.85, step: 1.5 }, alta: { pr: 1.6, shadow: 2048, bloom: true, plants: 1, trees: 1, step: 1.25 } }[GFX] || { pr: 1.25, shadow: 1024, bloom: false, plants: 0.65, trees: 0.85, step: 1.5 };
 const $ = s => document.querySelector(s);
 const clamp = (v, a, b) => Math.max(a, Math.min(b, v));
 const esc = s => String(s).replace(/[&<>"]/g, c => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;' }[c]));
@@ -21,14 +24,14 @@ const BALL_R = 0.11, CUP_R = 0.32, AV_H = 2.0;
 
 // ---------- motore grafico ----------
 const renderer = new THREE.WebGLRenderer({ canvas: $('#gl'), antialias: !MOBILE, powerPreference: 'high-performance' });
-let PR = Math.min(devicePixelRatio, MOBILE ? 1.3 : 1.5); renderer.setPixelRatio(PR);
+let PR = Math.min(devicePixelRatio, QL.pr); renderer.setPixelRatio(PR);
 renderer.outputColorSpace = THREE.SRGBColorSpace; renderer.toneMapping = THREE.ACESFilmicToneMapping; renderer.toneMappingExposure = 1.0;
-renderer.shadowMap.enabled = !LITE; if (LITE) renderer.setPixelRatio(PR = 0.5); renderer.shadowMap.type = THREE.PCFSoftShadowMap;
+renderer.shadowMap.enabled = !LITE && QL.shadow > 0; if (LITE) renderer.setPixelRatio(PR = 0.5); renderer.shadowMap.type = THREE.PCFSoftShadowMap;
 const scene = new THREE.Scene();
 const FOG = new THREE.Color(0xa9cbee); scene.background = FOG; scene.fog = new THREE.Fog(FOG, 160, 560);
 const camera = new THREE.PerspectiveCamera(50, 1, 0.3, 900);
 let composer = null;
-if (!MOBILE && !LITE) { composer = new EffectComposer(renderer); composer.addPass(new RenderPass(scene, camera)); composer.addPass(new UnrealBloomPass(new THREE.Vector2(256, 256), 0.25, 0.4, 1.0)); composer.addPass(new OutputPass()); }
+if (QL.bloom && !LITE) { composer = new EffectComposer(renderer); composer.addPass(new RenderPass(scene, camera)); composer.addPass(new UnrealBloomPass(new THREE.Vector2(256, 256), 0.25, 0.4, 1.0)); composer.addPass(new OutputPass()); }
 function resize() { const w = innerWidth, h = innerHeight; renderer.setSize(w, h, false); composer && composer.setSize(w, h); camera.aspect = w / h; camera.fov = w < h ? 68 : 50; camera.updateProjectionMatrix(); }
 addEventListener('resize', resize);
 FX.initFx(scene);
@@ -51,7 +54,7 @@ const sky = new THREE.Mesh(new THREE.SphereGeometry(800, 32, 16), new THREE.Shad
 scene.add(sky);
 const hemi = new THREE.HemisphereLight(0xcfe6ff, 0x5a7040, 0.9); scene.add(hemi);
 const sun = new THREE.DirectionalLight(0xfff1dc, 2.6); sun.castShadow = true;
-sun.shadow.mapSize.set(MOBILE ? 1024 : 2048, MOBILE ? 1024 : 2048); sun.shadow.bias = -0.0004; sun.shadow.normalBias = 0.04;
+sun.shadow.mapSize.set(QL.shadow || 512, QL.shadow || 512); sun.shadow.bias = -0.0004; sun.shadow.normalBias = 0.04;
 scene.add(sun, sun.target);
 function placeSun(focus, size) {
   sun.position.copy(focus).addScaledVector(SUN_DIR, 120); sun.target.position.copy(focus);
@@ -61,7 +64,7 @@ function placeSun(focus, size) {
 const waterNormal = (() => { const c = document.createElement('canvas'); c.width = c.height = 128; const g = c.getContext('2d'); const img = g.createImageData(128, 128); for (let y = 0; y < 128; y++) for (let x = 0; x < 128; x++) { const a = Math.sin(x / 128 * Math.PI * 6 + Math.sin(y / 128 * Math.PI * 4) * 2), b = Math.cos(y / 128 * Math.PI * 8 + Math.sin(x / 128 * Math.PI * 2) * 2); const o = (y * 128 + x) * 4; img.data[o] = 128 + a * 40; img.data[o + 1] = 128 + b * 40; img.data[o + 2] = 255; img.data[o + 3] = 255; } g.putImageData(img, 0, 0); const t = new THREE.CanvasTexture(c); t.wrapS = t.wrapT = THREE.RepeatWrapping; t.repeat.set(60, 60); return t; })();
 const water = new THREE.Mesh(new THREE.PlaneGeometry(1600, 1600), new THREE.MeshStandardMaterial({ color: 0x2f8db5, roughness: 0.08, metalness: 0.1, normalMap: waterNormal, normalScale: new THREE.Vector2(0.35, 0.35), transparent: true, opacity: 0.88 }));
 water.rotation.x = -Math.PI / 2; water.position.y = WATER; water.receiveShadow = true; scene.add(water);
-const terrain = terrainMesh(MOBILE); scene.add(terrain);
+const terrain = terrainMesh(QL.step); scene.add(terrain);
 
 // ---------- buche: bandiera, coppa, tee ----------
 const flags = HOLES.map((h, i) => {
@@ -77,7 +80,7 @@ const flags = HOLES.map((h, i) => {
   scene.add(g);
   // tee: due segnaposto
   const dx = h.mid[0] - h.tee[0], dz = h.mid[1] - h.tee[1], l = Math.hypot(dx, dz);
-  for (const s of [-1, 1]) { const m = new THREE.Mesh(new THREE.SphereGeometry(0.22, 16, 10), new THREE.MeshStandardMaterial({ color: 0xffffff, roughness: 0.3 })); const tx = h.tee[0] + (-dz / l) * 2.2 * s, tz = h.tee[1] + (dx / l) * 2.2 * s; m.position.set(tx, heightAt(tx, tz) + 0.15, tz); m.castShadow = true; scene.add(m); }
+  for (const s of [-1, 1]) { const m = new THREE.Mesh(new THREE.CylinderGeometry(0.2, 0.26, 0.45, 14), new THREE.MeshStandardMaterial({ color: 0xe8243c, roughness: 0.4 })); const tx = h.tee[0] + (-dz / l) * 2.2 * s, tz = h.tee[1] + (dx / l) * 2.2 * s; m.position.set(tx, heightAt(tx, tz) + 0.15, tz); m.castShadow = true; scene.add(m); }
   return g;
 });
 function textTex(t, color, size = 128, font = 90) {
@@ -259,6 +262,7 @@ function onPhone(id, m) {
   const p = G.players.find(x => x.conn === id); if (!p) return;
   if (m.t === 'joy') { p.input.x = clamp(+m.x || 0, -1, 1); p.input.y = clamp(+m.y || 0, -1, 1); }
   else if (m.t === 'btn') { p.input.btn = !!m.on; }
+  else if (m.t === 'sling') { p.input.sling = m.on ? { dx: clamp(+m.dx || 0, -1.5, 1.5), pow: clamp(+m.pow || 0, 0, 1) } : null; }
   else if (m.t === 'use') { p.input.item = true; }
 }
 function sendState(p) {
@@ -278,6 +282,7 @@ const BOT_NAMES = ['Mazzolino', 'Contessa', 'Er Buca', 'Nonna Pina', 'Birdie', '
 document.addEventListener('click', e => {
   const b = e.target.closest('button'); if (!b || $('#lobby').classList.contains('hide')) return;
   if (b.dataset.del != null) { const p = G.players[+b.dataset.del]; send(p, { t: 'kicked' }); disposePlayer(p); G.players.splice(+b.dataset.del, 1); renderLobby(); }
+  if (b.dataset.q) { try { localStorage.setItem('ridotto-gfx', b.dataset.q); } catch (e2) { } location.reload(); return; }
   if (b.dataset.h) { G.nHoles = +b.dataset.h; document.querySelectorAll('#nholes .chip').forEach(x => x.classList.toggle('sel', x === b)); }
 });
 $('#addLocal').onclick = () => { if (G.players.some(p => p.kind === 'local')) return; const pr = savedProfile(); const n = $('#localName').value.trim() || (pr && pr.name) || 'Giocatore'; G.players.push(newPlayer({ kind: 'local', name: n.slice(0, 14), look: pr ? pr.look : randomLook() })); FX.audio(); renderLobby(); };
@@ -356,10 +361,24 @@ addEventListener('keydown', e => { keys[e.code] = true; if (e.code === 'Space') 
 addEventListener('keyup', e => { keys[e.code] = false; });
 let mouseBtn = false, lastMX = null;
 const canvas = $('#gl');
-canvas.addEventListener('pointerdown', e => { FX.audio(); if (e.button === 2) { const lp = localP(); if (lp) lp.input.item = true; return; } mouseBtn = true; });
-addEventListener('pointerup', e => { if (e.button !== 2) mouseBtn = false; });
+let mDrag = null;
+canvas.addEventListener('pointerdown', e => {
+  FX.audio(); const lp = localP();
+  if (e.button === 2) { if (lp) lp.input.item = true; return; }
+  if (lp && lp.state === 'addr') { mDrag = { x: e.clientX, y: e.clientY }; return; } // fionda col mouse
+  mouseBtn = true;
+});
+addEventListener('pointerup', e => { if (e.button === 2) return; mouseBtn = false; if (mDrag) { mDrag = null; const lp = localP(); if (lp) lp.input.sling = null; } });
+addEventListener('pointermove', e => {
+  if (!mDrag) return; const lp = localP(); if (!lp) return;
+  const dx = e.clientX - mDrag.x, dy = e.clientY - mDrag.y, l = Math.hypot(dx, dy);
+  if (l < 8) { lp.input.sling = { world: true, yaw: lp.aimYaw, pow: 0 }; return; }
+  camAxes(); // tiri dalla parte opposta a dove trascini (come una fionda)
+  const wx = -(_r.x * dx) + _f.x * dy, wz = -(_r.z * dx) + _f.z * dy;
+  lp.input.sling = { world: true, yaw: Math.atan2(wx, wz), pow: clamp(l / (Math.min(innerHeight, innerWidth) * 0.35), 0, 1) };
+});
 canvas.addEventListener('contextmenu', e => e.preventDefault());
-addEventListener('pointermove', e => { if (lastMX != null) { const lp = localP(); if (lp && lp.state === 'addr') lp.input.aim += (e.clientX - lastMX) * 0.004; } lastMX = e.clientX; });
+addEventListener('pointermove', e => { if (lastMX != null && !mDrag) { const lp = localP(); if (lp && lp.state === 'addr' && e.buttons) lp.input.aim += (e.clientX - lastMX) * 0.004; } lastMX = e.clientX; });
 function localP() { return G.players.find(p => p.kind === 'local'); }
 function readLocal(p, dt) {
   const f = (keys.KeyW || keys.ArrowUp ? 1 : 0) - (keys.KeyS || keys.ArrowDown ? 1 : 0), r = (keys.KeyD || keys.ArrowRight ? 1 : 0) - (keys.KeyA || keys.ArrowLeft ? 1 : 0);
@@ -403,8 +422,17 @@ function updatePlayer(p, dt) {
     const tx = b.pos.x - Math.cos(p.aimYaw) * 0.75 - Math.sin(p.aimYaw) * 0.15, tz = b.pos.z + Math.sin(p.aimYaw) * 0.75 - Math.cos(p.aimYaw) * 0.15;
     p.pos.x += (tx - p.pos.x) * Math.min(1, dt * 10); p.pos.z += (tz - p.pos.z) * Math.min(1, dt * 10);
     p.yaw = lerpAngle(p.yaw, p.aimYaw + Math.PI / 2, Math.min(1, dt * 10));
+    // fionda: trascini indietro, la direzione è la mira e la lunghezza la potenza; lasci e tiri
+    if (inp.sling) {
+      if (!p.slingOn) { p.slingOn = true; p.slingBase = p.aimYaw; p.state = 'charge'; p.slingMode = true; }
+      if (inp.sling.world) p.aimYaw = inp.sling.yaw; else p.aimYaw = p.slingBase - inp.sling.dx * 1.1;
+      p.charge = clamp(inp.sling.pow, 0, 1);
+    } else if (p.slingOn) {
+      p.slingOn = false; p.slingMode = false;
+      if (p.charge > 0.04) shoot(p); else { p.state = 'addr'; p.charge = 0; }
+    }
     if (p.state === 'addr' && inp.btn && !p.btnWas) { p.state = 'charge'; p.chargeT = 0; }
-    if (p.state === 'charge') {
+    if (p.state === 'charge' && !p.slingMode) {
       p.chargeT += dt; p.charge = 1 - Math.abs(1 - (p.chargeT / 1.1) % 2); // va su e giù
       if (!inp.btn) shoot(p);
     }
@@ -734,28 +762,40 @@ function simStep(dt) {
   }
   if (G.phase === 'results') { G.resT += dt; $('#clock').classList.add('hide'); if (G.resT > 3.5) nextHole(); }
 }
+const arrowShape = (() => { const sh = new THREE.Shape(); sh.moveTo(-0.18, 0); sh.lineTo(0.18, 0); sh.lineTo(0.18, 0.75); sh.lineTo(0.42, 0.75); sh.lineTo(0, 1); sh.lineTo(-0.42, 0.75); sh.lineTo(-0.18, 0.75); sh.closePath(); const g = new THREE.ShapeGeometry(sh); g.rotateX(Math.PI / 2); return g; })();
+function aimDeco(p) {
+  if (p.arrow) return;
+  p.arrow = new THREE.Mesh(arrowShape, new THREE.MeshBasicMaterial({ color: p.color, transparent: true, opacity: 0.85, depthWrite: false, side: THREE.DoubleSide })); scene.add(p.arrow);
+  p.land = new THREE.Mesh(new THREE.RingGeometry(0.7, 0.95, 32), new THREE.MeshBasicMaterial({ color: p.color, transparent: true, opacity: 0.9, depthWrite: false, side: THREE.DoubleSide })); p.land.rotation.x = -Math.PI / 2; scene.add(p.land);
+}
 function updateAimPreview() {
   for (const p of G.players) {
     if (!p.aimDots) continue;
+    aimDeco(p);
     const show = (p.state === 'addr' || p.state === 'charge') && !p.done;
-    p.aimDots.visible = show; if (!show) continue;
-    p.aimT = (p.aimT || 0) + 1; if (p.aimT % 3) continue; // ogni 3 fotogrammi basta
+    p.aimDots.visible = p.arrow.visible = p.land.visible = show; if (!show) continue;
+    const pwA = p.state === 'charge' ? Math.max(0.05, p.charge) : 0.3, b = p.ball.pos;
+    p.arrow.position.set(b.x, heightAt(b.x, b.z) + 0.1, b.z); p.arrow.rotation.y = p.aimYaw;
+    p.arrow.scale.set(1 + pwA * 0.6, 1, 1.5 + pwA * 6); p.arrow.rotation.order = 'YXZ';
+    p.arrow.material.color.setStyle(p.color).lerp(new THREE.Color(1, 0.3, 0.2), pwA * 0.6);
+    p.aimT = (p.aimT || 0) + 1; if (p.aimT % 2) continue; // ogni 2 fotogrammi basta
     const pos = p.aimDots.geometry.attributes.position;
     const pw = p.state === 'charge' ? Math.max(0.05, p.charge) : 0.55;
     const putt = onGreen(p.ball.pos);
     const r = simulate(p, pw, p.aimYaw, putt ? 4 : 6, !putt, pos);
     let k = r.k || 0; if (putt) k = Math.max(2, Math.floor(k * 0.45));
+    p.land.visible = !putt && p.state === 'charge'; p.land.position.set(r.pos.x, heightAt(r.pos.x, r.pos.z) + 0.08, r.pos.z); p.land.scale.setScalar(0.8 + Math.sin(G.time * 6) * 0.08);
     for (let i = k; i < 60; i++) pos.setXYZ(i, 0, -100, 0);
     pos.needsUpdate = true;
   }
 }
 
 // ---------- avvio ----------
-resize(); renderLobby();
+resize(); renderLobby(); document.querySelectorAll('#gfx .chip').forEach(x => x.classList.toggle('sel', x.dataset.q === GFX));
 requestAnimationFrame(frame);
 (async () => {
   let a = 0, b = 0; const prog = () => { $('#bar').style.width = ((a * 0.5 + b * 0.5) * 100) + '%'; };
-  await Promise.all([loadAvatarLibrary(p => { a = p; prog(); }), (LITE ? Promise.resolve() : loadNature(scene, { mobile: MOBILE, onProgress: p => { b = p; prog(); } }))]);
+  await Promise.all([loadAvatarLibrary(p => { a = p; prog(); }), (LITE ? Promise.resolve() : loadNature(scene, { mobile: GFX === 'bassa', plants: QL.plants, trees: QL.trees, onProgress: p => { b = p; prog(); } }))]);
   // riflessi dal cielo
   const pm = new THREE.PMREMGenerator(renderer); const envScene = new THREE.Scene(); envScene.add(sky.clone()); scene.environment = pm.fromScene(envScene, 0.04).texture; pm.dispose();
   $('#load').classList.add('hide'); $('#lobby').classList.remove('hide'); G.phase = 'lobby';

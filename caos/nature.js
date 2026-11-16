@@ -32,7 +32,7 @@ function windify(mat, amp) {
   mat.customProgramCacheKey = () => 'wind' + amp;
 }
 
-export async function loadNature(scene, { mobile = false, onProgress } = {}) {
+export async function loadNature(scene, { mobile = false, plants = 1, trees = 1, onProgress } = {}) {
   const ld = new GLTFLoader(), src = {};
   const names = Object.keys(KINDS); let n = 0;
   await Promise.all(names.map(async k => { src[k] = (await ld.loadAsync('assets/nature/' + k + '.gltf')).scene; onProgress && onProgress(++n / names.length); }));
@@ -43,17 +43,17 @@ export async function loadNature(scene, { mobile = false, onProgress } = {}) {
   const land = (x, z) => surfAt(x, z) === S.ROUGH && heightAt(x, z) > WATER + 0.6;
   const pick = a => a[Math.floor(R() * a.length)];
   // alberi: a gruppi (boschetti) nel rough, lontani dai corridoi
-  for (let i = 0; i < (mobile ? 2200 : 3400); i++) {
+  for (let i = 0; i < 3400; i++) {
     const x = X0 + 6 + R() * (W - 12), z = Z0 + 6 + R() * (D - 12);
     if (!land(x, z)) continue;
     const fd = Math.min(...HOLES.map(h => fairDist(h, x, z)));
     const dens = fbm(x * 0.03 + 11, z * 0.03 - 4, 3);
-    if (fd > 13 && dens > 0.5 && R() < (dens - 0.5) * 2.2) place[pick(dens > 0.62 ? ['Pine_1', 'Pine_3', 'CommonTree_3'] : ['CommonTree_1', 'CommonTree_2', 'CommonTree_5'])].push([x, z]);
+    if (fd > 13 && dens > 0.5 && R() < (dens - 0.5) * 2.2 * trees) place[pick(dens > 0.62 ? ['Pine_1', 'Pine_3', 'CommonTree_3'] : ['CommonTree_1', 'CommonTree_2', 'CommonTree_5'])].push([x, z]);
     else if (fd > 10 && R() < 0.04) place[pick(['Bush_Common', 'Bush_Common_Flowers'])].push([x, z]);
     else if (fd > 9 && R() < 0.02) place[pick(['Rock_Medium_1', 'Rock_Medium_2', 'Rock_Medium_3'])].push([x, z]);
   }
   // fiori, felci, funghi ed erba alta ai bordi dei corridoi (dove si gioca e si guarda)
-  for (let i = 0; i < (mobile ? 1800 : 3600); i++) {
+  for (let i = 0; i < 3600 * plants; i++) {
     const h = pick(HOLES), t = R(), a = t < 0.5 ? h.tee : h.mid, b = t < 0.5 ? h.mid : h.green, u = R();
     const side = (R() < 0.5 ? -1 : 1) * (9.5 + R() * 18), dx = b[0] - a[0], dz = b[1] - a[1], l = Math.hypot(dx, dz);
     const x = a[0] + dx * u + (-dz / l) * side, z = a[1] + dz * u + (dx / l) * side;

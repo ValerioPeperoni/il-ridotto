@@ -45,7 +45,7 @@ button{font:inherit;color:inherit;cursor:pointer;border:none}
 .tagp .pw{width:70px;height:10px;margin:4px auto 0;border-radius:5px;background:rgba(255,255,255,.7);box-shadow:0 0 0 2px #fff;overflow:hidden}
 .tagp .pw b{display:block;height:100%;background:linear-gradient(90deg,var(--yel),var(--pink))}
 .tagp .st{font-size:13px;font-weight:700;color:#fff;-webkit-text-stroke:3px var(--ink);paint-order:stroke fill}
-#legend{position:absolute;left:max(12px,env(safe-area-inset-left));bottom:max(12px,env(safe-area-inset-bottom));background:rgba(255,255,255,.9);border-radius:16px;padding:8px 12px;font-size:13px;line-height:1.5;color:#3a4270}
+#legend{position:absolute;left:max(12px,env(safe-area-inset-left));bottom:max(64px,env(safe-area-inset-bottom));max-width:min(420px,60vw);background:rgba(255,255,255,.9);border-radius:16px;padding:8px 12px;font-size:13px;line-height:1.5;color:#3a4270}
 #legend b{color:var(--ink)}
 .items{display:grid;grid-template-columns:repeat(auto-fill,minmax(150px,1fr));gap:6px;font-size:13px;color:#5a6390}
 .items div{background:#eef3ff;border-radius:12px;padding:6px 8px}.items b{color:var(--ink)}
@@ -89,7 +89,7 @@ a.lnk{color:var(--blue);font-weight:600;text-decoration:none}
   <div id="clock" class="hide"></div>
   <div id="big"></div>
   <div id="tip"></div>
-  <div id="legend" class="hide"><b>WASD</b> corri · vicino alla palla <b>A/D</b> o mouse mira<br><b>tieni premuto clic / spazio</b> carica e lascia · <b>E / tasto destro</b> oggetto · lontano dalla palla <b>clic</b> = mazzata</div>
+  <div id="legend" class="hide"><b>WASD</b> corri · alla palla: <b>clicca e trascina indietro</b> (la freccia mostra dove va, più lunga = più forte) e lascia<br><b>E / tasto destro</b> oggetto · lontano dalla palla <b>clic</b> = mazzata</div>
   <button id="menuBtn">☰</button>
 </div>
 <div class="ov hide" id="lobby">
@@ -111,6 +111,8 @@ a.lnk{color:var(--blue);font-weight:600;text-decoration:none}
         <div class="row" style="margin-top:8px"><input class="nmi" id="localName" maxlength="14" placeholder="Nome"><button class="chip" id="addLocal">+ Gioco qui (tastiera e mouse)</button><button class="chip" id="addBot">+ Computer</button></div>
         <h2>Buche</h2>
         <div class="row" id="nholes"><button class="chip" data-h="3">3</button><button class="chip sel" data-h="6">6</button></div>
+        <h2>Grafica</h2>
+        <div class="row" id="gfx"><button class="chip" data-q="bassa">Leggera (non scatta)</button><button class="chip" data-q="media">Media</button><button class="chip" data-q="alta">Bella (PC potente)</button></div>
         <h2>Oggetti nelle casse</h2>
         <div class="items"><div><b>🚀 Razzo</b> insegue l'avversario più vicino</div><div><b>💣 Bomba</b> la lanci, esplode dopo un attimo</div><div><b>❄️ Gelo</b> raggio che congela</div><div><b>🌩️ Fulmine</b> colpisce tutti gli altri</div><div><b>🧲 Calamita</b> la tua palla cerca la buca</div><div><b>⚡ Super tiro</b> più forte e passa tra gli alberi</div><div><b>🎯 Mina</b> la lasci a terra</div></div>
         <button class="go" id="start" disabled>Giochiamo!</button>

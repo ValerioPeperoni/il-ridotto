@@ -125,8 +125,8 @@ export function terrainTexture() {
   const t = new THREE.CanvasTexture(c); t.colorSpace = THREE.SRGBColorSpace; t.anisotropy = 8; t.flipY = false;
   return t;
 }
-export function terrainMesh(mobile) {
-  const step = mobile ? 2 : 1.25, nx = Math.round(W / step), nz = Math.round(D / step);
+export function terrainMesh(step = 1.5) {
+  const nx = Math.round(W / step), nz = Math.round(D / step);
   const geo = new THREE.PlaneGeometry(W, D, nx, nz); geo.rotateX(-Math.PI / 2);
   const p = geo.attributes.position, uv = geo.attributes.uv;
   for (let i = 0; i < p.count; i++) { const x = p.getX(i) + X0 + W / 2, z = p.getZ(i) + Z0 + D / 2; p.setXYZ(i, x, heightAt(x, z), z); uv.setXY(i, (x - X0) / W, (z - Z0) / D); }

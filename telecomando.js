@@ -283,9 +283,20 @@ joy.addEventListener('pointermove', e => { if (e.buttons || e.pointerType === 't
 const joyEnd = () => { joyV = { x: 0, y: 0 }; knob.style.transform = ''; sendJoy(true); };
 joy.addEventListener('pointerup', joyEnd); joy.addEventListener('pointercancel', joyEnd);
 setInterval(() => { if (game === 'caos' && (joyV.x || joyV.y)) sendJoy(true); }, 120);
-const cBtn = $('#cBtn');
-cBtn.addEventListener('pointerdown', e => { e.preventDefault(); cBtn.setPointerCapture(e.pointerId); cBtn.classList.add('on'); vibrate(15); net && net.send({ t: 'btn', on: true }); });
-const cUp = () => { cBtn.classList.remove('on'); net && net.send({ t: 'btn', on: false }); };
+const cBtn = $('#cBtn'); let sl = null, slSent = 0;
+const aiming = () => lastCaos.near || lastCaos.state === 'addr' || lastCaos.state === 'charge';
+cBtn.addEventListener('pointerdown', e => {
+  e.preventDefault(); cBtn.setPointerCapture(e.pointerId); cBtn.classList.add('on'); vibrate(15);
+  if (aiming()) { sl = { x: e.clientX, y: e.clientY }; net && net.send({ t: 'sling', on: true, dx: 0, pow: 0 }); }
+  else net && net.send({ t: 'btn', on: true });
+});
+cBtn.addEventListener('pointermove', e => {
+  if (!sl) return; const now = performance.now(); if (now - slSent < 45) return; slSent = now;
+  const dx = (e.clientX - sl.x) / 160, pow = Math.max(0, Math.min(1, (e.clientY - sl.y) / (innerHeight * 0.32)));
+  if (Math.round(pow * 10) !== sl.lastP) { sl.lastP = Math.round(pow * 10); vibrate(6); }
+  net && net.send({ t: 'sling', on: true, dx: +dx.toFixed(3), pow: +pow.toFixed(3) });
+});
+const cUp = () => { cBtn.classList.remove('on'); if (sl) { sl = null; net && net.send({ t: 'sling', on: false }); } else net && net.send({ t: 'btn', on: false }); };
 cBtn.addEventListener('pointerup', cUp); cBtn.addEventListener('pointercancel', cUp); cBtn.addEventListener('contextmenu', e => e.preventDefault());
 $('#cItem').onclick = () => { net && net.send({ t: 'use' }); vibrate(30); };
 function caosState(m) {
@@ -296,7 +307,7 @@ function caosState(m) {
   $('#cInfo').textContent = `${m.strokes} colpi · ${m.score} punti`;
   const st = { frozen: '❄️ Congelato!', ko: '💫 Sei a terra!', done: '⛳ In buca!', addr: 'Mira e tira', charge: 'Lascia per tirare!' }[m.state] || (m.near ? 'Sei alla palla' : '');
   $('#cState').textContent = st;
-  cBtn.textContent = m.near || m.state === 'addr' || m.state === 'charge' ? 'TIRA' : 'MAZZATA';
+  cBtn.innerHTML = m.near || m.state === 'addr' || m.state === 'charge' ? 'TIRA<br><small style="font-size:13px;font-weight:500">trascina giù<br>e lascia</small>' : 'MAZZATA';
   const it = $('#cItem'); it.textContent = m.item || 'nessun oggetto'; it.classList.toggle('on', !!m.item);
   if (m.item && !lastCaos.item) vibrate(60);
   if (m.state === 'ko' && lastCaos.state !== 'ko') vibrate([100, 50, 100]);
