@@ -254,7 +254,7 @@ function onPhone(id, m) {
       if (m.color) p.color = m.color;
       G.players.push(p);
     }
-    p.conn = id; p.online = true; p.view = !!m.wantView; p.viewLookKey = undefined; if (m.look) p.look = m.look;
+    p.conn = id; p.online = true; p.view = !!m.wantView; if (m.look) p.look = m.look;
     NET.send(id, { t: 'hi', name: p.name, color: p.color, game: 'caos' });
     renderLobby(); sendState(p);
     return;
@@ -453,7 +453,7 @@ function updatePlayer(p, dt) {
     // mazzata a chi è vicino (lontano dalla palla)
     if (inp.btn && !p.btnWas && dBall > 3 && p.swipeCd <= 0 && G.phase === 'play' && G.holeT > 2) swipe(p);
   }
-  if (p.kind === 'phone' && !moveIn && p.state !== 'addr' && p.state !== 'charge') p.moveYaw = lerpAngle(p.moveYaw ?? p.yaw, p.yaw, Math.min(1, dt * 1.5));
+  if (p.kind === 'phone' && p.state !== 'addr' && p.state !== 'charge') p.moveYaw = lerpAngle(p.moveYaw ?? p.yaw, p.yaw, Math.min(1, dt * (moveIn ? 3.5 : 1.5)));
   p.idleT = moveIn ? 0 : (p.idleT || 0) + dt;
   p.btnWas = inp.btn;
   // terreno, alberi, bordi
@@ -736,23 +736,17 @@ function sendViewerSnapshots() {
   const active = G.players.filter(p => p.pos && p.ball && p.ball.pos);
   if (!active.length) return;
   viewSyncAt = G.time;
-  const players = active.map(p => {
-    const lookKey = JSON.stringify(p.look || null);
-    const includeLook = lookKey !== p.viewLookKey;
-    p.viewLookKey = lookKey;
-    return {
-      id: p.pid || (p.kind + '-' + G.players.indexOf(p)), name: p.name, color: p.color,
-      ...(includeLook ? { look: p.look } : {}),
-      x: p.pos.x, y: p.pos.y, z: p.pos.z, yaw: p.yaw,
-      // In mira la camera del telefono salva la direzione del tiro; in corsa
-      // segue invece l'orientamento di movimento del personaggio.
-      cyaw: p.state === 'addr' || p.state === 'charge' ? p.aimYaw : (p.moveYaw ?? p.yaw),
-      bx: p.ball.pos.x, by: p.ball.pos.y, bz: p.ball.pos.z,
-      moving: !!p.ball.moving, done: !!p.done, charge: p.charge || 0,
-      state: p.frozen > 0 ? 'frozen' : p.ko > 0 ? 'ko' : (p.state || 'walk'),
-      anim: p.anim || 'Idle', item: p.item || ''
-    };
-  });
+  const players = active.map(p => ({
+    id: p.pid || (p.kind + '-' + G.players.indexOf(p)), name: p.name, color: p.color, look: p.look,
+    x: p.pos.x, y: p.pos.y, z: p.pos.z, yaw: p.yaw,
+    // In mira la camera del telefono salva la direzione del tiro; in corsa
+    // segue invece l'orientamento di movimento del personaggio.
+    cyaw: p.state === 'addr' || p.state === 'charge' ? p.aimYaw : (p.moveYaw ?? p.yaw),
+    bx: p.ball.pos.x, by: p.ball.pos.y, bz: p.ball.pos.z,
+    moving: !!p.ball.moving, done: !!p.done, charge: p.charge || 0,
+    state: p.frozen > 0 ? 'frozen' : p.ko > 0 ? 'ko' : (p.state || 'walk'),
+    anim: p.anim || 'Idle', item: p.item || ''
+  }));
   for (const p of active) if (p.kind === 'phone' && p.online && p.view && p.conn && NET) {
     NET.send(p.conn, { t: 'caos-view', me: p.pid, phase: G.phase, hole: G.hole + 1, players });
   }
