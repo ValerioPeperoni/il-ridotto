@@ -13,8 +13,10 @@ await loadSportLibrary();
 const clips = (Q.get('clips') || 'Idle_Loop,Jog_Fwd_Loop,Sword_Attack,OverhandThrow').split(',');
 const avs = [];
 let seed = 3; const rnd = () => (seed = (seed * 9301 + 49297) % 233280) / 233280;
-clips.forEach((c, i) => { const a = makeSportsmate(i === 0 ? {} : randomSport(rnd), { height: 1.75 }); a.root.position.x = (i - (clips.length - 1) / 2) * 1.2; s.add(a.root); a.play(c); avs.push(a); });
-const t0 = +(Q.get('t') || 0.4); for (const a of avs) a.update(t0);
+const times = Q.get('times') ? Q.get('times').split(',').map(Number) : null;
+const list = times ? times.map(() => clips[0]) : clips;
+list.forEach((c, i) => { const a = makeSportsmate(i === 0 ? {} : randomSport(rnd), { height: 1.75 }); a.root.position.x = (i - (list.length - 1) / 2) * 1.2; a.root.rotation.y = +(Q.get('ry') || 0); s.add(a.root); a.play(c); avs.push(a); });
+const t0 = +(Q.get('t') || 0.4); avs.forEach((a, i) => a.update(times ? times[i] : t0));
 window.__ready = true;
 const clock = new THREE.Clock(); (function f() { requestAnimationFrame(f); r.render(s, cam); })();
 </script></body></html>

@@ -494,6 +494,7 @@ function throwBall(inp, src) {
   G.pending = { speed, hook, ang, loft, note };
   // animazione: un passo avanti e il braccio che va
   G.released = true; G.relT = 0; G.swingFrom = G.swing; snd('whoosh', speed / 9); G.fadeAv = true;
+  if (p.av) p.av.play('Jog_Fwd_Loop', { fade: 0.12, speed: 1.3 }); // i passi della rincorsa
   $('#aim').classList.add('hide'); $('#power').classList.remove('on');
 }
 function launch() {
@@ -749,7 +750,7 @@ function frame(now) {
       av.root.position.z = 1.25 + (tz - 1.25) * k;
       const th = G.swingFrom + (0.9 - G.swingFrom) * k;
       poseArm(av, th);
-      if (th > -0.05 && !G.ball) { launch(); }
+      if (th > -0.05 && !G.ball) { launch(); av.play('Idle_Loop', { fade: 0.3 }); }
       if (G.relT > 0.42 && !G.followDone) { G.followDone = true; }
     } else {
       poseArm(av, G.swing);

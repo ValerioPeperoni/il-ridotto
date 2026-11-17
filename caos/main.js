@@ -444,7 +444,7 @@ function shoot(p) {
   const b = p.ball, power = Math.max(0.04, p.charge);
   b.last = b.pos.clone(); b.vel.copy(shotVel(p, power, p.aimYaw)); b.moving = true; b.air = !onGreen(b.pos); b.inWater = false; b.ghost = p.superShot; b.superT = p.superShot ? 4 : 0;
   p.superShot = false; p.strokes++; p.state = 'swing'; p.charge = 0; p.swingT = 0.5;
-  playAnim(p, '1H_Melee_Attack_Slice_Horizontal'); p.anim = 'swing';
+  p.av.play('TreeChopping_Loop', { once: true, fade: 0.08, speed: 1.5, then: 'Idle_Loop' }); p.anim = 'swing';
   FX.sound(onGreen(b.pos) ? 'putt' : 'hit', 0.8 + power * 0.4); FX.sound('swish', power);
   if (power > 0.9) FX.sparkle(b.pos.clone(), new THREE.Color(2, 1.8, 0.6), 10);
   setTimeout(() => { if (p.state === 'swing') p.state = 'walk'; }, 550);
