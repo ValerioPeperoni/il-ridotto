@@ -349,7 +349,7 @@ function seatPlayers() {
   const others = G.players.filter((_, i) => i !== G.cur);
   others.forEach((p, k) => {
     const av = ensureAvatar(p), s = seats[k % Math.max(1, seats.length)] || [k - 2, 7.2];
-    av.root.position.set(s[0], 0.12, s[1]); av.root.rotation.y = Math.PI;
+    av.root.position.set(s[0], 0.36, s[1] + 0.12); av.root.rotation.y = Math.PI;
     if (av.state !== 'sit') { av.play('Sitting_Idle_Loop', { fade: 0.3 }); av.state = 'sit'; }
   });
   const p = G.players[G.cur]; if (!p) return;
