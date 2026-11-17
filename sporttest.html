@@ -1,0 +1,20 @@
+<!doctype html><html><head><meta charset="utf-8"><style>html,body{margin:0;height:100%;background:#cfe0ff}canvas{width:100%;height:100%;display:block}</style></head><body><canvas id="c"></canvas>
+<script type="importmap">{"imports":{"three":"./vendor/three.module.js","three/addons/":"./vendor/jsm/"}}</script>
+<script type="module">
+import * as THREE from 'three';
+import { loadSportLibrary, makeSportsmate, randomSport } from './avatar/sport.js';
+const Q = new URLSearchParams(location.search);
+const r = new THREE.WebGLRenderer({ canvas: document.getElementById('c'), antialias: true }); r.setSize(innerWidth, innerHeight); r.outputColorSpace = THREE.SRGBColorSpace; r.toneMapping = THREE.ACESFilmicToneMapping; r.shadowMap.enabled = true;
+const s = new THREE.Scene(); s.background = new THREE.Color(0xdfeaff);
+const cam = new THREE.PerspectiveCamera(35, innerWidth / innerHeight, 0.1, 50); cam.position.set(0, 1.4, 6.5); cam.lookAt(0, 0.95, 0);
+s.add(new THREE.HemisphereLight(0xffffff, 0x8899bb, 1.2)); const d = new THREE.DirectionalLight(0xfff2e0, 2.2); d.position.set(2, 5, 4); d.castShadow = true; s.add(d);
+const fl = new THREE.Mesh(new THREE.PlaneGeometry(20, 20), new THREE.MeshStandardMaterial({ color: 0xf2f4fa })); fl.rotation.x = -Math.PI / 2; fl.receiveShadow = true; s.add(fl);
+await loadSportLibrary();
+const clips = (Q.get('clips') || 'Idle_Loop,Jog_Fwd_Loop,Sword_Attack,OverhandThrow').split(',');
+const avs = [];
+let seed = 3; const rnd = () => (seed = (seed * 9301 + 49297) % 233280) / 233280;
+clips.forEach((c, i) => { const a = makeSportsmate(i === 0 ? {} : randomSport(rnd), { height: 1.75 }); a.root.position.x = (i - (clips.length - 1) / 2) * 1.2; s.add(a.root); a.play(c); avs.push(a); });
+const t0 = +(Q.get('t') || 0.4); for (const a of avs) a.update(t0);
+window.__ready = true;
+const clock = new THREE.Clock(); (function f() { requestAnimationFrame(f); r.render(s, cam); })();
+</script></body></html>
