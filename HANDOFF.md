@@ -9,10 +9,17 @@ Leggi tutto prima di toccare il codice. Rispondi a Valerio **in italiano**.
 - Prima di lavorare su un gioco vuole che tu **studi il gioco di riferimento** (immagini, video, recensioni) e ti avvicini a quello per colori, realismo, grafica, font, comandi. Non serve una copia identica, ma il riferimento va rispettato.
 - Prova tutto lui su PC (scheda grafica integrata, tipo Intel Iris Xe) e su telefoni veri: **il gioco non deve laggare**.
 
+## 1b. Strategia per arrivare alla qualità di Switch Sports (17/11)
+Valerio vuole giochi che "facciano venire voglia di giocare" come Switch Sports, non prototipi. Non serve chiedergli feedback su estetica, animazioni, fisica: si lavora e basta; il suo feedback serve solo per i comandi col telefono.
+1. **Personaggi stile Sportsmate**: passare dagli avatar KayKit (cavalieri/scheletri) agli Universal Base Characters di Quaternius (umani stilizzati, maschio/femmina, capelli, già nell'upload di Valerio) con la Universal Animation Library 1+2 (stesso scheletro: Idle, Jog, Sprint, Dance, Hit, Death, OverhandThrow, Sword…). Vestiti e colori via texture/tinte. Le animazioni sportive che mancano (swing da golf, lancio bowling, dritto/rovescio ping pong, esultanze) vanno create a mano: piccolo strumento JS che scrive clip a keyframe sulle ossa del rig.
+2. **Ambienti**: modellare meglio con asset CC0 (Quaternius, KayKit, Kenney), materiali PBR leggeri, luci cotte (lightmap/AO finti con texture), riflessi da `fromScene`, post-processing leggero (SSAO no, troppo pesante; vignettatura, color grading).
+3. **Comandi**: conta l'inizio del gesto (fatto nel ping pong), finestre generose, mira automatica dove serve; Joy-Con via WebHID per chi gioca sul PC.
+4. **Prestazioni**: preset grafica, istanze, niente luci aggiunte a runtime (fanno ricompilare tutti i materiali: è la causa dei blocchi di secondi), effetti precompilati al caricamento.
+
 ## 2. Che cos'è il progetto
 Una raccolta di giochi da festa nel browser. Il **PC o la TV** è lo schermo comune, i **telefoni** fanno da controller e si collegano inquadrando un QR. Niente account, niente installazioni.
 - Sito: https://valeriopeperoni.github.io/il-ridotto/
-- Repository: https://github.com/ValerioPeperoni/il-ridotto (rami: `dev` per il lavoro, `main` e `gh-pages` per la versione pubblica; GitHub Pages pubblica `gh-pages`).
+- Repository: https://github.com/ValerioPeperoni/il-ridotto (Valerio vuole rinominarlo "giochi": dalle impostazioni di GitHub, il proxy di Claude non può farlo; poi il sito diventa /giochi/) (rami: `dev` per il lavoro, `main` e `gh-pages` per la versione pubblica; GitHub Pages pubblica `gh-pages`).
 - Sito statico **senza passaggio di build**: HTML + moduli JS ES, three.js locale in `vendor/` con importmap (`three` → `vendor/three.module.js`, `three/addons/` → `vendor/jsm/`). three.js r160, cannon-es 0.20, PeerJS 1.5.4, qrcode.js.
 
 ### Pubblicare
@@ -25,7 +32,8 @@ Alla fine dei messaggi di commit Claude aggiungeva le righe di attribuzione; usa
 ## 3. Mappa dei file
 | Cosa | File |
 |---|---|
-| Ingresso e lobby con le sale | `index.html` (contiene anche il tavolo di blackjack/Dubito: `table.js`, `chars.js`, `sfx.js`, `engine.js`, `play.html/js`, `scuola.html`) |
+| Ingresso "Giochi" | `index.html` (scelta del gioco) |
+| Il Ridotto: blackjack e Dubito | `ridotto.html` (+ `table.js`, `chars.js`, `sfx.js`, `engine.js`, `play.html/js`, `scuola.html`) |
 | Rete telefoni ↔ schermo | `net.js` (`hostRoom(code, {onOpen,onMsg,onClose,onError})`, `joinRoom`, `randomCode`; ID PeerJS = `ridotto1758-` + codice) |
 | Controller del telefono (tutti i giochi) | `telecomando.html` + `telecomando.js` (schermate: join, wait, bowl, pong, golf, caos) |
 | Camerino (avatar condiviso) | `avatar.html`, `avatar/camerino.js`, `avatar/avatar.js`, `avatar/costumes.js`, `avatar/stage.js` |
