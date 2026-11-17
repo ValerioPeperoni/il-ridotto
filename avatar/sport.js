@@ -100,6 +100,27 @@ export function makeSportsmate(look = DEFAULT_SPORT, opts = {}) {
   }
   if (look.hair && look.hair !== 'none') attachHair(look.hair);
   if (look.beard) attachHair('Beard');
+  // scarpe da ginnastica vere (tomaia colorata + suola bianca), agganciate alle ossa dei piedi nella posa di riposo
+  rig.updateMatrixWorld(true);
+  const shoeMat = new THREE.MeshStandardMaterial({ color: look.shoes, roughness: 0.6 }), soleMat = new THREE.MeshStandardMaterial({ color: 0xf6f6f2, roughness: 0.7 });
+  const lace = new THREE.MeshStandardMaterial({ color: 0xffffff, roughness: 0.8 });
+  for (const sd of ['l', 'r']) {
+    const foot = bones['foot_' + sd], ball = bones['ball_' + sd]; if (!foot || !ball) continue;
+    const pf = foot.getWorldPosition(new THREE.Vector3()), pb = ball.getWorldPosition(new THREE.Vector3());
+    const dir = pb.clone().sub(pf); dir.y = 0; const len = Math.max(0.1, dir.length()); dir.normalize();
+    const g = new THREE.Group();
+    const upper = new THREE.Mesh(new THREE.CapsuleGeometry(0.046, 0.15, 6, 14), shoeMat); upper.rotation.x = Math.PI / 2; upper.scale.set(1.08, 1, 0.8); upper.position.set(0, 0.045, 0.02); g.add(upper);
+    const sole = new THREE.Mesh(new THREE.BoxGeometry(0.104, 0.028, 0.27), soleMat); sole.position.set(0, 0.014, 0.02); g.add(sole);
+    const strip = new THREE.Mesh(new THREE.BoxGeometry(0.05, 0.012, 0.08), lace); strip.position.set(0, 0.088, 0.04); strip.rotation.x = -0.25; g.add(strip);
+    g.traverse(o => { if (o.isMesh) { o.castShadow = true; } });
+    // posizione nel mondo: tallone sotto la caviglia, punta verso le dita
+    const center = pf.clone().addScaledVector(dir, len * 0.35); center.y = 0;
+    const W = new THREE.Matrix4().compose(center, new THREE.Quaternion().setFromUnitVectors(new THREE.Vector3(0, 0, 1), dir), new THREE.Vector3(1, 1, 1));
+    const local = foot.matrixWorld.clone().invert().multiply(W);
+    local.decompose(g.position, g.quaternion, g.scale);
+    foot.add(g); extras.push(g);
+  }
+  if (body) body.material.userData.shoeMat = shoeMat;
   if (opts.height) { root.scale.setScalar(opts.height / 1.8); }
   const mixer = new THREE.AnimationMixer(rig);
   let current = null;
@@ -115,7 +136,7 @@ export function makeSportsmate(look = DEFAULT_SPORT, opts = {}) {
     return a;
   };
   av.update = dt => mixer.update(dt);
-  av.setColors = c => { const U = body && body.material.userData.U; if (!U) return; if (c.shirt) U.uShirt.value.set(c.shirt); if (c.shorts) U.uShorts.value.set(c.shorts); if (c.shoes) U.uShoes.value.set(c.shoes); if (c.skin != null) U.uSkin.value.set(SKINS[c.skin]); };
+  av.setColors = c => { const U = body && body.material.userData.U; if (!U) return; if (c.shirt) U.uShirt.value.set(c.shirt); if (c.shorts) U.uShorts.value.set(c.shorts); if (c.shoes) { U.uShoes.value.set(c.shoes); if (body.material.userData.shoeMat) body.material.userData.shoeMat.color.set(c.shoes); } if (c.skin != null) U.uSkin.value.set(SKINS[c.skin]); };
   av.dispose = () => { root.parent && root.parent.remove(root); };
   av.play(opts.idle || 'Idle_Loop');
   return av;
