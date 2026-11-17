@@ -206,7 +206,7 @@ function onPhone(id, m) {
 const r2 = v => Math.round(v * 100) / 100;
 let viewT = 0;
 function sendViews(dt) {
-  viewT += dt; if (viewT < 1 / 15) return; viewT = 0;
+  viewT += dt; if (viewT < 1 / 20) return; viewT = 0;
   const viewers = G.players.filter(p => p.kind === 'phone' && p.wantView && p.online !== false);
   if (!viewers.length || !['intro', 'play', 'results', 'over'].includes(G.phase)) return;
   const ready = G.players.filter(p => p.pos && p.ball);
@@ -371,7 +371,7 @@ function updatePlayer(p, dt) {
     if (!p.nearBall || stunned) p.state = 'walk';
     else if (p.state === 'addr' && Math.abs(inp.y) > 0.7 && !inp.btn) p.state = 'walk';
   }
-  if (p.state === 'walk' && p.nearBall && !stunned && G.phase === 'play' && (!moveIn || dBall < 1.2) && p.idleT > 0.15) {
+  if (p.state === 'walk' && p.nearBall && !stunned && G.phase === 'play' && ((!moveIn || dBall < 1.2) && p.idleT > 0.15 || inp.sling)) {
     p.state = 'addr'; const c = cupOf(h); p.aimYaw = autoAim(p); inp.aim = 0;
   }
   if (p.state === 'addr' || p.state === 'charge') {
@@ -756,6 +756,8 @@ requestAnimationFrame(frame);
   await Promise.all([loadAvatarLibrary(p => { a = p; prog(); }), (LITE ? Promise.resolve() : loadNature(scene, { mobile: GFX === 'bassa', plants: QL.plants, trees: QL.trees, onProgress: p => { b = p; prog(); } }))]);
   // riflessi dal cielo
   const pm = new THREE.PMREMGenerator(renderer); const envScene = new THREE.Scene(); envScene.add(sky.clone()); scene.environment = pm.fromScene(envScene, 0.04).texture; pm.dispose();
+  // prepara subito gli effetti (fuori vista), così la prima esplosione non blocca il gioco
+  { const far = new THREE.Vector3(0, -300, 0); FX.explosion(far, 5); FX.splash(far); FX.confetti(far); FX.beam(far, far.clone().add(new THREE.Vector3(1, 0, 0))); FX.lightning(far); }
   $('#load').classList.add('hide'); $('#lobby').classList.remove('hide'); G.phase = 'lobby';
   if (DEBUG) { window.__G = G; window.__cam = camera; window.__sim = simulate; window.__setCam = (a) => { camPos.set(a[0], a[1], a[2]); camLook.set(a[3], a[4], a[5]); }; window.__HOLES = HOLES; window.__boom = (x, z) => boom(new THREE.Vector3(x, heightAt(x, z), z), 5, null); }
   if (Q.has('cam')) { $('#lobby').classList.add('hide'); const c = Q.get('cam').split(',').map(Number); G.phase = 'still'; camPos.set(c[0], c[1], c[2]); camLook.set(c[3], c[4], c[5]); updateCamera = () => { camera.position.copy(camPos); camera.lookAt(camLook); sky.position.copy(camera.position); placeSun(camLook, 60); }; }

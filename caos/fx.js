@@ -4,7 +4,10 @@ import * as THREE from 'three';
 let scene;
 const parts = []; // particelle generiche
 const live = []; // oggetti con update(dt) → false quando finiscono
-export function initFx(s) { scene = s; }
+// luci riutilizzate: aggiungere o togliere luci dalla scena fa ricompilare tutti i materiali (blocchi di secondi)
+const lightPool = []; let lightNext = 0;
+export function initFx(s) { scene = s; for (let i = 0; i < 2; i++) { const l = new THREE.PointLight(0xffffff, 0, 10, 2); scene.add(l); lightPool.push(l); } }
+function borrowLight(color, intensity, dist, decay) { const l = lightPool[lightNext++ % lightPool.length]; l.color.set(color); l.intensity = intensity; l.distance = dist; l.decay = decay; return l; }
 
 function dotTex(soft) {
   const c = document.createElement('canvas'); c.width = c.height = 64; const g = c.getContext('2d');
@@ -34,9 +37,9 @@ export function explosion(pos, r = 5, { shake } = {}) {
   // lampo
   const flash = new THREE.Mesh(new THREE.SphereGeometry(1, 20, 14), new THREE.MeshBasicMaterial({ color: new THREE.Color(1.6, 0.8, 0.3), transparent: true, toneMapped: false, blending: THREE.AdditiveBlending, depthWrite: false }));
   flash.position.copy(pos); scene.add(flash);
-  const light = new THREE.PointLight(0xffaa55, 120, r * 5, 2); light.position.copy(pos).y += 1.5; scene.add(light);
+  const light = borrowLight(0xffaa55, 120, r * 5, 2); light.position.copy(pos).y += 1.5;
   let t = 0;
-  live.push(dt => { t += dt; const k = t / 0.18; flash.scale.setScalar(r * (0.15 + k * 0.45)); flash.material.opacity = Math.max(0, 0.8 - k); light.intensity = 120 * Math.max(0, 1 - t / 0.5); if (t > 0.5) { scene.remove(flash, light); flash.geometry.dispose(); flash.material.dispose(); return false; } return true; });
+  live.push(dt => { t += dt; const k = t / 0.18; flash.scale.setScalar(r * (0.15 + k * 0.45)); flash.material.opacity = Math.max(0, 0.8 - k); light.intensity = 120 * Math.max(0, 1 - t / 0.5); if (t > 0.5) { light.intensity = 0; scene.remove(flash); flash.geometry.dispose(); flash.material.dispose(); return false; } return true; });
   // palla di fuoco
   for (let i = 0; i < 26; i++) { const d = new THREE.Vector3(Math.random() - .5, Math.random() * 0.9 + 0.1, Math.random() - .5).normalize(); spawn({ pos: pos.clone().addScaledVector(d, 0.4), vel: d.multiplyScalar(4 + Math.random() * 7), color: new THREE.Color().setHSL(0.03 + Math.random() * 0.07, 1, 0.42).multiplyScalar(0.9), size: 1.3 + Math.random() * 1.4, grow: 2.0, life: 0.45 + Math.random() * 0.35, add: true, drag: 3.5 }); }
   for (let i = 0; i < 10; i++) { const d = new THREE.Vector3(Math.random() - .5, Math.random() * 0.7 + 0.2, Math.random() - .5).normalize(); spawn({ pos: pos.clone().addScaledVector(d, 0.3), vel: d.multiplyScalar(3 + Math.random() * 4), color: new THREE.Color(0.55, 0.12, 0.03), tex: smokeTex, size: 1.8 + Math.random(), grow: 2.2, life: 0.7, op: 0.9, drag: 3 }); }
@@ -95,8 +98,8 @@ export function lightning(pos) {
   pts.push(pos.clone());
   const geo = new THREE.TubeGeometry(new THREE.CatmullRomCurve3(pts, false, 'catmullrom', 0), 60, 0.12, 5);
   const m = new THREE.Mesh(geo, new THREE.MeshBasicMaterial({ color: new THREE.Color(2.6, 2.6, 3.4), toneMapped: false, transparent: true })); scene.add(m);
-  const l = new THREE.PointLight(0xcfe0ff, 200, 30, 1.5); l.position.copy(pos).y += 3; scene.add(l);
-  let t = 0; live.push(dt => { t += dt; m.visible = Math.floor(t * 30) % 3 !== 2; m.material.opacity = Math.max(0, 1 - t / 0.6); l.intensity = 200 * Math.max(0, 1 - t / 0.4); if (t > 0.6) { scene.remove(m, l); geo.dispose(); return false; } return true; });
+  const l = borrowLight(0xcfe0ff, 200, 30, 1.5); l.position.copy(pos).y += 3;
+  let t = 0; live.push(dt => { t += dt; m.visible = Math.floor(t * 30) % 3 !== 2; m.material.opacity = Math.max(0, 1 - t / 0.6); l.intensity = 200 * Math.max(0, 1 - t / 0.4); if (t > 0.6) { l.intensity = 0; scene.remove(m); geo.dispose(); return false; } return true; });
   sparkle(pos, new THREE.Color(1.5, 1.6, 2.5), 20);
 }
 export function updateFx(dt, camera) {

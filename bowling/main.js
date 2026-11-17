@@ -293,7 +293,14 @@ ballMesh.castShadow = true; scene.add(ballMesh);
 const ballTexCache = {};
 function setBallColor(c) { ballMesh.material.map = ballTexCache[c] || (ballTexCache[c] = ballTex(c)); ballMesh.material.needsUpdate = true; }
 const pinMeshes = pinSpots().map(() => { const m = new THREE.Mesh(pinGeo, pinMat); m.castShadow = true; m.receiveShadow = true; scene.add(m); return m; });
-const rake = new THREE.Mesh(new THREE.BoxGeometry(L.W + 0.4, 0.14, 0.05), navy); rake.visible = false; scene.add(rake);
+const rakeMat = new THREE.MeshStandardMaterial({ color: 0x2b3566, metalness: 0.5, roughness: 0.4 });
+const rake = new THREE.Group(); rake.visible = false; scene.add(rake);
+{ const bar = new THREE.Mesh(new THREE.BoxGeometry(L.W + 0.5, 0.16, 0.05), rakeMat); rake.add(bar); for (const s of [-1, 1]) { const arm = new THREE.Mesh(new THREE.BoxGeometry(0.04, 0.9, 0.04), rakeMat); arm.position.set(s * (L.W / 2 + 0.22), 0.5, 0); rake.add(arm); } }
+// la macchina rimetti-birilli: scende, solleva i birilli in piedi, poi li rimette giù
+const setter = new THREE.Group(); scene.add(setter);
+{ const plate = new THREE.Mesh(new THREE.BoxGeometry(L.W + 0.15, 0.1, 1.15), new THREE.MeshStandardMaterial({ color: 0x3a4170, metalness: 0.4, roughness: 0.5 })); setter.add(plate);
+  for (const sp of pinSpots()) { const cup = new THREE.Mesh(new THREE.CylinderGeometry(0.07, 0.07, 0.04, 14), new THREE.MeshStandardMaterial({ color: 0x1d2340 })); cup.position.set(sp.x, -0.07, sp.z + 18.75); setter.add(cup); }
+  setter.position.set(0, 1.75, -18.75); }
 
 // ---------- suoni ----------
 let AC = null, master, noiseB, rollGain = null;
@@ -620,6 +627,52 @@ function headSplit(st) {
   for (let i = 1; i < xs.length; i++) if (xs[i] - xs[i - 1] > 0.31) return true;
   return false;
 }
+// sequenza vera: 1) la macchina scende e solleva i birilli rimasti in piedi; 2) la sbarra scende e spazza
+// birilli caduti e palla nella fossa; 3) la sbarra risale; 4) la macchina rimette giù i birilli (o un castello nuovo)
+const SW = { down: 0.55, lift: 0.95, rakeDown: 1.15, sweep: 2.15, rakeUp: 2.45, place: 3.1, up: 3.5 };
+function startSweep() {
+  G.phase = 'sweep'; G.sweepT = 0; G.camSnap = true;
+  const p = G.players[G.cur], fi = Sc.currentFrame(p.sheet);
+  G.sweepFresh = fi !== G.throwFrame || Sc.finished(p.sheet) || Sc.freshRack(p.sheet, fi);
+  // birilli: posizione di partenza (come sono finiti) e chi resta in piedi
+  G.sweepPins = deck.pins.map((q, i) => ({ i, removed: q.removed, standing: !q.removed && G.standing.includes(q.spot.n), p0: pinMeshes[i].position.clone(), q0: pinMeshes[i].quaternion.clone(), spot: q.spot, gone: q.removed }));
+}
+function sweepStep(dt) {
+  G.sweepT += dt * (FAST ? 2 : 1); const t = G.sweepT, ease = k => k * k * (3 - 2 * k), seg = (a, b) => ease(Math.min(1, Math.max(0, (t - a) / (b - a))));
+  // macchina
+  let sy = 1.75;
+  if (t < SW.down) sy = 1.75 - (1.75 - 0.44) * seg(0, SW.down);
+  else if (t < SW.lift) sy = 0.44 + 0.75 * seg(SW.down, SW.lift);
+  else if (t < SW.rakeUp) sy = 1.19;
+  else if (t < SW.place) sy = 1.19 - 0.75 * seg(SW.rakeUp, SW.place);
+  else sy = 0.44 + 1.31 * seg(SW.place, SW.up);
+  setter.position.y = sy;
+  // sbarra
+  rake.visible = t > SW.lift - 0.1 && t < SW.rakeUp + 0.3;
+  const ry = t < SW.rakeDown ? 0.9 - 0.8 * seg(SW.lift - 0.1, SW.rakeDown) : t < SW.sweep ? 0.1 : 0.1 + 0.9 * seg(SW.sweep, SW.rakeUp);
+  const rz = t < SW.rakeDown ? -17.65 : t < SW.sweep ? -17.65 - 1.85 * seg(SW.rakeDown, SW.sweep) : -19.5 + 1.85 * seg(SW.sweep + 0.05, SW.rakeUp + 0.3);
+  rake.position.set(0, ry, rz);
+  // birilli
+  const lifted = t > SW.down && t < SW.place;
+  for (const sp of G.sweepPins) {
+    const m = pinMeshes[sp.i];
+    if (sp.standing) {
+      // in piedi: salgono con la macchina e tornano giù nello stesso punto
+      if (G.sweepFresh && t > SW.lift) { m.visible = false; continue; }
+      m.visible = true; m.quaternion.copy(sp.q0);
+      m.position.set(sp.p0.x, lifted ? sp.p0.y + (sy - 0.44) : sp.p0.y, sp.p0.z);
+    } else if (!sp.gone) {
+      // caduti: la sbarra li spinge nella fossa
+      const pz = Math.min(sp.p0.z, rake.position.z - 0.08 - (t > SW.rakeDown ? 0 : 99));
+      if (t > SW.rakeDown && rake.position.y < 0.3) { sp.p0.z = Math.min(sp.p0.z, rake.position.z - 0.08); }
+      m.position.set(sp.p0.x, sp.p0.z < -19.3 ? Math.max(-0.5, sp.p0.y - (t - SW.rakeDown) * 1.5) : sp.p0.y, sp.p0.z);
+      m.quaternion.copy(sp.q0); m.visible = m.position.y > -0.45; void pz;
+    } else m.visible = false;
+  }
+  // castello nuovo: i 10 birilli scendono con la macchina
+  if (G.sweepFresh && t > SW.rakeUp) for (const sp of G.sweepPins) { const m = pinMeshes[sp.i]; m.visible = true; m.quaternion.identity(); m.position.set(sp.spot.x, Pins.PIN.com + (t < SW.place ? sy - 0.44 : 0), sp.spot.z); }
+  if (t > SW.up + 0.1) { rake.visible = false; ballMesh.visible = true; setter.position.y = 1.75; afterSweep(); }
+}
 function afterSweep() {
   const p = G.players[G.cur];
   const fi = Sc.currentFrame(p.sheet);
@@ -729,14 +782,9 @@ function frame(now) {
     f.p.forEach((q, i) => { if (deck.pins[i].removed) return; pinMeshes[i].position.set(q[0], q[1], q[2]); pinMeshes[i].quaternion.set(q[3], q[4], q[5], q[6]); });
     if (k >= G.rec.length - 1 && G.repT > 1) { G.phase = 'react'; G.reactT = 0; react(); }
   }
-  if (G.phase === 'react') { G.reactT += dt; if (G.reactT > (FAST ? 0.6 : 2.2)) { G.phase = 'sweep'; G.sweepT = 0; ballMesh.visible = false; G.camSnap = true; } }
-  if (G.phase === 'sweep') {
-    G.sweepT += dt; const t = G.sweepT; rake.visible = t > 0.2 && t < 1.6;
-    rake.position.set(0, t < 0.5 ? 0.6 - (t - 0.2) * 1.6 : 0.12, t < 0.5 ? -17.7 : -17.7 - (t - 0.5) * 1.8);
-    if (t > 0.5) for (const q of deck.pins) if (!q.removed && G.sweepDown.includes(q.spot.n)) { q.position.z = Math.min(q.position.z, rake.position.z - 0.06); if (q.position.z < -19.3) q.position.y = Math.max(-0.4, q.position.y - dt * 2); }
-    if (t > 1.7) { rake.visible = false; ballMesh.visible = true; afterSweep(); }
-  }
-  if (G.phase !== 'replay') deck.pins.forEach((q, i) => { const m = pinMeshes[i]; m.visible = !q.removed; m.position.copy(q.position); m.quaternion.copy(q.quaternion); });
+  if (G.phase === 'react') { G.reactT += dt; if (G.reactT > (FAST ? 0.6 : 2.2)) startSweep(); }
+  if (G.phase === 'sweep') sweepStep(dt);
+  if (G.phase !== 'replay' && G.phase !== 'sweep') deck.pins.forEach((q, i) => { const m = pinMeshes[i]; m.visible = !q.removed; m.position.copy(q.position); m.quaternion.copy(q.quaternion); });
   updateParts(dt);
   updateCamera(dt);
   composer.render();

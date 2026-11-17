@@ -25,6 +25,8 @@ export async function startPhoneView(canvas, ui, onProgress) {
   await Promise.all([loadAvatarLibrary(p => { a = p; prog(); }), loadNature(scene, { mobile: true, plants: 0.15, trees: 0.45, onProgress: p => { b = p; prog(); } })]);
   { const pm = new THREE.PMREMGenerator(renderer), es = new THREE.Scene(); es.add(W_.sky.clone()); scene.environment = pm.fromScene(es, 0.04).texture; pm.dispose(); }
 
+  // prepara subito gli effetti (fuori vista), così la prima esplosione non blocca il gioco
+  { const far = new THREE.Vector3(0, -300, 0); FX.explosion(far, 5); FX.splash(far); FX.confetti(far); FX.beam(far, far.clone().add(new THREE.Vector3(1, 0, 0))); FX.lightning(far); }
   // ombre finte: un disco scuro sotto personaggi e palle (costa pochissimo)
   const blobTex = (() => { const c = document.createElement('canvas'); c.width = c.height = 64; const g = c.getContext('2d'); const gr = g.createRadialGradient(32, 32, 2, 32, 32, 30); gr.addColorStop(0, 'rgba(0,0,0,.45)'); gr.addColorStop(1, 'rgba(0,0,0,0)'); g.fillStyle = gr; g.fillRect(0, 0, 64, 64); return new THREE.CanvasTexture(c); })();
   const blob = s => { const m = new THREE.Mesh(new THREE.PlaneGeometry(s, s), new THREE.MeshBasicMaterial({ map: blobTex, transparent: true, depthWrite: false })); m.rotation.x = -Math.PI / 2; scene.add(m); return m; };
@@ -61,12 +63,13 @@ export async function startPhoneView(canvas, ui, onProgress) {
   const view = {
     me: () => players[me],
     camYaw: () => camYaw,
-    turn(d) { const p = players[me]; if (!p || !(p.flags & 16)) camYaw -= d; },
+    turn(d) { const p = players[me]; lastTurn = performance.now(); if (!p || !(p.flags & 16)) camYaw -= d; },
     onLooks(m) { me = m.me; setupPlayers(m.players); setupBoxes(m.boxes || []); },
     onSnap(m) {
       phase = m.ph; if (m.me != null) me = m.me;
       m.P.forEach((d, i) => {
         const p = players[i]; if (!p) return;
+        const now = performance.now() / 1000; if (p.snapT) { const ds = Math.max(0.03, now - p.snapT); p.vel = p.vel || new THREE.Vector3(); p.vel.set((d[0] - p.tgt.x) / ds, 0, (d[2] - p.tgt.z) / ds); if (p.vel.length() > 15) p.vel.set(0, 0, 0); } p.snapT = now;
         p.tgt.set(d[0], d[1], d[2]); p.tyaw = d[3]; p.btgt.set(d[6], d[7], d[8]); p.flags = d[9]; p.aim = d[10]; p.charge = d[11]; p.lx = d[12]; p.lz = d[13]; p.item = d[14];
         if (p.first) { p.pos.copy(p.tgt); p.bpos.copy(p.btgt); p.yaw = p.tyaw; p.first = false; }
         if (d[5] !== p.clipN) { p.clipN = d[5]; p.av.play(d[4], { fade: 0.18, once: /Death|Cheer|Attack|Hit/.test(d[4]) && !/Cheer/.test(d[4]) ? true : false }); p.clip = d[4]; }
@@ -95,7 +98,7 @@ export async function startPhoneView(canvas, ui, onProgress) {
       else if (m.k === 'cup') FX.confetti(v);
     },
   };
-  let shake = 0;
+  let shake = 0, lastTurn = 0; const _ext = new THREE.Vector3();
 
   // freccia a bordo schermo verso la propria palla quando non si vede
   const _v = new THREE.Vector3();
@@ -120,7 +123,10 @@ export async function startPhoneView(canvas, ui, onProgress) {
     W_.update(t);
     const k = 1 - Math.exp(-dt * 12);
     for (const p of players) {
-      p.pos.lerp(p.tgt, k); p.yaw = lerpA(p.yaw, p.tyaw, k); p.bpos.lerp(p.btgt, 1 - Math.exp(-dt * 16));
+      // si prevede un po' dove sarà (gli aggiornamenti arrivano 20 volte al secondo): niente scatti
+      const ahead = p.vel && p.snapT ? Math.min(0.12, performance.now() / 1000 - p.snapT) : 0;
+      _ext.copy(p.tgt); if (ahead && p.vel) { _ext.x += p.vel.x * ahead; _ext.z += p.vel.z * ahead; }
+      p.pos.lerp(_ext, 1 - Math.exp(-dt * 16)); p.yaw = lerpA(p.yaw, p.tyaw, k); p.bpos.lerp(p.btgt, 1 - Math.exp(-dt * 16));
       p.av.root.position.copy(p.pos); p.av.root.rotation.y = p.yaw; p.av.update(dt);
       p.av.mixer.timeScale = p.flags & 2 ? 0 : 1;
       p.ball.position.copy(p.bpos); p.ball.visible = !(p.flags & 1);
@@ -142,8 +148,8 @@ export async function startPhoneView(canvas, ui, onProgress) {
       // telecamera da dietro: mentre mira guarda nella direzione del tiro, mentre corre segue il personaggio
       let want = camYaw;
       if (aiming) want = p.aim;
-      else if (p.tgt.distanceTo(p.pos) > 0.02 || p.clip === 'Running_A' || p.clip === 'Walking_A') want = p.yaw;
-      camYaw = lerpA(camYaw, want, 1 - Math.exp(-dt * (aiming ? 6 : 2.2)));
+      else if (performance.now() - lastTurn > 2500 && p.vel && p.vel.length() > 2) want = Math.atan2(p.vel.x, p.vel.z); // se non giri tu, la visuale si mette piano dietro la corsa
+      camYaw = lerpA(camYaw, want, 1 - Math.exp(-dt * (aiming ? 7 : 1.3)));
       const fx = Math.sin(camYaw), fz = Math.cos(camYaw);
       const focus = aiming ? p.bpos : p.pos;
       const dist = aiming ? 6.2 : 6.5, h = aiming ? 3.4 : 3.2, side = aiming ? 1.3 : 0; // mirando, la telecamera sta dal lato opposto al personaggio

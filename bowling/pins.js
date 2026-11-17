@@ -2,7 +2,7 @@
 import * as CANNON from 'cannon-es';
 import { L, pinSpots } from './lane.js';
 
-export const PIN = { h: 0.381, mass: 1.53, com: 0.145 };
+export const PIN = { h: 0.381, mass: 1.3, com: 0.155 };
 
 export function createDeck() {
   const world = new CANNON.World({ gravity: new CANNON.Vec3(0, -9.82, 0) });
@@ -10,9 +10,9 @@ export function createDeck() {
   world.solver.iterations = 14;
   world.broadphase = new CANNON.SAPBroadphase(world);
   const mLane = new CANNON.Material('lane'), mPin = new CANNON.Material('pin'), mBall = new CANNON.Material('ball'), mWall = new CANNON.Material('wall');
-  world.addContactMaterial(new CANNON.ContactMaterial(mPin, mPin, { friction: 0.3, restitution: 0.52 }));
-  world.addContactMaterial(new CANNON.ContactMaterial(mPin, mLane, { friction: 0.4, restitution: 0.15 }));
-  world.addContactMaterial(new CANNON.ContactMaterial(mBall, mPin, { friction: 0.12, restitution: 0.62 }));
+  world.addContactMaterial(new CANNON.ContactMaterial(mPin, mPin, { friction: 0.2, restitution: 0.72 }));
+  world.addContactMaterial(new CANNON.ContactMaterial(mPin, mLane, { friction: 0.28, restitution: 0.12 }));
+  world.addContactMaterial(new CANNON.ContactMaterial(mBall, mPin, { friction: 0.08, restitution: 0.8 }));
   world.addContactMaterial(new CANNON.ContactMaterial(mBall, mLane, { friction: 0.2, restitution: 0.05 }));
   world.addContactMaterial(new CANNON.ContactMaterial(mPin, mWall, { friction: 0.3, restitution: 0.3 }));
   world.addContactMaterial(new CANNON.ContactMaterial(mBall, mWall, { friction: 0.1, restitution: 0.3 }));
@@ -26,9 +26,9 @@ export function createDeck() {
   for (const s of [-1, 1]) fixed(new CANNON.Box(new CANNON.Vec3(0.03, 0.5, 2.0)), s * sideX, 0.3, L.deckEnd + 0.4, mWall); // sponde laterali
   fixed(new CANNON.Box(new CANNON.Vec3(1.5, 0.6, 0.05)), 0, 0.2, L.deckEnd - 1.6, mWall); // tenda in fondo
   const pins = pinSpots().map(sp => {
-    const b = new CANNON.Body({ mass: PIN.mass, material: mPin, allowSleep: true, sleepSpeedLimit: 0.08, sleepTimeLimit: 0.4, linearDamping: 0.03, angularDamping: 0.08 });
+    const b = new CANNON.Body({ mass: PIN.mass, material: mPin, allowSleep: true, sleepSpeedLimit: 0.08, sleepTimeLimit: 0.4, linearDamping: 0.02, angularDamping: 0.03 });
     const c = -PIN.com;
-    b.addShape(new CANNON.Cylinder(0.058, 0.038, 0.12, 10), new CANNON.Vec3(0, 0.06 + c, 0));
+    b.addShape(new CANNON.Cylinder(0.058, 0.03, 0.12, 10), new CANNON.Vec3(0, 0.06 + c, 0));
     b.addShape(new CANNON.Cylinder(0.026, 0.058, 0.13, 10), new CANNON.Vec3(0, 0.185 + c, 0));
     b.addShape(new CANNON.Sphere(0.032), new CANNON.Vec3(0, 0.33 + c, 0));
     b.position.set(sp.x, PIN.com + 0.0005, sp.z); world.addBody(b); b.sleep();

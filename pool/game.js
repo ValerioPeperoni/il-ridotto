@@ -745,9 +745,10 @@ function endSettle() {
 }
 function boom(x, z) {
   snd('pot'); snd('foul');
-  const fl = new THREE.PointLight(0xffa040, 6, 2); fl.position.set(x, 0.2, z); tableGroup.add(fl);
+  if (!G.boomLight) { G.boomLight = new THREE.PointLight(0xffa040, 0, 2); tableGroup.add(G.boomLight); }
+  const fl = G.boomLight; fl.intensity = 6; fl.position.set(x, 0.2, z);
   const ball = new THREE.Mesh(new THREE.SphereGeometry(0.05, 16, 12), new THREE.MeshBasicMaterial({ color: 0xffc070, transparent: true, toneMapped: false })); ball.position.set(x, 0.03, z); tableGroup.add(ball);
-  let t = 0; const iv = setInterval(() => { t += 0.03; ball.scale.setScalar(1 + t * 14); ball.material.opacity = Math.max(0, 1 - t * 2.2); fl.intensity = Math.max(0, 6 - t * 14); if (t > 0.5) { clearInterval(iv); tableGroup.remove(ball); tableGroup.remove(fl); } }, 30);
+  let t = 0; const iv = setInterval(() => { t += 0.03; ball.scale.setScalar(1 + t * 14); ball.material.opacity = Math.max(0, 1 - t * 2.2); fl.intensity = Math.max(0, 6 - t * 14); if (t > 0.5) { clearInterval(iv); tableGroup.remove(ball); fl.intensity = 0; } }, 30);
   G.shake = 0.5;
 }
 function whack() {
@@ -879,6 +880,7 @@ balls = P.rack(); syncBallMeshes(); setCue(CFG.cue);
   const floorL = new THREE.Mesh(new THREE.PlaneGeometry(12, 12), new THREE.MeshBasicMaterial({ color: 0x120c08 })); floorL.rotation.x = -Math.PI / 2; floorL.position.y = -1.5; es.add(floorL);
   scene.environment = pmrem.fromScene(es, 0.04).texture;
 }
+G.boomLight = new THREE.PointLight(0xffa040, 0, 2); tableGroup.add(G.boomLight);
 fillMenu(); resize(); requestAnimationFrame(frame);
 G.camPos.set(3, 2, 2);
 

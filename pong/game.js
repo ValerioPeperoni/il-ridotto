@@ -137,7 +137,7 @@ function bounceRing(x, y, z, color = 0xffffff) {
   const m = new THREE.Mesh(new THREE.RingGeometry(0.02, 0.035, 24), new THREE.MeshBasicMaterial({ color, transparent: true, depthWrite: false })); m.rotation.x = -Math.PI / 2; m.position.set(x, y + 0.002, z); scene.add(m); hitRings.push({ m, t: 0 });
 }
 function updateRings(dt) { for (let i = hitRings.length - 1; i >= 0; i--) { const r = hitRings[i]; r.t += dt; r.m.scale.setScalar(1 + r.t * 9); r.m.material.opacity = Math.max(0, 0.9 - r.t * 2.2); if (r.t > 0.45) { scene.remove(r.m); hitRings.splice(i, 1); } } }
-const fireLight = new THREE.PointLight(0xff5a00, 3, 1.5, 2); fireLight.visible = false; scene.add(fireLight);
+const fireLight = new THREE.PointLight(0xff5a00, 0, 1.5, 2); scene.add(fireLight); // sempre presente: accenderla/spegnerla non ricompila i materiali
 function updateCharge() { const c = G.charge || [0, 0]; for (const [i, id] of [[0, '#chA'], [1, '#chB']]) { const el = document.querySelector(id); if (el) { el.style.width = (c[i] * 100) + '%'; el.parentElement.classList.toggle('full', c[i] >= 1); } } }
 
 // ---------- suoni ----------
@@ -203,23 +203,27 @@ function animateAvatars(dt) {
     a.av.root.position.set(a.x, 0, s * (T.L / 2 + 0.65));
     // animazioni
     let anim = window.__idle || 'Block';
+    if (a.pend) { a.pend.wait -= dt; if (a.pend.wait <= 0) { const pd = a.pend; a.pend = null; a.swingT = 0; a.swingDir = pd.side; a.up = pd.up; snd('swish', pd.p); a.anim = 'swing'; a.av.play('1H_Melee_Attack_Slice_Horizontal', { once: true, fade: 0.08, speed: 1.7 }); } }
     if (a.swingT >= 0) { a.swingT += dt; if (a.swingT > 0.55) a.swingT = -1; }
     else if (Math.abs(a.vx) > 0.6) anim = (a.vx * (i === 0 ? -1 : 1)) > 0 ? 'Running_Strafe_Right' : 'Running_Strafe_Left';
-    if (a.swingT < 0 && anim !== a.anim) { a.anim = anim; a.av.play(anim, { fade: 0.15 }); }
+    if (a.swingT < 0 && !a.pend && anim !== a.anim) { a.anim = anim; a.av.play(anim, { fade: 0.15 }); }
     a.av.update(dt);
   });
-  // racchetta in prima persona: a destra in basso, spazza da destra a sinistra quando colpisci
-  if (fpRacket.visible && G.pq && G.pq[0]) {
-    // racchetta = telefono: stessa rotazione della mano, con un po' di morbidezza
-    const q = _pq.set(...G.pq[0]); const e = _pe.setFromQuaternion(q, 'YXZ');
-    _pq2.copy(FP_BASE).multiply(q);
-    fpRacket.quaternion.slerp(_pq2, Math.min(1, dt * 18));
-    fpRacket.position.lerp(_pv.set(0.3 - Math.sin(e.y) * 0.45, -0.32 + Math.sin(e.x) * 0.25, -0.62 + Math.abs(Math.sin(e.y)) * 0.1), Math.min(1, dt * 18));
-  } else if (fpRacket.visible) {
-    const a = avatars[0]; const k = a && a.swingT >= 0 ? clamp(a.swingT / 0.3, 0, 1) : 0, e = Math.sin(k * Math.PI);
-    const dir = a ? a.swingDir : 1, up = a ? (a.up || 0) : 0;
-    fpRacket.position.set(0.32 - 0.62 * k * dir, -0.3 + 0.12 * e + up * 0.08 * e, -0.62 - 0.18 * e);
-    fpRacket.rotation.set(-0.35 + up * 0.4 * e, 0.5 - 1.3 * k * dir, -0.45 + 0.6 * e);
+  // racchetta in prima persona: si prepara dal lato dove arriva la palla (dritto a destra, rovescio a sinistra)
+  // e colpisce con un gesto vero: dritto da destra a sinistra, rovescio da sinistra a destra
+  if (fpRacket.visible) {
+    const a = avatars[0]; if (!a) return;
+    const ready = G.ideal && G.ideal.who === 0 ? sideOf(0, G.ideal) : 1;
+    const side = a.swingT >= 0 ? a.swingDir : ready;
+    a.fpSide = (a.fpSide ?? 1) + (side - (a.fpSide ?? 1)) * Math.min(1, dt * 8);
+    const k = a.swingT >= 0 ? clamp(a.swingT / 0.28, 0, 1) : 0, e = Math.sin(k * Math.PI), up = a.up || 0;
+    const fs = a.fpSide; // +1 dritto, -1 rovescio
+    const x0 = fs > 0 ? 0.36 : -0.34, x1 = fs > 0 ? -0.28 : 0.3;
+    _pv.set(x0 + (x1 - x0) * k, -0.3 + 0.1 * e + up * 0.1 * e - (k > 0 && k < 1 ? 0 : 0.02), -0.6 - 0.22 * e);
+    fpRacket.position.lerp(_pv, Math.min(1, dt * 20));
+    const ry0 = fs > 0 ? 0.55 : -1.0, ry1 = fs > 0 ? -0.9 : 0.7;
+    _pe.set(-0.3 + up * 0.5 * e, ry0 + (ry1 - ry0) * k, (fs > 0 ? -0.45 : 0.5) + 0.4 * e * fs);
+    _pq2.setFromEuler(_pe); fpRacket.quaternion.slerp(_pq2, Math.min(1, dt * 20));
   }
 }
 
@@ -255,10 +259,10 @@ function onPhone(id, m) {
   if (m.t === 'sync') { const rtt = (performance.now() - m.h) / 1000; if (rtt < 1) p.lat = p.lat * 0.7 + (rtt / 2) * 0.3; return; }
   if (m.t === 'pq') { const i = G.players.indexOf(p); G.pq = G.pq || []; G.pq[i] = m.q; return; }
   if (m.t === 'toss') { const i = G.players.indexOf(p); if (G.phase === 'serve' && G.server === i && !G.toss) toss(); return; }
+  if (m.t === 'sw0') { const i = G.players.indexOf(p); swing(i, { time: G.time - (p.lat || 0.05) - (m.ago || 0) / 1000 }); return; }
   if (m.t === 'sw') {
     const i = G.players.indexOf(p);
     // la direzione viene da come è girata la racchetta (il telefono) in quel momento
-    if (G.pq && G.pq[i]) { const e = new THREE.Euler().setFromQuaternion(new THREE.Quaternion(...G.pq[i]), 'YXZ'); m.yaw = clamp(e.y / 0.6, -1, 1) || m.yaw; }
     swing(i, { time: G.time - (p.lat || 0.04) - (m.ago || 0) / 1000, p: clamp(+m.p || 0.5, 0.05, 1.4), vert: clamp(+m.vert || 0, -1, 1), twist: clamp(+m.twist || 0, -1, 1), yaw: m.yaw || 0 });
   }
 }
@@ -333,18 +337,34 @@ function scheduleCpu(i) {
     else if (Math.random() < 0.12) { p = rnd(0.35, 0.6); vert = -0.5; }
     else if (Math.random() < 0.08 && G.level >= 1) { p = 0.12; vert = 0.1; }
   }
-  G.cpuSwing = { who: i, at: id.t + dt, sw: { p, vert, twist: rnd(-0.2, 0.2), aim } };
+  G.cpuSwing = { who: i, at: id.t + HIT_BEST + dt, sw: { p, vert, twist: rnd(-0.2, 0.2), aim } };
 }
+// Colpo "alla Wii": conta l'INIZIO del gesto. Se parti in una finestra larga prima del momento giusto,
+// la racchetta prende la palla nel punto giusto (il ritardo del Wi-Fi non conta più). Forza, alto/basso
+// ed effetto arrivano dal gesto completo, se arriva in tempo.
+const HIT_EARLY = 0.65, HIT_LATE = 0.12, HIT_BEST = -0.16;
 function swing(i, sw) {
   const a = avatars[i]; if (!a) return;
-  if (a.swingT < 0 || a.swingT > 0.25) { a.swingT = 0; a.swingDir = sw.yaw ? Math.sign(sw.yaw) : 1; a.up = sw.vert; snd('swish', sw.p); a.anim = 'swing'; a.av.play('1H_Melee_Attack_Slice_Horizontal', { once: true, fade: 0.08, speed: 1.7 }); }
-  if (G.phase !== 'serve' && G.phase !== 'rally') return;
-  const id = G.ideal; if (!id || id.who !== i) return;
-  if (G.serving && !G.toss) { toss(); return; } // il primo gesto lancia la palla
-  const W = (G.assist && G.players[i].kind !== 'cpu' ? 0.24 : 0.16) * (G.fire ? 0.6 : 1);
-  const d = (sw.time ?? G.time) - id.t;
-  if (Math.abs(d) > W) { if (G.players[i].kind !== 'cpu') shotTip(d < 0 ? 'Troppo presto!' : 'Troppo tardi!'); return; }
-  G.pendingHit = { who: i, at: Math.max(G.time, id.t + d), d, W, sw };
+  const t = sw.time ?? G.time;
+  const ph = G.pendingHit;
+  // dettagli di un gesto già iniziato: si aggiornano forza e direzione, non si rifà il colpo
+  if (ph && ph.who === i && !ph.done && t - ph.t0 < 0.7) { Object.assign(ph.sw, sw.p != null ? { p: sw.p, vert: sw.vert ?? ph.sw.vert, twist: sw.twist ?? 0, yaw: sw.yaw ?? ph.sw.yaw } : {}); return; }
+  if (G.phase !== 'serve' && G.phase !== 'rally') { startSwingAnim(i, sw); return; }
+  if (G.serving && G.server === i && !G.toss) { toss(); return; } // senza tasto, il primo gesto lancia la palla
+  const id = G.ideal; if (!id || id.who !== i) { startSwingAnim(i, sw); return; }
+  const d = t - id.t;
+  if (d < -HIT_EARLY || d > HIT_LATE) { startSwingAnim(i, sw); if (G.players[i].kind !== 'cpu') shotTip(d < 0 ? 'Troppo presto!' : 'Troppo tardi!'); return; }
+  const W = HIT_EARLY;
+  G.pendingHit = { who: i, at: Math.max(G.time, id.t), d: d - HIT_BEST, W, sw: { p: 0.65, vert: 0.2, twist: 0, yaw: 0, ...sw }, t0: t, side: sideOf(i, id) };
+  // l'animazione parte in modo da arrivare sulla palla proprio al momento giusto
+  startSwingAnim(i, sw, Math.max(0, id.t - G.time), G.pendingHit.side);
+}
+// dritto o rovescio: dipende da che lato del corpo arriva la palla (destrorso)
+function sideOf(i, id) { const a = avatars[i]; if (!a || !id) return 1; const rel = (id.x - a.x) * (i === 0 ? 1 : -1); return rel >= -0.05 ? 1 : -1; }
+function startSwingAnim(i, sw, lead = 0, side) {
+  const a = avatars[i]; if (!a) return;
+  if ((a.swingT >= 0 && a.swingT < 0.25) || a.pend) return;
+  a.pend = { wait: Math.max(0, lead - 0.14), side: side ?? (G.ideal ? sideOf(i, G.ideal) : 1), up: sw.vert || 0, p: sw.p || 0.6 };
 }
 
 // colpo: dalla posizione attuale della palla verso il campo avversario
@@ -519,7 +539,7 @@ function frame(now) {
       while (acc > 1 / 480 && n < 60) {
         const ev = []; step(b, 1 / 480, ev, G.time); acc -= 1 / 480; n++;
         if (G.phase !== 'point') for (const e of ev) onEvent(e);
-        if (G.pendingHit && G.time >= G.pendingHit.at) doHit(G.pendingHit);
+        if (G.pendingHit && !G.pendingHit.done && G.time >= G.pendingHit.at) { G.pendingHit.done = true; doHit(G.pendingHit); }
         if (G.serving && G.toss && b.y < 0.75 && b.vy < 0 && G.phase === 'serve') { if (G.players[G.server].kind !== 'cpu') shotTip('Palla caduta: rilancio'); beginServe(); break; }
       }
       // palla ferma sul tavolo
@@ -528,7 +548,7 @@ function frame(now) {
     }
     ballMesh.position.set(b.x, b.y, b.z); ballMesh.visible = true;
     ballMesh.material.emissive.setHex(G.fire ? 0xff4400 : 0xffa060); ballMesh.material.emissiveIntensity = G.fire ? 1.6 : 0.12;
-    fireLight.visible = !!G.fire; fireLight.position.copy(ballMesh.position);
+    fireLight.intensity = G.fire ? 3 : 0; fireLight.position.copy(ballMesh.position);
     // la palla gira davvero con la sua rotazione
     const wl = Math.hypot(b.wx, b.wy, b.wz); if (wl > 0.1) { ballMesh.rotateOnWorldAxis(_tv.set(b.wx / wl, b.wy / wl, b.wz / wl), Math.min(wl * dt * 0.25, 0.9)); }
     const over = Math.abs(b.x) <= T.W / 2 && Math.abs(b.z) <= T.L / 2 && b.y > T.H - 0.01, gy = over ? T.H + 0.002 : 0.004;

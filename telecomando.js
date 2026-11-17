@@ -101,7 +101,7 @@ function sendAim() { clearTimeout(aimTimer); aimTimer = setTimeout(() => net && 
 let spin = 0;
 function drawSpin() { document.querySelectorAll('#spinRow [data-sp]').forEach(b => b.classList.toggle('sel', +b.dataset.sp === spin)); }
 $('#spinRow').onclick = e => { const b = e.target.closest('[data-sp]'); if (!b) return; spin = +b.dataset.sp; drawSpin(); vibrate(15); net && net.send({ t: 'spin', v: spin }); };
-$('#swMode').onclick = () => { fingerMode = !fingerMode; $('#pad').classList.toggle('hide', !fingerMode); $('#hold').classList.toggle('hide', fingerMode); $('#spinRow').classList.toggle('hide', !fingerMode && !spinKeys); $('#meter').classList.toggle('hide', fingerMode); $('#swMode').textContent = fingerMode ? 'Usa i sensori' : 'Senza sensori? Usa il dito'; };
+$('#swMode').onclick = () => { fingerMode = !fingerMode; $('#pad').classList.toggle('hide', !fingerMode); $('#hold').classList.toggle('hide', fingerMode); $('#spinRow').classList.toggle('hide', !fingerMode && !spinKeys); $('#swMode').textContent = fingerMode ? 'Usa i sensori' : 'Senza sensori? Usa il dito'; };
 
 // ---------- lancio col movimento (tutto manuale) ----------
 // Tieni premuto, braccio indietro e poi avanti: la palla parte da sola nel punto più basso del braccio
@@ -172,7 +172,7 @@ function release(byFinger) {
   let hook = Math.max(-1, Math.min(1, -roll / 0.9)); if (flipHook) hook = -hook;          // 0.9 rad ≈ 50° = effetto pieno
   if (spinKeys) hook = spin;
   else if (Math.abs(hook) < 0.15) hook = 0;
-  const timing = byFinger ? a.th : 0.1; // rilascio automatico = momento giusto
+  const timing = 0.1; // conta solo la forza del gesto: il momento in cui alzi il dito non penalizza
   const msg = { t: 'throw', power: Math.min(1.25, peak / 9.5), hook, timing, pull: Math.max(-0.05, Math.min(0.05, dir * 0.12)) };
   net && net.send(msg); myTurn = false; vibrate(40);
   const dTxt = Math.abs(dir) < 0.05 ? 'dritta' : dir < 0 ? 'verso sinistra' : 'verso destra';
@@ -209,7 +209,8 @@ function pongMotion(e) {
   const ag = e.accelerationIncludingGravity, la = e.acceleration;
   if (ag && ag.x != null && mag < 2) { const n = norm([ag.x, ag.y, ag.z]); gUp = norm(gUp.map((v, i) => v * 0.9 + n[i] * 0.1)); }
   let lin = la && la.x != null ? [la.x, la.y, la.z] : ag && ag.x != null ? [ag.x - gUp[0] * 9.81, ag.y - gUp[1] * 9.81, ag.z - gUp[2] * 9.81] : [0, 0, 0];
-  if (!swingS && mag > 6 && t > coolUntil) swingS = { peak: mag, tPeak: t, wPeak: w, acc: [] };
+  // appena il gesto parte lo diciamo subito allo schermo: conta l'inizio, non la fine (così il Wi-Fi non fa ritardo)
+  if (!swingS && mag > 4.5 && t > coolUntil) { swingS = { peak: mag, tPeak: t, wPeak: w, acc: [] }; net && net.send({ t: 'sw0', ago: 0 }); vibrate(12); }
   if (swingS) {
     swingS.acc.push({ t, up: dot(lin, gUp) });
     if (mag > swingS.peak) { swingS.peak = mag; swingS.tPeak = t; swingS.wPeak = w; }

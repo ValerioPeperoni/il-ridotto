@@ -119,8 +119,8 @@ input{background:#fff;color:var(--ink);border:none;box-shadow:0 3px 0 rgba(0,0,0
   <div id="lane"><div class="pins">• • • •<br>• • •<br>• •<br>•</div><svg viewBox="0 0 100 100" preserveAspectRatio="none"><line id="aimL" x1="50" y1="92" x2="50" y2="8" stroke="#fff" stroke-width="1" stroke-dasharray="3 3" vector-effect="non-scaling-stroke"/></svg><div class="ball"></div></div>
   <div class="angrow"><button id="aL">◀</button><span class="state">spostati sulla pista</span><button id="aR">▶</button></div>
   <div class="spinrow hide" id="spinRow"><span>Effetto</span><button data-sp="-1">⟲⟲</button><button data-sp="-0.5">⟲</button><button data-sp="0" class="sel">dritta</button><button data-sp="0.5">⟳</button><button data-sp="1">⟳⟳</button></div>
-  <div id="meter"><div class="ok"></div><i></i></div>
-  <button id="hold">TIENI<br>PREMUTO<br><small style="font-weight:400;font-size:15px">e lancia come al bowling:<br>la palla parte da sola</small></button>
+  <div id="meter" class="hide"><div class="ok"></div><i></i></div>
+  <button id="hold">TIENI<br>PREMUTO<br><small style="font-weight:400;font-size:15px">e lancia come al bowling:<br>la forza la decide il braccio</small></button>
   <div id="pad" class="hide">Trascina giù e poi<br>su veloce, e lascia.</div>
   <div class="hint">Braccio un po' a sinistra o a destra = palla di lì.<br>Ruota il polso mentre lanci = effetto.</div>
   <div class="links"><button id="swMode">Senza sensori? Usa il dito</button><button id="spinMode"></button><button id="flipD"></button><button id="flip"></button></div>
@@ -160,6 +160,6 @@ input{background:#fff;color:var(--ink);border:none;box-shadow:0 3px 0 rgba(0,0,0
 </div>
 <script src="vendor/peerjs.min.js"></script>
 <script type="importmap">{"imports":{"three":"./vendor/three.module.js","three/addons/":"./vendor/jsm/"}}</script>
-<script type="module" src="telecomando.js"></script>
+<script type="module" src="telecomando.js?v=202611170147"></script>
 </body>
 </html>
