@@ -105,6 +105,7 @@ export function makeSportsmate(look = DEFAULT_SPORT, opts = {}) {
   let current = null;
   const av = { root, rig, bones, mixer, look, body };
   av.play = (name, o = {}) => {
+    name = ALIAS[name] || name; if (o.then) o = { ...o, then: ALIAS[o.then] || o.then };
     const clip = LIB.clips[name]; if (!clip) return null;
     const a = mixer.clipAction(clip);
     a.reset(); a.setLoop(o.once ? THREE.LoopOnce : THREE.LoopRepeat); a.clampWhenFinished = !!o.once; a.timeScale = o.speed || 1;
@@ -119,6 +120,10 @@ export function makeSportsmate(look = DEFAULT_SPORT, opts = {}) {
   av.play(opts.idle || 'Idle_Loop');
   return av;
 }
+// nomi delle animazioni dei vecchi personaggi → animazioni nuove (così i giochi funzionano con entrambi)
+export const ALIAS = { Idle: 'Idle_Loop', Idle_B: 'Sword_Idle', '1H_Ranged_Aiming': 'Sword_Idle', Running_A: 'Sprint_Loop', Running_B: 'Jog_Fwd_Loop', Walking_A: 'Walk_Loop', Cheer: 'Dance_Loop',
+  '1H_Melee_Attack_Slice_Horizontal': 'Sword_Regular_A', Death_A: 'Death01', Death_B: 'Hit_Knockback', Block: 'Sword_Idle', Sit_Chair_Idle: 'Sitting_Idle_Loop', Running_Strafe_Left: 'Jog_Fwd_Loop',
+  Running_Strafe_Right: 'Jog_Fwd_Loop', Taunt: 'Yes', Hit_A: 'Hit_Chest', Hit_B: 'Hit_Head', Throw: 'OverhandThrow', Use_Item: 'Interact' };
 export function randomSport(r = Math.random) {
   const pick = a => a[Math.floor(r() * a.length)];
   const body = r() < 0.5 ? 'M' : 'F';

@@ -9,7 +9,9 @@ import { L, SPECIALS, newBall, step as laneStep, pinSpots, heightAt } from './la
 import * as Pins from './pins.js';
 import * as Sc from './score.js';
 import { hostRoom, randomCode } from '../net.js';
-import { loadAvatarLibrary, makeAvatar, randomLook, savedProfile } from '../avatar/avatar.js';
+import { savedProfile } from '../avatar/avatar.js';
+import { loadSportLibrary, makeSportsmate, randomSport } from '../avatar/sport.js';
+const randomLook = randomSport;
 
 const Q = new URLSearchParams(location.search);
 const DEBUG = Q.has('debug'), FAST = Q.has('fast');
@@ -338,7 +340,7 @@ G.lastClack = 0;
 const AV_H = 1.7;
 function ensureAvatar(p) {
   if (p.av) return p.av;
-  p.av = makeAvatar({ ...(p.look || randomLook()), prop: 'none' }, { height: AV_H });
+  p.av = makeSportsmate(p.sport || randomSport(), { height: AV_H });
   p.av.root.traverse(o => { if (o.isMesh) o.castShadow = true; });
   scene.add(p.av.root);
   return p.av;
@@ -348,11 +350,11 @@ function seatPlayers() {
   others.forEach((p, k) => {
     const av = ensureAvatar(p), s = seats[k % Math.max(1, seats.length)] || [k - 2, 7.2];
     av.root.position.set(s[0], 0.12, s[1]); av.root.rotation.y = Math.PI;
-    if (av.state !== 'sit') { av.play('Sit_Chair_Idle', { fade: 0.3 }); av.state = 'sit'; }
+    if (av.state !== 'sit') { av.play('Sitting_Idle_Loop', { fade: 0.3 }); av.state = 'sit'; }
   });
   const p = G.players[G.cur]; if (!p) return;
   const av = ensureAvatar(p); av.root.rotation.y = Math.PI; av.state = 'bowl';
-  av.root.position.set(G.aimX + 0.12, 0, 1.25); av.play('Idle', { fade: 0.25 });
+  av.root.position.set(G.aimX + 0.12, 0, 1.25); av.play('Idle_Loop', { fade: 0.25 });
 }
 const _v1 = new THREE.Vector3(), _v2 = new THREE.Vector3(), _q1 = new THREE.Quaternion(), _q2 = new THREE.Quaternion();
 // orienta un osso perché punti nella direzione voluta (in coordinate mondo)
@@ -367,7 +369,7 @@ function aimBone(bone, child, dir) {
 }
 function poseArm(av, th, k = 1) {
   // th: 0 braccio giù, <0 indietro, >0 avanti (il personaggio guarda verso -z)
-  const B = av.bones, up = B.upperarmr, low = B.lowerarmr, hand = B.wristr || B.handr;
+  const B = av.bones, up = B.upperarm_r || B.upperarmr, low = B.lowerarm_r || B.lowerarmr, hand = B.hand_r || B.wristr || B.handr;
   if (!up || !low) return;
   const dir = new THREE.Vector3(0.08, -Math.cos(th), -Math.sin(th)).normalize();
   if (k < 1) { const cur = new THREE.Vector3(); const a = up.getWorldPosition(new THREE.Vector3()), b = low.getWorldPosition(new THREE.Vector3()); cur.subVectors(b, a).normalize(); dir.lerp(cur, 1 - k).normalize(); }
@@ -389,7 +391,7 @@ function updateGuide() {
   while (k < GUIDE_N) pos.setXYZ(k++, 0, -5, 0);
   pos.needsUpdate = true; guideGeo.computeBoundingSphere();
 }
-function handPos(av) { const h = av.bones.handslotr || av.bones.handr; return h.getWorldPosition(new THREE.Vector3()); }
+function handPos(av) { const h = av.bones.hand_r || av.bones.handslotr || av.bones.handr; return h.getWorldPosition(new THREE.Vector3()); }
 
 // ---------- rete: telefoni ----------
 const CODE = (Q.get('code') || randomCode()).toUpperCase();
@@ -411,10 +413,10 @@ function onPhone(id, m) {
     if (!p) {
       if (G.phase !== 'lobby') { NET.send(id, { t: 'full', text: 'Partita in corso: aspetta la prossima' }); return; }
       if (G.players.length >= 6) { NET.send(id, { t: 'full', text: 'Sala piena' }); return; }
-      p = { kind: 'phone', pid: m.pid, name: (m.name || 'Telefono').slice(0, 14), color: m.color || COLORS[G.players.length % 6], look: m.look || randomLook() };
+      p = { kind: 'phone', pid: m.pid, name: (m.name || 'Telefono').slice(0, 14), color: m.color || COLORS[G.players.length % 6], look: m.look, sport: m.sport || randomSport() };
       G.players.push(p);
     }
-    p.conn = id; p.online = true; if (m.name) p.name = m.name.slice(0, 14); if (m.look) { p.look = m.look; if (p.av) p.av.setLook({ ...m.look, prop: 'none' }); }
+    p.conn = id; p.online = true; if (m.name) p.name = m.name.slice(0, 14); if (m.sport) { p.sport = m.sport; if (p.av) { p.av.dispose(); p.av = null; } }
     NET.send(id, { t: 'hi', name: p.name, color: p.color, game: 'bowling' });
     renderLobby(); if (G.phase !== 'lobby') sendTurns();
     return;
@@ -450,8 +452,8 @@ document.addEventListener('click', e => {
   if (b.dataset.m) { G.mode = b.dataset.m; document.querySelectorAll('#modes .opt').forEach(x => x.classList.toggle('sel', x === b)); }
   if (b.dataset.f) { G.nFrames = +b.dataset.f; document.querySelectorAll('#frames .chip').forEach(x => x.classList.toggle('sel', x === b)); }
 });
-$('#addLocal').onclick = () => { if (G.players.some(p => p.kind === 'local')) return; const pr = savedProfile(); const n = $('#localName').value.trim() || (pr && pr.name) || 'Giocatore'; G.players.push({ kind: 'local', name: n.slice(0, 14), color: COLORS[G.players.length % 6], look: pr ? pr.look : randomLook() }); ac(); renderLobby(); };
-$('#addBot').onclick = () => { const used = G.players.map(p => p.name); const n = BOT_NAMES.find(x => !used.includes(x)) || 'Computer'; G.players.push({ kind: 'bot', name: n, color: COLORS[G.players.length % 6], look: randomLook() }); renderLobby(); };
+$('#addLocal').onclick = () => { if (G.players.some(p => p.kind === 'local')) return; const pr = savedProfile(); const n = $('#localName').value.trim() || (pr && pr.name) || 'Giocatore'; G.players.push({ kind: 'local', name: n.slice(0, 14), color: COLORS[G.players.length % 6], look: pr ? pr.look : null, sport: pr && pr.sport ? pr.sport : randomSport() }); ac(); renderLobby(); };
+$('#addBot').onclick = () => { const used = G.players.map(p => p.name); const n = BOT_NAMES.find(x => !used.includes(x)) || 'Computer'; G.players.push({ kind: 'bot', name: n, color: COLORS[G.players.length % 6], sport: randomSport() }); renderLobby(); };
 $('#start').onclick = () => { ac(); startGame(); };
 $('#again').onclick = () => { $('#end').classList.add('hide'); startGame(); };
 $('#toLobby').onclick = () => { $('#end').classList.add('hide'); $('#hud').classList.add('hide'); $('#lobby').classList.remove('hide'); G.phase = 'lobby'; buildSpecial(null); G.spec = null; sendTurns(); };
@@ -618,8 +620,8 @@ function react() {
   av.root.visible = true; setAvatarOpacity(p, 1); G.fadeAv = false;
   av.root.rotation.y = 0; // si gira verso di noi
   const m = G.mood;
-  av.play(m === 'great' ? 'Cheer' : m === 'good' ? 'Taunt' : m === 'bad' ? (Math.random() < 0.5 ? 'Death_B' : 'Hit_A') : 'Interact', { once: true, then: 'Idle' });
-  for (const q of G.players) if (q !== p && q.av && m === 'great') q.av.play('Cheer', { once: true, then: 'Sit_Chair_Idle' });
+  av.play(m === 'great' ? (Math.random() < 0.5 ? 'Dance_Loop' : 'Yes') : m === 'good' ? 'Yes' : m === 'bad' ? (Math.random() < 0.5 ? 'Idle_No_Loop' : 'Hit_Chest') : 'Interact', { once: m !== 'great' || Math.random() < 0.5, then: 'Idle_Loop' });
+  for (const q of G.players) if (q !== p && q.av && m === 'great') q.av.play('Sitting_Talking_Loop', { fade: 0.3 });
 }
 function headSplit(st) {
   if (st.includes(1) || st.length < 2) return false;
@@ -691,7 +693,7 @@ function endGame() {
   const rank = [...G.players].sort((a, b) => Sc.total(b.sheet) - Sc.total(a.sheet));
   $('#final').innerHTML = `<div class="w">${esc(rank[0].name)} vince!</div>` + rank.map((p, i) => `<div>${i + 1}. ${esc(p.name)} — <b>${Sc.total(p.sheet)}</b></div>`).join('');
   $('#end').classList.remove('hide'); snd('strike');
-  const w = rank[0]; if (w.av) { w.av.root.position.set(0, 0, 1.25); w.av.root.rotation.y = 0; w.av.play('Cheer', { once: false }); }
+  const w = rank[0]; if (w.av) { w.av.root.position.set(0, 0, 1.25); w.av.root.rotation.y = 0; w.av.play('Dance_Loop', { once: false }); }
   for (const p of G.players) send(p, { t: 'end', text: `${rank[0].name} vince`, score: Sc.total(p.sheet) });
 }
 
@@ -807,13 +809,13 @@ function updateCamera(dt) {
 // ---------- avvio ----------
 buildHall(); buildDetails(); Pins.resetPins(deck); setBallColor(COLORS[0]); renderLobby(); resize(); drawMonitor('Bowling', 'Pronti?');
 requestAnimationFrame(frame);
-Promise.all([loadAvatarLibrary(p => { $('#bar').style.width = (p * 90) + '%'; }), loadFurniture()]).then(() => {
+Promise.all([loadSportLibrary(p => { $('#bar').style.width = (p * 90) + '%'; }), loadFurniture()]).then(() => {
   bakeEnvironment(); $('#load').classList.add('hide'); $('#lobby').classList.remove('hide'); G.phase = 'lobby';
   if (DEBUG) { window.__G = G; window.__deck = deck; window.__throw = throwBall; window.__start = startGame; }
   if (Q.has('cam')) { G.still = Q.get('cam').split(',').map(Number); $('#lobby').classList.add('hide'); G.camSnap = true; }
   if (Q.has('auto')) {
     G.mode = Q.get('auto') === 'speciale' ? 'speciale' : 'classica'; G.nFrames = +(Q.get('frames') || 3);
-    G.players.push({ kind: 'bot', name: 'Birillo', color: COLORS[0], look: randomLook() }, { kind: 'bot', name: 'Contessa', color: COLORS[1], look: { costume: 'banana', head: 'Mage', body: 'Mage', arms: 'Mage', legs: 'Mage', hat: 'none', cape: 'none', prop: 'none', hue: 2 } });
+    G.players.push({ kind: 'bot', name: 'Birillo', color: COLORS[0], sport: randomSport() }, { kind: 'bot', name: 'Contessa', color: COLORS[1], sport: randomSport() });
     startGame();
   }
 }).catch(e => { $('#load').textContent = 'Errore nel caricamento: ' + e.message; });

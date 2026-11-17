@@ -9,7 +9,8 @@ import { loadNature, trunks, wind } from './nature.js';
 import * as FX from './fx.js';
 import { buildWorld, ITEMS, boxGeo, boxMat, makeClub } from './world.js';
 import { hostRoom, randomCode } from '../net.js';
-import { loadAvatarLibrary, makeAvatar, randomLook, savedProfile } from '../avatar/avatar.js';
+import { savedProfile } from '../avatar/avatar.js';
+import { loadSportLibrary as loadAvatarLibrary, makeSportsmate, randomSport as randomLook } from '../avatar/sport.js';
 
 const Q = new URLSearchParams(location.search);
 const DEBUG = Q.has('debug');
@@ -66,11 +67,11 @@ function newPlayer(o) {
 }
 function ensureAvatar(p) {
   if (p.av) return;
-  p.av = makeAvatar({ ...p.look, prop: 'none' }, { height: AV_H });
+  p.av = makeSportsmate(p.sport || p.look, { height: AV_H });
   { const play = p.av.play; p.clipN = 0; p.av.play = (n, o) => { p.clip = n; p.clipN++; return play(n, o); }; }
   p.av.root.traverse(o => { if (o.isMesh) o.castShadow = true; });
-  const hand = p.av.bones.handslotr || p.av.bones.handr;
-  p.club = makeClub(p.color); hand.add(p.club); p.club.rotation.set(0, 0, 0); p.club.scale.setScalar(2.45 / AV_H * 1.0);
+  const hand = p.av.bones.hand_r;
+  p.club = makeClub(p.color); hand.add(p.club); p.club.rotation.set(Math.PI, 0, 0); p.club.position.set(0, 0.08, 0); p.club.scale.setScalar(1.8 / AV_H);
   scene.add(p.av.root);
   // palla
   p.ballMesh = new THREE.Mesh(new THREE.SphereGeometry(BALL_R, 20, 14), new THREE.MeshStandardMaterial({ color: 0xffffff, roughness: 0.35 }));
@@ -186,11 +187,11 @@ function onPhone(id, m) {
     if (!p) {
       if (G.phase !== 'lobby') { NET.send(id, { t: 'full', text: 'Partita in corso: aspetta la prossima' }); return; }
       if (G.players.length >= 8) { NET.send(id, { t: 'full', text: 'Sala piena' }); return; }
-      p = newPlayer({ kind: 'phone', pid: m.pid, name: (m.name || 'Telefono').slice(0, 14), look: m.look || randomLook() });
+      p = newPlayer({ kind: 'phone', pid: m.pid, name: (m.name || 'Telefono').slice(0, 14), sport: m.sport || randomLook() });
       if (m.color) p.color = m.color;
       G.players.push(p);
     }
-    p.conn = id; p.online = true; if (m.look) p.look = m.look; p.wantView = !!m.wantView; p.viewSent = 0;
+    p.conn = id; p.online = true; if (m.sport) p.sport = m.sport; p.wantView = !!m.wantView; p.viewSent = 0;
     NET.send(id, { t: 'hi', name: p.name, color: p.color, game: 'caos' });
     renderLobby(); sendState(p);
     return;
@@ -218,7 +219,7 @@ function sendViews(dt) {
   for (const v of viewers) {
     if (v.viewSent !== G.viewSeq) { // all'inizio di ogni buca: nomi, look, casse
       v.viewSent = G.viewSeq;
-      send(v, { t: 'cvl', h: G.hole, me: ready.indexOf(v), players: ready.map(p => ({ name: p.name, color: p.color, look: p.look })), boxes: boxes.map(b => [r2(b.x), r2(b.z)]) });
+      send(v, { t: 'cvl', h: G.hole, me: ready.indexOf(v), players: ready.map(p => ({ name: p.name, color: p.color, look: p.sport || p.look })), boxes: boxes.map(b => [r2(b.x), r2(b.z)]) });
     }
     snap.me = ready.indexOf(v); send(v, snap);
   }
@@ -244,7 +245,7 @@ document.addEventListener('click', e => {
   if (b.dataset.q) { try { localStorage.setItem('ridotto-gfx', b.dataset.q); } catch (e2) { } location.reload(); return; }
   if (b.dataset.h) { G.nHoles = +b.dataset.h; document.querySelectorAll('#nholes .chip').forEach(x => x.classList.toggle('sel', x === b)); }
 });
-$('#addLocal').onclick = () => { if (G.players.some(p => p.kind === 'local')) return; const pr = savedProfile(); const n = $('#localName').value.trim() || (pr && pr.name) || 'Giocatore'; G.players.push(newPlayer({ kind: 'local', name: n.slice(0, 14), look: pr ? pr.look : randomLook() })); FX.audio(); renderLobby(); };
+$('#addLocal').onclick = () => { if (G.players.some(p => p.kind === 'local')) return; const pr = savedProfile(); const n = $('#localName').value.trim() || (pr && pr.name) || 'Giocatore'; G.players.push(newPlayer({ kind: 'local', name: n.slice(0, 14), sport: pr && pr.sport ? pr.sport : randomLook() })); FX.audio(); renderLobby(); };
 $('#addBot').onclick = () => { const used = G.players.map(p => p.name); const n = BOT_NAMES.find(x => !used.includes(x)) || 'Computer'; G.players.push(newPlayer({ kind: 'bot', name: n })); renderLobby(); };
 $('#start').onclick = () => { FX.audio(); startGame(); };
 $('#again').onclick = () => { $('#end').classList.add('hide'); startGame(); };
@@ -408,7 +409,7 @@ function updatePlayer(p, dt) {
     const sp = Math.hypot(p.vel.x, p.vel.z);
     if (sp > 0.5) p.yaw = lerpAngle(p.yaw, Math.atan2(p.vel.x, p.vel.z), Math.min(1, dt * 12));
     if (!p.fly) playAnim(p, p.done && sp < 0.5 ? (p.anim === 'Cheer' ? 'Cheer' : 'Idle') : sp > 4 ? 'Running_A' : sp > 0.5 ? 'Walking_A' : 'Idle');
-    if (p.av.mixer) { const a = p.av.mixer._actions.find(x => x.isRunning() && x.getClip().name === 'Running_A'); if (a) a.timeScale = sp / 6.5; }
+    if (p.av.mixer) { const a = p.av.mixer._actions.find(x => x.isRunning() && x.getClip().name === 'Sprint_Loop'); if (a) a.timeScale = sp / 7; }
     // mazzata a chi è vicino (lontano dalla palla)
     if (inp.btn && !p.btnWas && dBall > 3 && p.swipeCd <= 0 && G.phase === 'play' && G.holeT > 2) swipe(p);
   }
@@ -764,7 +765,6 @@ requestAnimationFrame(frame);
   if (Q.has('auto')) {
     const n = +(Q.get('bots') || 3);
     for (let i = 0; i < n; i++) $('#addBot').onclick();
-    G.players[1] && (G.players[1].look = { costume: 'banana', head: 'Mage', body: 'Mage', arms: 'Mage', legs: 'Mage', hat: 'none', cape: 'none', prop: 'none', hue: 2 });
     G.nHoles = +(Q.get('holes') || 6); startGame();
   }
 })().catch(e => { $('#load').querySelector('p').textContent = 'Errore nel caricamento: ' + e.message; console.error(e); });

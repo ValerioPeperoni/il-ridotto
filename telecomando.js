@@ -11,6 +11,7 @@ let color = store.get('ridotto-color') || COLORS[Math.floor(Math.random() * 6)];
 let game = 'bowling', net = null, myTurn = false, flipHook = store.get('ridotto-flip') === '1', fingerMode = false;
 
 // ---------- schermata di ingresso ----------
+function mySport() { try { const p = JSON.parse(store.get('ridotto-avatar') || 'null'); return p && p.sport ? p.sport : null; } catch (e) { return null; } }
 function myLook() { try { const p = JSON.parse(store.get('ridotto-avatar') || 'null'); return p && p.look ? p.look : null; } catch (e) { return null; } }
 { const prof = (() => { try { return JSON.parse(store.get('ridotto-avatar') || 'null'); } catch (e) { return null; } })();
   $('#camLink').href = 'avatar.html?ret=' + encodeURIComponent('telecomando.html' + location.search);
@@ -27,7 +28,7 @@ $('#enter').onclick = async () => {
   await askMotion(); keepAwake();
   show('wait'); $('#waitT').textContent = 'Mi collego…';
   net = joinRoom(CODE, {
-    onState(s) { $('#netstate').textContent = s === 'open' ? 'Collegato' : s === 'noroom' ? 'Non trovo la sala: lo schermo è acceso?' : s === 'lost' ? 'Connessione persa, riprovo…' : 'Mi collego…'; if (s === 'open') net.send({ t: 'join', name, color, pid, look: myLook(), wantView: want3D() }); },
+    onState(s) { $('#netstate').textContent = s === 'open' ? 'Collegato' : s === 'noroom' ? 'Non trovo la sala: lo schermo è acceso?' : s === 'lost' ? 'Connessione persa, riprovo…' : 'Mi collego…'; if (s === 'open') net.send({ t: 'join', name, color, pid, look: myLook(), sport: mySport(), wantView: want3D() }); },
     onMsg: onMsg,
   });
 };

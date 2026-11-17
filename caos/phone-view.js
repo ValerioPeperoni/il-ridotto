@@ -5,7 +5,7 @@ import { heightAt } from './course.js';
 import { loadNature, wind } from './nature.js';
 import * as FX from './fx.js';
 import { buildWorld, boxGeo, boxMat, makeClub } from './world.js';
-import { loadAvatarLibrary, makeAvatar } from '../avatar/avatar.js';
+import { loadSportLibrary as loadAvatarLibrary, makeSportsmate } from '../avatar/sport.js';
 
 const AV_H = 2.0;
 const lerpA = (a, b, k) => { let d = b - a; while (d > Math.PI) d -= Math.PI * 2; while (d < -Math.PI) d += Math.PI * 2; return a + d * k; };
@@ -48,8 +48,8 @@ export async function startPhoneView(canvas, ui, onProgress) {
   function setupPlayers(list) {
     for (const p of players) { p.av && p.av.dispose(); scene.remove(p.ball, p.bBlob, p.pBlob); }
     players = list.map((d, i) => {
-      const av = makeAvatar({ ...(d.look || {}), prop: 'none' }, { height: AV_H });
-      const hand = av.bones.handslotr || av.bones.handr; const club = makeClub(d.color); club.scale.setScalar(2.45 / AV_H); hand && hand.add(club);
+      const av = makeSportsmate(d.look && d.look.body ? d.look : {}, { height: AV_H });
+      const hand = av.bones.hand_r; const club = makeClub(d.color); club.rotation.set(Math.PI, 0, 0); club.position.set(0, 0.08, 0); club.scale.setScalar(1.8 / AV_H); hand && hand.add(club);
       scene.add(av.root);
       const ball = new THREE.Mesh(new THREE.SphereGeometry(0.13, 16, 12), new THREE.MeshStandardMaterial({ color: 0xffffff, roughness: 0.35, emissive: new THREE.Color(d.color), emissiveIntensity: i === me ? 0.25 : 0.12 }));
       scene.add(ball);

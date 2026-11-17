@@ -6,7 +6,8 @@ import { ShaderPass } from 'three/addons/postprocessing/ShaderPass.js';
 import { UnrealBloomPass } from 'three/addons/postprocessing/UnrealBloomPass.js';
 import { OutputPass } from 'three/addons/postprocessing/OutputPass.js';
 import { T, mkBall, step, predict, solve, copy } from './ball.js';
-import { loadAvatarLibrary, makeAvatar, randomLook, savedProfile } from '../avatar/avatar.js';
+import { savedProfile } from '../avatar/avatar.js';
+import { loadSportLibrary as loadAvatarLibrary, makeSportsmate, randomSport as randomLook } from '../avatar/sport.js';
 const BOTS = [{ name: 'Topspin' }, { name: 'La Contessa' }, { name: 'Muro' }, { name: 'Nonna Pina' }, { name: 'Er Taglio' }];
 import { hostRoom, randomCode } from '../net.js';
 
@@ -176,13 +177,13 @@ function setupAvatars() {
   for (const a of avatars) a.av.dispose();
   avatars.length = 0;
   G.players.forEach((p, i) => {
-    const av = makeAvatar({ ...(p.look || randomLook()), prop: "none" }, { height: 2.05 });
+    const av = makeSportsmate(p.sport || randomLook(), { height: 1.78 });
     av.root.traverse(o => { if (o.isMesh) o.castShadow = true; });
     av.root.rotation.y = i === 0 ? Math.PI : 0;
     av.root.position.set(0.3 * (i ? -1 : 1), 0, sideZ(i) * (T.L / 2 + 0.65));
     scene.add(av.root);
-    const racket = makeRacket(i === 0 ? 0xe8243c : 0x2a5fd6); const hand = av.bones.handslotr || av.bones.wristr;
-    hand.add(racket); racket.scale.setScalar(2.45 / 2.05 * 1.5); racket.rotation.set(0, Math.PI, 0); racket.position.set(0, 0.04, 0);
+    const racket = makeRacket(i === 0 ? 0xe8243c : 0x2a5fd6); const hand = av.bones.hand_r;
+    hand.add(racket); racket.scale.setScalar(1.3); racket.rotation.set(0, 0, 0); racket.position.set(0, 0.06, 0.02);
     av.play('Idle_B');
     avatars.push({ av, racket, x: av.root.position.x, vx: 0, swingT: -1, swingDir: 1, anim: 'Idle_B' });
   });
@@ -203,7 +204,7 @@ function animateAvatars(dt) {
     a.av.root.position.set(a.x, 0, s * (T.L / 2 + 0.65));
     // animazioni
     let anim = window.__idle || 'Block';
-    if (a.pend) { a.pend.wait -= dt; if (a.pend.wait <= 0) { const pd = a.pend; a.pend = null; a.swingT = 0; a.swingDir = pd.side; a.up = pd.up; snd('swish', pd.p); a.anim = 'swing'; a.av.play('1H_Melee_Attack_Slice_Horizontal', { once: true, fade: 0.08, speed: 1.7 }); } }
+    if (a.pend) { a.pend.wait -= dt; if (a.pend.wait <= 0) { const pd = a.pend; a.pend = null; a.swingT = 0; a.swingDir = pd.side; a.up = pd.up; snd('swish', pd.p); a.anim = 'swing'; a.av.play(pd.side > 0 ? 'Sword_Regular_A' : 'Sword_Regular_B', { once: true, fade: 0.08, speed: 1.5 }); } }
     if (a.swingT >= 0) { a.swingT += dt; if (a.swingT > 0.55) a.swingT = -1; }
     else if (Math.abs(a.vx) > 0.6) anim = (a.vx * (i === 0 ? -1 : 1)) > 0 ? 'Running_Strafe_Right' : 'Running_Strafe_Left';
     if (a.swingT < 0 && !a.pend && anim !== a.anim) { a.anim = anim; a.av.play(anim, { fade: 0.15 }); }
@@ -247,7 +248,7 @@ function onPhone(id, m) {
     if (!p) {
       const humans = G.players.filter(x => x.kind !== 'cpu');
       if (G.phase !== 'lobby' || humans.length >= 2) { NET.send(id, { t: 'full', text: G.phase !== 'lobby' ? 'Partita in corso: aspetta la prossima' : 'Ci sono già due giocatori' }); return; }
-      p = { kind: 'phone', pid: m.pid, name: (m.name || 'Telefono').slice(0, 14), color: m.color, look: m.look || randomLook() };
+      p = { kind: 'phone', pid: m.pid, name: (m.name || 'Telefono').slice(0, 14), color: m.color, look: m.look, sport: m.sport || randomLook() };
       G.players = G.players.filter(x => x.kind !== 'cpu'); G.players.push(p);
     }
     p.conn = id; p.online = true; p.lat = 0.04;
@@ -289,7 +290,7 @@ document.addEventListener('click', e => {
   if (b.dataset.p) { G.target = +b.dataset.p; pick('#pts .chip', b); }
   if (b.dataset.a) { G.assist = b.dataset.a === '1'; pick('#assist .chip', b); }
 });
-$('#addLocal').onclick = () => { ac(); if (G.players.filter(p => p.kind === 'local').length >= 1 || G.players.filter(p => p.kind !== 'cpu').length >= 2) return; const n = $('#localName').value.trim() || 'Giocatore'; G.players = G.players.filter(x => x.kind !== 'cpu'); const pr = savedProfile(); G.players.unshift({ kind: 'local', name: n.slice(0, 14), look: pr ? pr.look : randomLook() }); renderLobby(); };
+$('#addLocal').onclick = () => { ac(); if (G.players.filter(p => p.kind === 'local').length >= 1 || G.players.filter(p => p.kind !== 'cpu').length >= 2) return; const n = $('#localName').value.trim() || 'Giocatore'; G.players = G.players.filter(x => x.kind !== 'cpu'); const pr = savedProfile(); G.players.unshift({ kind: 'local', name: n.slice(0, 14), sport: pr && pr.sport ? pr.sport : randomLook() }); renderLobby(); };
 $('#start').onclick = () => { if (!$('#start').dataset.ready) return; ac(); startMatch(); };
 $('#again').onclick = () => { $('#end').classList.add('hide'); startMatch(); };
 $('#toLobby').onclick = () => { $('#end').classList.add('hide'); $('#hud').classList.add('hide'); $('#lobby').classList.remove('hide'); G.phase = 'lobby'; G.players = G.players.filter(p => p.kind !== 'cpu'); renderLobby(); sendState(); };
@@ -298,7 +299,7 @@ $('#menuBtn').onclick = () => { if (window.confirm('Tornare alla sala?')) $('#to
 // ---------- partita ----------
 function startMatch() {
   G.players = G.players.filter(p => p.kind !== 'cpu');
-  if (G.players.length === 1) { const b = BOTS[Math.floor(Math.random() * BOTS.length)]; G.players.push({ kind: 'cpu', name: b.name, look: randomLook() }); }
+  if (G.players.length === 1) { const b = BOTS[Math.floor(Math.random() * BOTS.length)]; G.players.push({ kind: 'cpu', name: b.name, sport: randomLook() }); }
   G.score = [0, 0]; G.server = Math.random() < 0.5 ? 0 : 1; G.serves = 0; G.charge = [0, 0]; G.fire = false; updateCharge();
   $('#lobby').classList.add('hide'); $('#hud').classList.remove('hide');
   $('#nA').textContent = G.players[0].name; $('#nB').textContent = G.players[1].name; $('#setInfo').textContent = 'a ' + G.target;
@@ -580,8 +581,7 @@ await loadAvatarLibrary(); $('#start').dataset.ready = '1';
 if (DEBUG) { window.__G = G; window.__swing = swing; window.__start = startMatch; window.__av = avatars; }
 if (Q.has('auto')) {
   // prova: due computer
-  G.players = [{ kind: 'cpu', name: 'Topspin', look: randomLook() }, { kind: 'cpu', name: 'La Contessa', look: randomLook() }];
-  if (Q.has('nocos')) G.players.forEach(p => { p.look.costume = 'none'; });
+  G.players = [{ kind: 'cpu', name: 'Topspin', sport: randomLook() }, { kind: 'cpu', name: 'La Contessa', sport: randomLook() }];
   G.target = +(Q.get('pts') || 5);
   const orig = startMatch;
   G.players.forEach(p => p.kind = 'cpu');
