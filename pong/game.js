@@ -12,7 +12,7 @@ const BOTS = [{ name: 'Topspin' }, { name: 'La Contessa' }, { name: 'Muro' }, { 
 import { hostRoom, randomCode } from '../net.js';
 
 const Q = new URLSearchParams(location.search);
-const DEBUG = Q.has('debug'), FAST = Q.has('fast');
+const DEBUG = Q.has('debug'), FAST = Q.has('fast'), NORENDER = Q.has('norender');
 const MOBILE = matchMedia('(pointer:coarse)').matches;
 const $ = s => document.querySelector(s);
 const clamp = (v, a, b) => Math.max(a, Math.min(b, v));
@@ -195,16 +195,17 @@ function animateAvatars(dt) {
   avatars.forEach((a, i) => {
     const s = sideZ(i);
     // si sposta verso il punto dove colpirà (con dolcezza: niente tremolii)
-    let tx = 0.25 * (i === 0 ? 1 : -1);
-    if (G.ideal && G.ideal.who === i) tx = G.ideal.x - 0.38 * (i === 0 ? 1 : -1);
-    else if (G.serving && G.server === i) tx = 0.35 * (i === 0 ? 1 : -1);
+    let tx = 0.25 * (i === 0 ? 1 : -1), tz = T.L / 2 + 0.65;
+    if (G.ideal && G.ideal.who === i && G.ideal.z != null) { tx = G.ideal.x - 0.42 * (i === 0 ? 1 : -1) * (G.ideal.side || 1); tz = clamp(Math.abs(G.ideal.z) + 0.42, T.L / 2 + 0.28, T.L / 2 + 1.5); }
+    else if (G.serving && G.server === i) { tx = 0.35 * (i === 0 ? 1 : -1); tz = T.L / 2 + 0.5; }
     tx = clamp(tx, -1.3, 1.3);
     const want = Math.abs(tx - a.x) < 0.04 ? 0 : clamp((tx - a.x) * 6, -3.5, 3.5);
     a.vx += (want - a.vx) * Math.min(1, dt * 8); a.x += a.vx * dt;
-    a.av.root.position.set(a.x, 0, s * (T.L / 2 + 0.65));
+    a.z = a.z ?? T.L / 2 + 0.65; const wz = Math.abs(tz - a.z) < 0.04 ? 0 : clamp((tz - a.z) * 5, -3, 3); a.vz = (a.vz || 0) + (wz - (a.vz || 0)) * Math.min(1, dt * 8); a.z += a.vz * dt;
+    a.av.root.position.set(a.x, 0, s * a.z);
     // animazioni
     let anim = window.__idle || 'Block';
-    if (a.pend) { a.pend.wait -= dt; if (a.pend.wait <= 0) { const pd = a.pend; a.pend = null; a.swingT = 0; a.swingDir = pd.side; a.up = pd.up; snd('swish', pd.p); a.anim = 'swing'; a.av.play(pd.side > 0 ? 'Sword_Regular_A' : 'Sword_Regular_B', { once: true, fade: 0.08, speed: 1.5 }); } }
+    if (a.pend) { a.pend.wait -= dt; if (a.pend.wait <= 0) { const pd = a.pend; a.pend = null; a.swingT = 0; a.swingDir = pd.side; a.up = pd.up; snd('swish', pd.p); a.anim = 'swing'; a.av.play(pd.smash ? 'OverhandThrow' : pd.side > 0 ? (Math.random() < 0.5 ? 'Sword_Regular_A' : 'Sword_Regular_C') : 'Sword_Regular_B', { once: true, fade: 0.08, speed: pd.smash ? 1.7 : 1.35 + Math.random() * 0.3 }); } }
     if (a.swingT >= 0) { a.swingT += dt; if (a.swingT > 0.55) a.swingT = -1; }
     else if (Math.abs(a.vx) > 0.6) anim = (a.vx * (i === 0 ? -1 : 1)) > 0 ? 'Running_Strafe_Right' : 'Running_Strafe_Left';
     if (a.swingT < 0 && !a.pend && anim !== a.anim) { a.anim = anim; a.av.play(anim, { fade: 0.15 }); }
@@ -315,7 +316,7 @@ function beginServe() {
   G.ball = mkBall(a.x - 0.12 * s, 0.95, s * (T.L / 2 + 0.25)); G.toss = null; G.ball.held = true;
   trailPts.length = 0;
   const p = G.players[i];
-  tip(p.kind === 'cpu' ? `${p.name} batte` : p.kind === 'phone' ? `${p.name}: premi LANCIA sul telefono, poi colpisci quando la palla scende` : 'Battuta: muovi il mouse veloce quando la palla scende (o premi spazio)');
+  tip(p.kind === 'cpu' ? `${p.name} batte` : p.kind === 'phone' ? `${p.name}: tocca la racchetta gialla sul telefono per lanciare, poi colpisci quando la palla scende` : 'Battuta: muovi il mouse veloce quando la palla scende (o premi spazio)');
   sendState();
   // il computer lancia subito; chi gioca lancia la palla col tasto (o dopo qualche secondo)
   const sv = G.serveId = (G.serveId || 0) + 1;
@@ -338,7 +339,10 @@ function scheduleCpu(i) {
     else if (Math.random() < 0.12) { p = rnd(0.35, 0.6); vert = -0.5; }
     else if (Math.random() < 0.08 && G.level >= 1) { p = 0.12; vert = 0.1; }
   }
-  G.cpuSwing = { who: i, at: id.t + HIT_BEST + dt, sw: { p, vert, twist: rnd(-0.2, 0.2), aim } };
+  // anche il computer sbaglia: più spesso contro i colpi forti e ai livelli facili
+  const errP = id.serve ? 0 : [0.13, 0.08, 0.045][G.level] + Math.max(0, (G.incomingSpeed || 0) - 10) * 0.025 + (G.fire ? 0.15 : 0);
+  const miss = Math.random() < errP ? (Math.random() < 0.5 ? 'long' : Math.random() < 0.6 ? 'wide' : 'net') : null;
+  G.cpuSwing = { who: i, at: id.t + HIT_BEST + dt, sw: { p, vert, twist: rnd(-0.2, 0.2), aim, miss } };
 }
 // Colpo "alla Wii": conta l'INIZIO del gesto. Se parti in una finestra larga prima del momento giusto,
 // la racchetta prende la palla nel punto giusto (il ritardo del Wi-Fi non conta più). Forza, alto/basso
@@ -349,6 +353,11 @@ function swing(i, sw) {
   const t = sw.time ?? G.time;
   const ph = G.pendingHit;
   // dettagli di un gesto già iniziato: si aggiornano forza e direzione, non si rifà il colpo
+  // i dettagli del gesto arrivano dopo il colpo (Wi-Fi): si corregge la traiettoria appena partita
+  const lh = G.lastHit;
+  if (sw.p != null && lh && lh.who === i && !lh.re && G.time - lh.hitAt < 0.28 && G.lastHitter === i && G.phase === 'rally' && (!G.serving || G.bounces.length === 0)) {
+    lh.re = true; Object.assign(lh.sw, { p: sw.p, vert: sw.vert ?? lh.sw.vert, twist: sw.twist ?? 0, yaw: sw.yaw ?? lh.sw.yaw }); G.serving = lh.serve; doHit(lh); return;
+  }
   if (ph && ph.who === i && !ph.done && t - ph.t0 < 0.7) { Object.assign(ph.sw, sw.p != null ? { p: sw.p, vert: sw.vert ?? ph.sw.vert, twist: sw.twist ?? 0, yaw: sw.yaw ?? ph.sw.yaw } : {}); return; }
   if (G.phase !== 'serve' && G.phase !== 'rally') { startSwingAnim(i, sw); return; }
   if (G.serving && G.server === i && !G.toss) { toss(); return; } // senza tasto, il primo gesto lancia la palla
@@ -361,72 +370,96 @@ function swing(i, sw) {
   startSwingAnim(i, sw, Math.max(0, id.t - G.time), G.pendingHit.side);
 }
 // dritto o rovescio: dipende da che lato del corpo arriva la palla (destrorso)
-function sideOf(i, id) { const a = avatars[i]; if (!a || !id) return 1; const rel = (id.x - a.x) * (i === 0 ? 1 : -1); return rel >= -0.05 ? 1 : -1; }
+function sideOf(i, id) { if (id && id.side) return id.side; const a = avatars[i]; if (!a || !id) return 1; const rel = (id.x - a.x) * (i === 0 ? 1 : -1); return rel >= -0.05 ? 1 : -1; }
 function startSwingAnim(i, sw, lead = 0, side) {
   const a = avatars[i]; if (!a) return;
   if ((a.swingT >= 0 && a.swingT < 0.25) || a.pend) return;
-  a.pend = { wait: Math.max(0, lead - 0.14), side: side ?? (G.ideal ? sideOf(i, G.ideal) : 1), up: sw.vert || 0, p: sw.p || 0.6 };
+  a.pend = { wait: Math.max(0, lead - 0.14), side: side ?? (G.ideal ? sideOf(i, G.ideal) : 1), up: sw.vert || 0, p: sw.p || 0.6, smash: (sw.p || 0) >= 0.95 && (sw.vert || 0) < -0.15 && G.ideal && G.ideal.y > 1.05 };
 }
 
 // colpo: dalla posizione attuale della palla verso il campo avversario
 function doHit(h) {
   if (DEBUG) (G.log = G.log || []).push(`${G.time.toFixed(2)} HIT by ${h.who} d=${h.d.toFixed(3)} y=${G.ball.y.toFixed(2)} z=${G.ball.z.toFixed(2)}`);
   const i = h.who, s = sideZ(i), b = G.ball, sw = h.sw, q = 1 - Math.abs(h.d) / h.W;
+  if (!h.re) { h.hitAt = G.time; h.serve = G.serving; G.lastHit = h; }
   const left = i === 0 ? -1 : 1; // la sinistra di chi colpisce, in coordinate x
   let type = 'drive', p = sw.p, vert = sw.vert;
   if (G.serving) type = 'serve';
   else if (p >= 0.95 && vert < -0.15) type = 'smash';
-  else if (vert > 0.5 && p < 0.5) type = 'lob';
+  else if (vert > 0.75 && p < 0.35) type = 'lob';
   else if (vert < -0.3 && p < 0.75) type = 'chop';
-  else if (p < 0.2) type = 'drop';
+  else if (p < 0.15) type = 'drop';
   const noise = 0.03 + (1 - q) * 0.16 + Math.max(0, p - 1.05) * 0.12 + (b.y < 0.85 && type === 'smash' ? 0.2 : 0);
-  let tx = sw.aim != null ? sw.aim : (h.d / h.W) * 0.6 * left * -1 + b.x * 0.15;
+  const u = clamp(h.d / (h.d < 0 ? 0.49 : 0.28), -1, 1), side = h.side || 1;
+  let tx = sw.aim != null ? sw.aim : -u * 0.62 * left * side + b.x * 0.12 + (sw.yaw && Math.abs(sw.yaw) < 1 ? sw.yaw * 0.15 : 0);
   tx = clamp(tx + gauss() * noise, -0.78, 0.78);
   let depth, flight, spin = { wx: 0, wy: (sw.twist || 0) * 60, wz: 0 }, label;
   if (type === 'serve') {
     // battuta: rimbalzo sul proprio campo e poi di là
-    return doServe(i, p, tx, q);
+    return doServe(i, p, tx, q, sw);
   } else if (type === 'smash') { depth = 0.95; flight = -1 * (14 + 5 * Math.min(p, 1.3)); spin.wx = -s * 70; label = 'Schiacciata!'; }
   else if (type === 'lob') { depth = 1.05; flight = 1.1 + (0.5 - p) * 0.4; spin.wx = -s * 30; label = 'Pallonetto'; }
   else if (type === 'chop') { depth = 0.8; flight = -1 * (4.5 + 3 * p); spin.wx = s * 110; label = 'Taglio'; }
   else if (type === 'drop') { depth = 0.35; flight = 0.8; spin.wx = s * 50; label = 'Smorzata'; }
   else { depth = 0.5 + 0.72 * Math.min(1, p) + Math.max(0, p - 1.05) * 1.6; flight = -1 * (5.5 + 9 * Math.min(p, 1.3)); spin.wx = -s * (40 + 110 * Math.max(0, vert)); label = vert > 0.5 ? 'Colpo carico' : 'Dritto'; }
-  depth += gauss() * noise;
+  depth = Math.min(1.2, depth + gauss() * noise);
+  if (sw.miss === 'long') depth = 1.45 + Math.random() * 0.3;
+  if (sw.miss === 'wide') tx = (Math.random() < 0.5 ? -1 : 1) * (0.86 + Math.random() * 0.2);
+  if (sw.miss === 'net') { flight = Math.abs(flight) > 0 && flight < 1 ? flight : 0.4; }
   const tz = -s * depth;
   // flight < 0 = velocità media: il tempo di volo dipende dalla distanza
   if (flight < 0) flight = Math.hypot(tx - b.x, tz - b.z) / -flight;
   // barra carica: i colpi a tempo la riempiono; piena + schiacciata (o colpo perfetto) = colpo di fuoco
-  G.charge[i] = Math.min(1, G.charge[i] + (q > 0.8 ? 0.25 : 0.1));
-  let fire = false;
-  if (G.charge[i] >= 1 && (type === 'smash' || q > 0.85) && type !== 'lob' && type !== 'drop') { fire = true; G.charge[i] = 0; flight /= 1.35; spin.wx *= 1.4; label = '🔥 COLPO DI FUOCO'; big('🔥 Fuoco!', 900); snd('cheer'); }
+  if (!h.re) G.charge[i] = Math.min(1, G.charge[i] + (q > 0.8 ? 0.25 : 0.1));
+  let fire = h.re && G.fire;
+  if (h.re && fire) { flight /= 1.35; spin.wx *= 1.4; label = '🔥 COLPO DI FUOCO'; }
+  else if (!h.re && G.charge[i] >= 1 && (type === 'smash' || q > 0.85) && type !== 'lob' && type !== 'drop') { fire = true; G.charge[i] = 0; flight /= 1.35; spin.wx *= 1.4; label = '🔥 COLPO DI FUOCO'; big('🔥 Fuoco!', 900); snd('cheer'); }
   G.fire = fire; updateCharge();
-  const v = solve({ x: b.x, y: b.y, z: b.z }, tx, tz, flight, spin);
+  let v = solve({ x: b.x, y: b.y, z: b.z }, tx, tz, flight, spin);
+  if (sw.miss === 'net') { const tn = Math.abs(b.z) / Math.max(4, Math.abs(v.vz)); v = { vx: v.vx, vy: (T.H + 0.08 - b.y + 0.5 * 9.81 * tn * tn) / tn, vz: -s * Math.max(4, Math.abs(v.vz)) }; }
+  else if (type !== 'drop' && !sw.miss) for (let k = 0; k < 4; k++) {
+    const pr = predict(mkBall(b.x, b.y, b.z, v.vx, v.vy, v.vz, spin.wx, spin.wy, spin.wz), 3), tb = pr.ev.filter(e => e.t === 'table');
+    if (!tb.length || tb[0].side !== -s) break;
+    const t1 = tb[0].time, t2 = tb[1] ? tb[1].time : 9;
+    if (pr.pts.some(q => q.t > t1 && q.t < t2 && -s * q.z > T.L / 2 + 0.1 && q.y > 0.8)) break;
+    depth = Math.min(1.25, depth + 0.12); const tz2 = -s * depth; const fl2 = flight * 0.95; v = solve({ x: b.x, y: b.y, z: b.z }, tx, tz2, fl2, spin);
+  }
+  // se finirebbe in rete senza volerlo (palla bassa vicino al tavolo), si alza la traiettoria
+  for (let k = 0; k < 3 && q > 0.35 && !sw.miss; k++) {
+    const pr = predict(mkBall(b.x, b.y, b.z, v.vx, v.vy, v.vz, spin.wx, spin.wy, spin.wz), 2), e0 = pr.ev[0];
+    if (!e0 || (e0.t !== 'net' && e0.t !== 'cord')) break;
+    flight *= 1.25; spin.wx *= 0.6; v = solve({ x: b.x, y: b.y, z: b.z }, tx, -s * Math.min(1.2, depth), flight, spin);
+  }
   Object.assign(b, { vx: v.vx, vy: v.vy, vz: v.vz, wx: spin.wx, wy: spin.wy, wz: spin.wz });
   G.netHit = false; G.lastHitter = i; G.bounces = []; G.ideal = null; G.pendingHit = null; G.incomingSpeed = Math.hypot(v.vx, v.vy, v.vz);
-  snd('hit', p);
+  if (!h.re) snd('hit', p);
   if (G.players[i].kind !== 'cpu') shotTip(`${label} · ${(G.incomingSpeed * 3.6).toFixed(0)} km/h` + (q > 0.8 ? ' · tempo perfetto' : ''));
   planReceive();
 }
-function doServe(i, p, tx, q) {
+function doServe(i, p, tx, q, sw = {}) {
   const s = sideZ(i), b = G.ball;
-  const tries = [];
-  const fast = Math.min(p, 1);
-  for (const z1 of [0.3, 0.4, 0.5]) for (const fl of [0.35, 0.4, 0.45, 0.5]) tries.push([z1, fl]);
-  tries.sort((a, c) => (Math.abs(a[1] - (0.5 - fast * 0.15)) - Math.abs(c[1] - (0.5 - fast * 0.15))) + (Math.random() - 0.5) * 0.08);
-  const err = (1 - q) * 0.25 + Math.max(0, p - 1.1) * 0.3;
-  let chosen = null;
-  for (const [z1, fl] of tries) {
-    const spin = { wx: -s * (Math.random() < 0.6 ? 60 : 0), wy: rnd(-20, 20), wz: 0 };
-    const v = solve({ x: b.x, y: b.y, z: b.z }, clamp(b.x * 0.5 + tx * 0.3, -0.6, 0.6), s * z1, fl, spin);
-    const test = mkBall(b.x, b.y, b.z, v.vx, v.vy, v.vz, spin.wx, spin.wy, spin.wz), pr = predict(test, 2.5);
-    const tb = pr.ev.filter(e => e.t === 'table');
-    if (tb.length >= 2 && tb[0].side === s && tb[1].side === -s && !pr.ev.some(e => e.t === 'net' || e.t === 'cord')) { chosen = { v, spin }; break; }
+  // forza = quanto è profonda e veloce; anticipo/ritardo = angolo; rotazione del polso = effetto laterale
+  const fast = clamp((p - 0.2) / 0.9, 0, 1);
+  const want2 = { x: clamp(tx * 1.15, -0.65, 0.65), z: -s * (0.7 + 0.55 * fast) };
+  const side = clamp(sw.twist || 0, -1, 1), back = (sw.vert || 0) < -0.3;
+  const spin = { wx: back ? s * 70 : -s * (30 + 50 * fast), wy: side * 70, wz: 0 };
+  let best = null;
+  for (const z1 of [0.4, 0.6, 0.8, 0.95, 1.1, 1.22]) for (const fl of [0.15, 0.19, 0.23, 0.28, 0.33, 0.4, 0.48]) for (const f of [0.25, 0.45, 0.6]) {
+    const x1 = b.x + (want2.x - b.x) * f;
+    const v = solve({ x: b.x, y: b.y, z: b.z }, x1, s * z1, fl, spin);
+    const pr = predict(mkBall(b.x, b.y, b.z, v.vx, v.vy, v.vz, spin.wx, spin.wy, spin.wz), 2.5), tb = pr.ev.filter(e => e.t === 'table');
+    if (!(tb.length >= 2 && tb[0].side === s && tb[1].side === -s && !pr.ev.some(e => e.t === 'net' || e.t === 'cord'))) continue;
+    const sp = Math.hypot(v.vx, v.vy, v.vz), c = Math.abs(tb[1].x - want2.x) + Math.abs(tb[1].z - want2.z) + Math.abs(sp - (6 + 9 * fast)) * 0.12;
+    if (!best || c < best.c) best = { c, v };
   }
-  if (!chosen) { const spin = { wx: -s * 40, wy: 0, wz: 0 }; chosen = { v: solve({ x: b.x, y: b.y, z: b.z }, 0, s * 0.7, 0.32, spin), spin }; }
-  const v = chosen.v; v.vx += gauss() * err * 0.5; if (err > 0.18) v.vz *= 1 + gauss() * 0.06;
-  Object.assign(b, { vx: v.vx, vy: v.vy, vz: v.vz, ...chosen.spin });
+  const v = best ? best.v : solve({ x: b.x, y: b.y, z: b.z }, 0, s * 0.7, 0.32, spin);
+  const err = (1 - q) * 0.25 + Math.max(0, p - 1.1) * 0.3;
+  v.vx += gauss() * err * 0.5; if (err > 0.18) v.vz *= 1 + gauss() * 0.06;
+  Object.assign(b, { vx: v.vx, vy: v.vy, vz: v.vz, ...spin });
+  if (DEBUG) (G.log = G.log || []).push(`${G.time.toFixed(2)} SERVE v=${[v.vx, v.vy, v.vz].map(x => x.toFixed(2))} best=${!!best} p=${p.toFixed(2)} tx=${tx} b=${[b.x, b.y, b.z].map(x => x.toFixed(2))}`);
   G.netHit = false; G.lastHitter = i; G.bounces = []; G.ideal = null; G.pendingHit = null; G.toss = null; G.phase = 'rally';
-  snd('hit', 0.6); planReceive();
+  if (!(G.lastHit && G.lastHit.re)) snd('hit', 0.6); planReceive();
+  if (G.players[i].kind !== 'cpu') shotTip(`Battuta ${fast > 0.66 ? 'forte' : fast > 0.33 ? 'media' : 'corta'}${Math.abs(want2.x) > 0.35 ? ' angolata' : ''}${Math.abs(side) > 0.4 ? ' con effetto' : ''} · ${(Math.hypot(v.vx, v.vy, v.vz) * 3.6).toFixed(0)} km/h`);
 }
 // prevede dove e quando l'avversario potrà colpire
 function planReceive() {
@@ -436,11 +469,21 @@ function planReceive() {
   const needed = G.serving ? 2 : 1;
   const bounce = tb[needed - 1];
   if (!bounce || bounce.side !== s || (G.serving && tb[0].side !== -s)) { G.ideal = null; if (DEBUG) (G.log = G.log || []).push(`${G.time.toFixed(2)} noplan ` + tb.map(e => e.side).join(',') + ' ' + pr.ev.map(e=>e.t).join(',')); return; }
-  const after = pr.pts.filter(q => q.t > bounce.time);
   const second = tb[needed] ? tb[needed].time : 9;
-  let hit = after.find(q => s * q.z > T.L / 2 + 0.12 && q.t < second) || after.find(q => q.vy < 0 && q.y < T.H + 0.3 && q.t < second - 0.04) || after[Math.floor(after.length * 0.3)];
-  if (!hit) { G.ideal = null; return; }
-  G.ideal = { who: r, t: G.time + hit.t, x: hit.x, y: hit.y, z: hit.z };
+  const after = pr.pts.filter(q => q.t > bounce.time + 0.03 && q.t < second - 0.02);
+  // come un giocatore vero: si colpisce dietro la fine del tavolo, all'altezza comoda (vicino al punto più alto)
+  let hit = null, best = 1e9;
+  for (const q of after) {
+    const dz = s * q.z - T.L / 2; if (dz < 0.05 || dz > 1.0 || q.y < 0.8 || q.y > 1.55) continue;
+    const c = Math.abs(dz - 0.32) + Math.abs(q.y - 1.05) * 0.8; if (c < best) { best = c; hit = q; }
+  }
+  // palla corta: ci si allunga sopra il bordo del tavolo
+  if (!hit) for (const q of after) { if (s * q.z > T.L / 2 - 0.45 && q.y > T.H + 0.1 && (!hit || q.y > hit.y)) hit = q; }
+  if (!hit) { G.ideal = null; if (DEBUG) (G.log = G.log || []).push(`${G.time.toFixed(2)} unreachable`); return; }
+  const a = avatars[r], dir = r === 0 ? 1 : -1;
+  // dritto o rovescio si decide subito, da dove arriva la palla rispetto a dove sei: poi ti sposti di conseguenza
+  const side = a ? ((hit.x - a.x) * dir >= -0.12 ? 1 : -1) : 1;
+  G.ideal = { who: r, t: G.time + hit.t, x: hit.x, y: hit.y, z: hit.z, side };
   if (DEBUG) (G.log = G.log || []).push(`${G.time.toFixed(2)} plan ${r} at ${G.ideal.t.toFixed(2)} y=${hit.y.toFixed(2)} z=${hit.z.toFixed(2)}`);
   if (G.players[r].kind === 'cpu') scheduleCpu(r);
 }
@@ -560,7 +603,7 @@ function frame(now) {
   updateRings(dt);
   animateAvatars(dt);
   updateCamera(dt);
-  composer.render();
+  if (!NORENDER) composer.render();
 }
 function updateCamera(dt) {
   const b = G.ball;
@@ -569,7 +612,7 @@ function updateCamera(dt) {
   else if (G.view === 'tv') { _p.set(3.4, 2.3, (b ? b.z : 0) * 0.15); _l.set(0, 0.85, (b ? b.z : 0) * 0.25); }
   else { // prima persona: occhi del giocatore vicino, segue un po' la palla
     const ax = avatars[0] ? avatars[0].x : 0;
-    _p.set(ax * 0.8 + 0.1, 1.42, T.L / 2 + 0.85);
+    _p.set(ax * 0.8 + 0.1, 1.42, (avatars[0] ? avatars[0].z ?? T.L / 2 + 0.65 : T.L / 2 + 0.65) + 0.2);
     _l.set((b ? b.x : 0) * 0.35 + ax * 0.3, 0.86 + (b ? Math.max(0, b.y - 1) * 0.3 : 0), -0.8);
   }
   const k = 1 - Math.exp(-dt * (G.view === 'tv' ? 4 : 7)); G.camPos.lerp(_p, k); G.camLook.lerp(_l, k);

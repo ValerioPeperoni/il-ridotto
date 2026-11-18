@@ -1,3 +1,6 @@
+// versione: se il telefono ha in memoria file vecchi, si ricarica da solo con quelli nuovi
+const BUILD = '202611180155';
+fetch('build.txt?' + Date.now(), { cache: 'no-store' }).then(r => r.ok ? r.text() : '').then(v => { v = (v || '').trim(); if (v && v !== BUILD && sessionStorage.getItem('ridotto-reload') !== v) { sessionStorage.setItem('ridotto-reload', v); const u = new URL(location.href); u.searchParams.set('_v', v); location.replace(u.href); } }).catch(() => { });
 // Telefono come controller di movimento (bowling; in futuro ping pong).
 import { joinRoom } from './net.js';
 
@@ -44,7 +47,7 @@ function onMsg(m) {
   if (m.t === 'cvl') { game = 'caos'; view3D().then(v => v && v.onLooks(m)); return; }
   if (m.t === 'cv') { if (V3) V3.onSnap(m); return; }
   if (m.t === 'cfx') { if (V3) V3.onFx(m); return; }
-  if (m.t === 'pong') { game = 'pong'; show('pong'); pServing = !!m.serving; $('#pScore').textContent = `${m.score[0]} - ${m.score[1]}`; $('#pInfo').textContent = m.serving ? 'Tocca a te battere: premi LANCIA, poi colpisci quando la palla scende' : `contro ${m.vs}`; $('#pToss').classList.toggle('hide', !m.serving); if (m.serving) { vibrate(50); calibrate(); } return; }
+  if (m.t === 'pong') { game = 'pong'; show('pong'); pServing = !!m.serving; $('#pScore').textContent = `${m.score[0]} - ${m.score[1]}`; $('#pInfo').textContent = m.serving ? 'Tocca a te battere: premi LANCIA, poi colpisci quando la palla scende' : `contro ${m.vs}`; $('#pToss').classList.toggle('hide', !m.serving); pongFace(); if (m.serving) { vibrate(50); calibrate(); } return; }
   if (m.t === 'hi' && m.game === 'caos') view3D(); // l'isola si carica subito, mentre si aspetta in sala
   if (m.t === 'hi') { game = m.game || 'bowling'; $('#waitT').textContent = `Ciao ${m.name}! Aspetta che parta la partita`; color = m.color || color; document.documentElement.style.setProperty('--me', color); }
   else if (m.t === 'full' || m.t === 'kicked') { $('#waitT').textContent = m.text || 'Sei stato tolto dalla sala'; }
@@ -75,7 +78,7 @@ async function askMotion() {
     motionOK = true;
     const k = Math.PI / 180;
     // alpha: asse z (perpendicolare allo schermo), beta: asse x, gamma: asse y (lungo il telefono)
-    const la = e.acceleration; buf.push({ t: performance.now() / 1000, w: [r.beta * k, r.gamma * k, r.alpha * k], a: la && la.x != null ? [la.x, la.y, la.z] : null });
+    const la = e.acceleration, ga = e.accelerationIncludingGravity; buf.push({ t: performance.now() / 1000, w: [r.beta * k, r.gamma * k, r.alpha * k], a: la && la.x != null ? [la.x, la.y, la.z] : null, g: ga && ga.x != null ? [ga.x, ga.y, ga.z] : null });
     while (buf.length && buf[0].t < buf[buf.length - 1].t - 3) buf.shift();
     if (holding) liveSwing();
     if (game === 'pong') pongMotion(e);
@@ -127,18 +130,23 @@ function principalAxis(samples) {
   for (let k = 0; k < 20; k++) v = norm([dot(M[0], v), dot(M[1], v), dot(M[2], v)]);
   return v;
 }
+// Il braccio è un pendolo: si trova l'asse dell'oscillazione, il verso (il primo tratto ampio è all'indietro)
+// e l'angolo. Si lancia nel punto più basso, cioè quando la velocità in avanti smette di crescere.
 function analyse(samples) {
   if (samples.length < 6) return null;
-  const u = principalAxis(samples);
-  let th = 0, sigma = 0, prev = samples[0].t, minTh = 0; const rates = [];
-  for (const s of samples) {
-    const r = dot(s.w, u);
-    if (!sigma && Math.abs(r) > 1.5) sigma = -Math.sign(r); // il primo movimento è all'indietro
-    th += r * (s.t - prev); prev = s.t; rates.push({ t: s.t, r, th, w: s.w, a: s.a });
-  }
-  if (!sigma) sigma = 1;
+  const strong = samples.filter(s => Math.hypot(...s.w) > 1.2);
+  if (strong.length < 4) return null;
+  const u = principalAxis(strong);
+  let th = 0, sigma = 0, prev = samples[0].t; const rates = [];
+  for (const s of samples) { const r = dot(s.w, u); th += r * (s.t - prev); prev = s.t; if (!sigma && Math.abs(th) > 0.25) sigma = -Math.sign(th); rates.push({ t: s.t, r, th, w: s.w, g: s.g }); }
+  if (!sigma) return null;
+  let minTh = 0;
   for (const x of rates) { x.r *= sigma; x.th *= sigma; minTh = Math.min(minTh, x.th); }
   return { u: u.map(c => c * sigma), th: th * sigma, minTh, rates };
+}
+function forwardPhase(a) {
+  let iMin = 0; a.rates.forEach((x, i) => { if (x.th < a.rates[iMin].th) iMin = i; });
+  return a.rates.slice(iMin);
 }
 function liveSwing() {
   if (thrown) return;
@@ -147,38 +155,41 @@ function liveSwing() {
   if (!a) return;
   const m = $('#meter i'); m.style.left = (50 + Math.max(-48, Math.min(48, a.th * 30))) + '%';
   if (now - lastSend > 0.05) { lastSend = now; net && net.send({ t: 'swing', th: a.th }); }
-  // rilascio automatico: dopo essere andato indietro, il braccio torna giù andando avanti veloce
-  const last = a.rates[a.rates.length - 1];
-  if (a.minTh < -0.35 && a.th > -0.05 && last.r > 3) release(false);
+  // rilascio automatico: braccio andato indietro (almeno 20°), poi in avanti forte; si lancia appena la velocità cala
+  if (a.minTh > -0.35) return;
+  const f = forwardPhase(a); if (f.length < 3) return;
+  const peak = Math.max(...f.map(x => x.r)), last = f[f.length - 1];
+  if (peak > 2.2 && last.r < peak * 0.85 && a.th > a.minTh + 0.3) release(false);
 }
 function release(byFinger) {
+  if (thrown) return;
   const s = buf.filter(x => x.t >= holdT0);
   const a = analyse(s);
-  if (!a || !myTurn) { if (motionOK) $('#bInfo').textContent = 'Non ho sentito il movimento: riprova'; return; }
-  const tEnd = s[s.length - 1].t;
-  const lastR = a.rates.filter(x => x.t > tEnd - 0.2);
-  const peak = Math.max(0, ...lastR.map(x => x.r));
-  if (peak < 1.2) { $('#bInfo').textContent = 'Troppo piano: braccio indietro e poi avanti, deciso'; net && net.send({ t: 'swing', th: 0 }); return; }
+  if (!a || !myTurn) { if (motionOK) $('#bInfo').textContent = 'Non ho sentito il movimento: tieni premuto, braccio indietro e poi avanti'; return; }
+  const f = forwardPhase(a);
+  const peak = Math.max(0, ...f.map(x => x.r));
+  if (peak < 1.5 || f.length < 3) { $('#bInfo').textContent = 'Troppo piano: braccio indietro e poi avanti, deciso'; net && net.send({ t: 'swing', th: 0 }); return; }
   thrown = true;
-  // Effetto e direzione: integriamo le rotazioni durante la sola spinta in avanti (dal punto più
-  // indietro al rilascio). Effetto = quanto ruoti il telefono attorno al suo lato lungo
-  // (come girare una maniglia); direzione = quanto il braccio va di lato.
-  let iMin = 0; a.rates.forEach((x, i) => { if (x.th < a.rates[iMin].th) iMin = i; });
-  const fwd = a.rates.slice(iMin);
-  const longAx = norm([0, 1, 0].map((c, i) => c - a.u[i] * a.u[1])); // lato lungo del telefono, tolta l'oscillazione
-  const side = norm(cross(a.u, longAx));
-  let roll = 0, lat = 0, swing = 0;
-  for (let i = 1; i < fwd.length; i++) { const dt = fwd[i].t - fwd[i - 1].t, w = fwd[i].w; roll += dot(w, longAx) * dt; lat += dot(w, side) * dt; swing += dot(w, a.u) * dt; }
-  let dir = Math.atan2(lat, Math.max(0.3, Math.abs(swing))); if (flipDir) dir = -dir; // + = destra
-  let hook = Math.max(-1, Math.min(1, -roll / 0.9)); if (flipHook) hook = -hook;          // 0.9 rad ≈ 50° = effetto pieno
+  // asse del braccio (dal telefono verso la spalla): lì puntano la gravità e la forza centripeta nel tratto veloce
+  let ax = [0, 0, 0];
+  for (const x of f) if (x.g) { const k = x.r * x.r; ax = ax.map((c, i) => c + x.g[i] * k); }
+  if (Math.hypot(...ax) < 1e-3) ax = [0, 1, 0];
+  let arm = norm(ax); arm = norm(arm.map((c, i) => c - a.u[i] * dot(arm, a.u)));
+  const lateral = cross(a.u, arm); // verso destra
+  let twist = 0, lat = 0, swing = 0;
+  for (let i = 1; i < f.length; i++) { const dt = f[i].t - f[i - 1].t, w = f[i].w; twist += dot(w, arm) * dt; lat += dot(w, lateral) * dt; swing += dot(w, a.u) * dt; }
+  let dir = Math.atan2(lat, Math.max(0.4, Math.abs(swing))); if (flipDir) dir = -dir; // + = destra
+  // polso girato in senso antiorario (visto dall'alto) = la palla curva a sinistra
+  let hook = Math.max(-1, Math.min(1, -twist / 0.8)); if (flipHook) hook = -hook;
   if (spinKeys) hook = spin;
-  else if (Math.abs(hook) < 0.15) hook = 0;
-  const timing = 0.1; // conta solo la forza del gesto: il momento in cui alzi il dito non penalizza
-  const msg = { t: 'throw', power: Math.min(1.25, peak / 9.5), hook, timing, pull: Math.max(-0.05, Math.min(0.05, dir * 0.12)) };
+  else if (Math.abs(hook) < 0.22) hook = 0;
+  const power = Math.max(0.08, Math.min(1.2, (peak - 2.2) / 8.5));
+  const msg = { t: 'throw', power, hook, timing: 0.1, pull: Math.max(-0.06, Math.min(0.06, dir * 0.15)) };
   net && net.send(msg); myTurn = false; vibrate(40);
-  const dTxt = Math.abs(dir) < 0.05 ? 'dritta' : dir < 0 ? 'verso sinistra' : 'verso destra';
+  const kmh = (2.8 + power * 6.7) * 3.6;
+  const dTxt = Math.abs(dir) < 0.06 ? 'dritta' : dir < 0 ? 'verso sinistra' : 'verso destra';
   const hTxt = hook === 0 ? 'senza effetto' : hook < 0 ? 'effetto a sinistra' : 'effetto a destra';
-  $('#bInfo').textContent = `Potenza ${(msg.power * 100).toFixed(0)}% · ${dTxt} · ${hTxt}`;
+  $('#bInfo').textContent = `${kmh.toFixed(0)} km/h · ${dTxt} · ${hTxt}`;
   holding = false; hold.classList.remove('on');
 }
 $('#flip').onclick = () => { flipHook = !flipHook; store.set('ridotto-flip', flipHook ? '1' : '0'); drawFlips(); };
@@ -211,11 +222,12 @@ function pongMotion(e) {
   if (ag && ag.x != null && mag < 2) { const n = norm([ag.x, ag.y, ag.z]); gUp = norm(gUp.map((v, i) => v * 0.9 + n[i] * 0.1)); }
   let lin = la && la.x != null ? [la.x, la.y, la.z] : ag && ag.x != null ? [ag.x - gUp[0] * 9.81, ag.y - gUp[1] * 9.81, ag.z - gUp[2] * 9.81] : [0, 0, 0];
   // appena il gesto parte lo diciamo subito allo schermo: conta l'inizio, non la fine (così il Wi-Fi non fa ritardo)
-  if (!swingS && mag > 4.5 && t > coolUntil) { swingS = { peak: mag, tPeak: t, wPeak: w, acc: [] }; net && net.send({ t: 'sw0', ago: 0 }); vibrate(12); }
+  const linM = Math.hypot(...lin);
+  if (!swingS && (mag > 3.8 || linM > 14) && t > coolUntil) { swingS = { peak: mag, tPeak: t, wPeak: w, acc: [] }; net && net.send({ t: 'sw0', ago: 0 }); vibrate(12); }
   if (swingS) {
     swingS.acc.push({ t, up: dot(lin, gUp) });
     if (mag > swingS.peak) { swingS.peak = mag; swingS.tPeak = t; swingS.wPeak = w; }
-    if (mag < swingS.peak * 0.55 || t - swingS.tPeak > 0.12) {
+    if (mag < swingS.peak * 0.7 || t - swingS.tPeak > 0.06) {
       const s = swingS; swingS = null; coolUntil = t + 0.35;
       const ups = s.acc.filter(a => a.t >= s.tPeak - 0.15 && a.t <= s.tPeak + 0.03);
       const vert = Math.max(-1, Math.min(1, ups.reduce((a, b) => a + b.up, 0) / Math.max(1, ups.length) / 12));
@@ -230,7 +242,7 @@ function pongMotion(e) {
 }
 // col dito: strisciata sulla racchetta
 const pr = $('#pRacket'); let ps = null;
-pr.addEventListener('pointerdown', e => { pr.setPointerCapture(e.pointerId); ps = [{ t: performance.now(), x: e.clientX, y: e.clientY }]; });
+pr.addEventListener('pointerdown', e => { if (pServing) { $('#pToss').onclick(); return; } pr.setPointerCapture(e.pointerId); ps = [{ t: performance.now(), x: e.clientX, y: e.clientY }]; });
 pr.addEventListener('pointermove', e => { if (!ps) return; const n = performance.now(); ps.push({ t: n, x: e.clientX, y: e.clientY }); while (ps.length > 2 && n - ps[0].t > 90) ps.shift(); });
 pr.addEventListener('pointerup', () => {
   if (!ps || ps.length < 2) { ps = null; return; }
@@ -318,7 +330,7 @@ function caosState(m) {
   document.documentElement.style.setProperty('--me', m.color || color);
   $('#cTitle').textContent = `Buca ${m.hole}`;
   $('#cInfo').textContent = `${m.strokes} colpi · ${m.score} punti`;
-  const st = { frozen: '❄️ Congelato!', ko: '💫 Sei a terra!', done: '⛳ In buca!', addr: 'Mira e tira', charge: 'Lascia per tirare!' }[m.state] || (m.near ? 'Sei alla palla' : '');
+  const st = { frozen: '❄️ Congelato!', ko: '💫 Sei a terra!', done: '⛳ In buca! Ora dai fastidio agli altri: mazzate e poteri', addr: 'Mira e tira', charge: 'Lascia per tirare!' }[m.state] || (m.near ? 'Sei alla palla' : '');
   $('#cState').textContent = st; $('#cState').style.visibility = st ? '' : 'hidden';
   cBtn.innerHTML = m.near || m.state === 'addr' || m.state === 'charge' ? 'TIRA<br><small style="font-size:13px;font-weight:500">tieni, trascina<br>giù e lascia</small>' : 'MAZZATA';
   const it = $('#cItem'); it.textContent = m.item || 'nessun oggetto'; it.classList.toggle('on', !!m.item);
@@ -361,5 +373,6 @@ addEventListener('deviceorientation', e => {
 });
 async function askOrientation() { try { if (typeof DeviceOrientationEvent !== 'undefined' && typeof DeviceOrientationEvent.requestPermission === 'function') await DeviceOrientationEvent.requestPermission(); } catch (e) { } }
 $('#enter').addEventListener('click', askOrientation);
-$('#pToss').onclick = () => { calibrate(); net && net.send({ t: 'toss' }); vibrate(30); $('#pToss').classList.add('hide'); };
+$('#pToss').onclick = () => { calibrate(); net && net.send({ t: 'toss' }); vibrate(30); $('#pToss').classList.add('hide'); pServing = false; pongFace(); };
+function pongFace() { $('#pRacket').innerHTML = pServing ? 'TOCCA QUI<br>per lanciare<br><small style="font-weight:400;font-size:15px">poi colpisci quando scende</small>' : 'Colpisci<br>quando arriva<br><small style="font-weight:400;font-size:15px">su = palla carica · giù = schiacciata</small>'; $('#pRacket').style.background = pServing ? 'radial-gradient(circle at 40% 35%,#ffe27a,#ffb300 60%,#a86f00)' : ''; }
 $('#pCal').onclick = () => { calibrate(); vibrate(20); };

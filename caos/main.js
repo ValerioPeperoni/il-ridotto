@@ -6,8 +6,9 @@ import { UnrealBloomPass } from 'three/addons/postprocessing/UnrealBloomPass.js'
 import { OutputPass } from 'three/addons/postprocessing/OutputPass.js';
 import { HOLES, S, W, D, X0, Z0, WATER, heightAt, normalAt, surfAt, terrainMesh, GREEN_R, fairDist } from './course.js';
 import { loadNature, trunks, wind } from './nature.js';
+import { propZones, loadProps } from './props.js';
 import * as FX from './fx.js';
-import { buildWorld, ITEMS, boxGeo, boxMat, makeClub } from './world.js';
+import { buildWorld, ITEMS, boxGeo, boxMat, makeClub, makeRocket } from './world.js';
 import { hostRoom, randomCode } from '../net.js';
 import { savedProfile } from '../avatar/avatar.js';
 import { loadSportLibrary as loadAvatarLibrary, makeSportsmate, randomSport as randomLook } from '../avatar/sport.js';
@@ -55,10 +56,10 @@ function placeBoxes(hole) {
   }
   for (const [x, z] of pts) { const m = new THREE.Mesh(boxGeo, boxMat); m.castShadow = true; m.position.set(x, heightAt(x, z) + 1.1, z); scene.add(m); boxes.push({ m, x, z, t: 0, gone: 0 }); }
 }
-function randomItem() { const tot = Object.values(ITEMS).reduce((a, b) => a + b.w, 0); let r = Math.random() * tot; for (const [k, v] of Object.entries(ITEMS)) { r -= v.w; if (r <= 0) return k; } return 'bomba'; }
+function randomItem(p) { const list = Object.entries(ITEMS).filter(([k]) => !(p && p.done && ITEMS[k].own)); const tot = list.reduce((a, b) => a + b[1].w, 0); let r = Math.random() * tot; for (const [k, v] of list) { r -= v.w; if (r <= 0) return k; } return 'bomba'; }
 
 // ---------- stato ----------
-const G = { phase: 'loading', players: [], hole: 0, nHoles: 6, time: 0, finishOrder: [], clock: 0, mines: [], missiles: [], bombs: [], shake: 0, intro: 0 };
+const G = { phase: 'loading', players: [], hole: 0, nHoles: 6, time: 0, finishOrder: [], clock: 0, mines: [], missiles: [], bombs: [], bananas: [], shake: 0, intro: 0 };
 const camPos = new THREE.Vector3(0, 60, 120), camLook = new THREE.Vector3(), camShake = new THREE.Vector3();
 const shake = k => { G.shake = Math.max(G.shake, k); };
 
@@ -67,7 +68,7 @@ function newPlayer(o) {
 }
 function ensureAvatar(p) {
   if (p.av) return;
-  p.av = makeSportsmate(p.sport || p.look, { height: AV_H });
+  p.av = makeSportsmate(p.sport || p.look, { height: AV_H }); p.baseScale = p.av.root.scale.x;
   { const play = p.av.play; p.clipN = 0; p.av.play = (n, o) => { p.clip = n; p.clipN++; return play(n, o); }; }
   p.av.root.traverse(o => { if (o.isMesh) o.castShadow = true; });
   const hand = p.av.bones.hand_r;
@@ -264,7 +265,9 @@ function startHole() {
   for (const m of G.mines) scene.remove(m.m); G.mines = [];
   for (const x of G.missiles) scene.remove(x.m); G.missiles = [];
   for (const x of G.bombs) scene.remove(x.m); G.bombs = [];
+  for (const x of G.bananas) scene.remove(x.m); G.bananas = [];
   placeBoxes(h); G.viewSeq = (G.viewSeq || 0) + 1;
+  flags.forEach((f, i) => { f.userData.beam.visible = i === G.hole; });
   const dx = h.mid[0] - h.tee[0], dz = h.mid[1] - h.tee[1], l = Math.hypot(dx, dz), yaw = Math.atan2(dx, dz);
   G.players.forEach((p, i) => {
     const n = G.players.length, off = (i - (n - 1) / 2) * 1.3;
@@ -272,7 +275,7 @@ function startHole() {
     p.ball = { pos: new THREE.Vector3(bx, heightAt(bx, bz) + BALL_R, bz), vel: new THREE.Vector3(), air: false, moving: false, last: null, inWater: false };
     p.ball.last = p.ball.pos.clone();
     p.pos = new THREE.Vector3(bx - Math.sin(yaw) * 1.2 - Math.cos(yaw) * 0.6, 0, bz - Math.cos(yaw) * 1.2 + Math.sin(yaw) * 0.6); p.pos.y = heightAt(p.pos.x, p.pos.z);
-    p.vel = new THREE.Vector3(); p.yaw = yaw; p.aimYaw = yaw; p.state = 'walk'; p.strokes = 0; p.done = false; p.item = null; p.ko = 0; p.frozen = 0; p.charge = 0; p.chargeT = 0; p.superShot = false; p.magnet = 0; p.swipeCd = 0; p.fly = null;
+    p.vel = new THREE.Vector3(); p.yaw = yaw; p.aimYaw = yaw; p.state = 'walk'; p.strokes = 0; p.done = false; p.item = null; p.ko = 0; p.frozen = 0; p.charge = 0; p.chargeT = 0; p.superShot = false; p.magnet = 0; p.swipeCd = 0; p.fly = null; p.giant = 0; if (p.baseScale) p.av.root.scale.setScalar(p.baseScale);
     p.av.root.visible = true; p.ballMesh.visible = true; p.ballRing.visible = true; p.ballPin.visible = true;
     p.av.play('Idle', { fade: 0.1 }); p.anim = 'Idle';
     unfreeze(p);
@@ -358,11 +361,12 @@ function updatePlayer(p, dt) {
     p.fly.v.y -= 20 * dt; p.pos.addScaledVector(p.fly.v, dt);
     const gh = heightAt(p.pos.x, p.pos.z); if (p.pos.y <= gh && p.fly.v.y < 0) { p.pos.y = gh; p.fly = null; FX.puff(p.pos.clone(), undefined, 6, 0.8); }
   }
-  if (p.ko > 0) { p.ko -= dt; if (p.ko <= 0) { p.av.play('Idle', { fade: 0.3 }); p.anim = 'Idle'; p.state = 'walk'; } }
+  if (p.ko > 0) { p.ko -= dt; if (p.ko <= 0) { p.av.play('Idle', { fade: 0.3 }); p.anim = 'Idle'; p.state = p.done ? 'done' : 'walk'; } }
+  if (p.giant > 0) { p.giant -= dt; const k = p.giant > 0 ? Math.min(2.2, p.av.root.scale.x / p.baseScale + dt * 4) : 1; p.av.root.scale.setScalar(p.baseScale * Math.max(1, k)); if (p.giant <= 0) p.av.root.scale.setScalar(p.baseScale); }
   if (p.frozen > 0) { p.frozen -= dt; if (p.frozen <= 0) unfreeze(p); }
   const stunned = p.ko > 0 || p.frozen > 0 || p.fly;
   // oggetto
-  if (inp.item) { inp.item = false; if (p.item && !stunned && !p.done && G.phase === 'play') useItem(p); }
+  if (inp.item) { inp.item = false; if (p.item && !stunned && G.phase === 'play') useItem(p); }
   if (G.phase !== 'play') { inp.btn = false; }
   // vicino alla palla?
   const dBall = Math.hypot(p.pos.x - b.pos.x, p.pos.z - b.pos.z);
@@ -377,7 +381,8 @@ function updatePlayer(p, dt) {
   }
   if (p.state === 'addr' || p.state === 'charge') {
     // mira: joystick/AD ruotano, il mouse pure
-    p.aimYaw -= (inp.x * 1.4 * dt) + inp.aim; inp.aim = 0;
+    const turnBy = inp.x * Math.abs(inp.x) * 1.3 * dt + inp.aim; inp.aim = 0;
+    p.aimYaw -= turnBy; if (p.slingOn) p.slingBase -= turnBy;
     // posizione di tiro accanto alla palla
     const tx = b.pos.x - Math.cos(p.aimYaw) * 0.75 - Math.sin(p.aimYaw) * 0.15, tz = b.pos.z + Math.sin(p.aimYaw) * 0.75 - Math.cos(p.aimYaw) * 0.15;
     p.pos.x += (tx - p.pos.x) * Math.min(1, dt * 10); p.pos.z += (tz - p.pos.z) * Math.min(1, dt * 10);
@@ -402,7 +407,7 @@ function updatePlayer(p, dt) {
     if (inp.cy != null) { _f.set(Math.sin(inp.cy), 0, Math.cos(inp.cy)); _r.set(-_f.z, 0, _f.x); } else camAxes(); // telefono con la sua visuale: rispetto alla sua telecamera
     const mx = _r.x * inp.x + _f.x * inp.y, mz = _r.z * inp.x + _f.z * inp.y, ml = Math.hypot(mx, mz);
     const s = surfAt(p.pos.x, p.pos.z), wet = s === S.WATER, sandy = s === S.SAND;
-    const speed = (wet ? 2.5 : sandy ? 4.2 : 7.2) * Math.min(1, ml);
+    const speed = (wet ? 2.5 : sandy ? 4.2 : 7.2) * Math.min(1, ml) * (p.giant > 0 ? 1.25 : 1);
     const tvx = ml > 0.2 ? mx / ml * speed : 0, tvz = ml > 0.2 ? mz / ml * speed : 0;
     p.vel.x += (tvx - p.vel.x) * Math.min(1, dt * 10); p.vel.z += (tvz - p.vel.z) * Math.min(1, dt * 10);
     if (!p.fly) { p.pos.x += p.vel.x * dt; p.pos.z += p.vel.z * dt; }
@@ -411,7 +416,9 @@ function updatePlayer(p, dt) {
     if (!p.fly) playAnim(p, p.done && sp < 0.5 ? (p.anim === 'Cheer' ? 'Cheer' : 'Idle') : sp > 4 ? 'Running_A' : sp > 0.5 ? 'Walking_A' : 'Idle');
     if (p.av.mixer) { const a = p.av.mixer._actions.find(x => x.isRunning() && x.getClip().name === 'Sprint_Loop'); if (a) a.timeScale = sp / 7; }
     // mazzata a chi è vicino (lontano dalla palla)
-    if (inp.btn && !p.btnWas && dBall > 3 && p.swipeCd <= 0 && G.phase === 'play' && G.holeT > 2) swipe(p);
+    if (inp.btn && !p.btnWas && (dBall > 3 || p.done) && p.swipeCd <= 0 && G.phase === 'play' && G.holeT > 2) swipe(p);
+    // da gigante travolgi chi tocchi
+    if (p.giant > 0) for (const q of G.players) if (q !== p && !(q.ko > 0) && q.pos.distanceTo(p.pos) < 1.9) { knock(q, p.pos, 12, 2.2); p.kos++; p.score++; FX.sound('whack'); shake(0.25); renderBoard(); }
   }
   p.idleT = moveIn ? 0 : (p.idleT || 0) + dt;
   p.btnWas = inp.btn;
@@ -423,7 +430,7 @@ function updatePlayer(p, dt) {
     p.pos.x -= p.vel.x * dt * 2; p.pos.z -= p.vel.z * dt * 2;
   }
   // casse
-  if (!p.item && !p.done) for (const bx of boxes) if (!bx.gone && Math.hypot(p.pos.x - bx.x, p.pos.z - bx.z) < 1.3) { bx.gone = 8; bx.m.visible = false; p.item = randomItem(); FX.sound('item'); FX.sparkle(bx.m.position.clone(), new THREE.Color(1.6, 1.2, 0.3)); if (p.kind !== 'bot') tip(`${p.name} ha preso: ${ITEMS[p.item].icon} ${ITEMS[p.item].name}`); }
+  if (!p.item) for (const bx of boxes) if (!bx.gone && Math.hypot(p.pos.x - bx.x, p.pos.z - bx.z) < 1.3) { bx.gone = 8; bx.m.visible = false; p.item = randomItem(p); FX.sound('item'); FX.sparkle(bx.m.position.clone(), new THREE.Color(1.6, 1.2, 0.3)); if (p.kind !== 'bot') tip(`${p.name} ha preso: ${ITEMS[p.item].icon} ${ITEMS[p.item].name}`); }
   // mine
   for (const mn of G.mines) if (mn.armed && mn.owner !== p && !mn.done && Math.hypot(p.pos.x - mn.x, p.pos.z - mn.z) < 1.2) { mn.done = true; scene.remove(mn.m); boom(new THREE.Vector3(mn.x, heightAt(mn.x, mn.z), mn.z), 4.5, mn.owner); }
   p.av.root.position.copy(p.pos); p.av.root.rotation.y = p.yaw;
@@ -443,7 +450,7 @@ function autoAim(p) {
 function shoot(p) {
   const b = p.ball, power = Math.max(0.04, p.charge);
   b.last = b.pos.clone(); b.vel.copy(shotVel(p, power, p.aimYaw)); b.moving = true; b.air = !onGreen(b.pos); b.inWater = false; b.ghost = p.superShot; b.superT = p.superShot ? 4 : 0;
-  p.superShot = false; p.strokes++; p.state = 'swing'; p.charge = 0; p.swingT = 0.5;
+  p.superShot = false; p.triedItem = false; p.strokes++; p.state = 'swing'; p.charge = 0; p.swingT = 0.5;
   p.av.play('TreeChopping_Loop', { once: true, fade: 0.08, speed: 1.5, then: 'Idle_Loop' }); p.anim = 'swing';
   FX.sound(onGreen(b.pos) ? 'putt' : 'hit', 0.8 + power * 0.4); FX.sound('swish', power);
   if (power > 0.9) FX.sparkle(b.pos.clone(), new THREE.Color(2, 1.8, 0.6), 10);
@@ -457,7 +464,14 @@ function updateBall(p, dt) {
     const steps = 4; for (let i = 0; i < steps; i++) {
       ballStep(b, dt / steps, ev, { ghost: b.ghost, magnet: p.magnet > 0 ? c : null });
       const dc = Math.hypot(b.pos.x - c.x, b.pos.z - c.z), sp = b.vel.length();
-      if (dc < CUP_R && b.pos.y < c.y + 0.6) { if (sp < 7) { playerSunk(p); return; } else { b.vel.y += 1.5; } }
+      if (dc < CUP_R * 1.15 && b.pos.y < c.y + 0.45) {
+        const hs = Math.hypot(b.vel.x, b.vel.z);
+        // entra se rotola non troppo forte, o se ci cade dentro dall'alto (schiacciata alla GWYF)
+        if (hs < 6 || (b.vel.y < -1 && hs < 11)) { playerSunk(p); return; }
+        if (!(b.lipT > G.time)) { b.lipT = G.time + 0.35; const a = (Math.random() - 0.5) * 0.6, ca = Math.cos(a), sa = Math.sin(a); const vx = b.vel.x * ca - b.vel.z * sa, vz = b.vel.x * sa + b.vel.z * ca; b.vel.x = vx * 0.72; b.vel.z = vz * 0.72; b.vel.y = Math.max(b.vel.y, 0.9); FX.sound('bounce', 0.6); }
+      } else if (dc < CUP_R * 3 && !b.air && sp < 2.2) { // imbuto: la buca attira un po' le palle lente che passano vicino
+        b.vel.x += (c.x - b.pos.x) / dc * 1.6 * dt / steps; b.vel.z += (c.z - b.pos.z) / dc * 1.6 * dt / steps;
+      }
       if (b.inWater) break;
     }
     for (const e of ev) { if (e.t === 'bounce' && e.v > 2) FX.sound('bounce', Math.min(1.5, e.v / 6)); if (e.t === 'bounce' && e.s === S.SAND) FX.puff(b.pos.clone(), new THREE.Color(0.95, 0.88, 0.7), 6, 0.5); if (e.t === 'tree') FX.sound('whack'); }
@@ -480,7 +494,7 @@ function updateBall(p, dt) {
 
 // ---------- mazzate, oggetti ----------
 function knock(p, from, force, ko = 2.4) {
-  if (p.done || p.ko > 0) return;
+  if (p.ko > 0 || p.giant > 0) return;
   if (DEBUG) console.log('knock', p.name, new Error().stack.split('\n')[2]);
   const d = p.pos.clone().sub(from); d.y = 0; const l = d.length() || 1; d.multiplyScalar(1 / l);
   p.fly = { v: new THREE.Vector3(d.x * force, 5 + force * 0.5, d.z * force) }; p.ko = ko; p.state = 'ko';
@@ -492,7 +506,7 @@ function swipe(p) {
   playAnim(p, '1H_Melee_Attack_Slice_Horizontal'); p.anim = 'swipe'; setTimeout(() => { if (p.anim === 'swipe') p.anim = ''; }, 500);
   const fx = Math.sin(p.yaw), fz = Math.cos(p.yaw);
   for (const q of G.players) {
-    if (q === p || q.done) continue; const dx = q.pos.x - p.pos.x, dz = q.pos.z - p.pos.z, d = Math.hypot(dx, dz);
+    if (q === p) continue; const dx = q.pos.x - p.pos.x, dz = q.pos.z - p.pos.z, d = Math.hypot(dx, dz);
     if (d < 2.2 && (dx * fx + dz * fz) / (d || 1) > 0.2) { knock(q, p.pos, 9); p.kos++; p.score++; FX.sound('whack'); shake(0.3); renderBoard(); }
   }
   for (const q of G.players) { // anche le palle degli altri vicine volano via
@@ -504,23 +518,20 @@ function boom(pos, r, owner) {
   FX.explosion(pos.clone().setY(pos.y + 0.4), r, { shake }); viewFx({ k: 'boom', x: r2(pos.x), y: r2(pos.y + 0.4), z: r2(pos.z), r });
   for (const q of G.players) {
     const d = q.pos.distanceTo(pos);
-    if (d < r && !q.done) { knock(q, pos, 14 * (1 - d / r) + 6, 2.6); if (owner && owner !== q) { owner.kos++; owner.score++; } }
+    if (d < r) { knock(q, pos, 14 * (1 - d / r) + 6, 2.6); if (owner && owner !== q) { owner.kos++; owner.score++; } }
     const b = q.ball; const db = b.pos.distanceTo(pos);
     if (!q.done && db < r * 1.2) { const dir = b.pos.clone().sub(pos); dir.y = 0; dir.normalize(); b.last = b.moving ? b.last : b.pos.clone(); b.vel.set(dir.x * 12 * (1 - db / (r * 1.2)) + dir.x * 3, 7, dir.z * 12 * (1 - db / (r * 1.2)) + dir.z * 3); b.moving = true; b.air = true; }
   }
   renderBoard();
 }
-function nearestFoe(p, maxD = 80) { let best = null, bd = maxD; for (const q of G.players) { if (q === p || q.done) continue; const d = q.pos.distanceTo(p.pos); if (d < bd) { bd = d; best = q; } } return best; }
+function nearestFoe(p, maxD = 80) { let best = null, bd = maxD; for (const q of G.players) { if (q === p) continue; const d = q.pos.distanceTo(p.pos); if (d < bd) { bd = d; best = q; } } return best; }
 function useItem(p) {
   const it = p.item; p.item = null; FX.sound('item');
   const head = p.pos.clone().setY(p.pos.y + 1.4);
   if (it === 'razzo') {
     const tgt = nearestFoe(p, 140);
-    const m = new THREE.Group();
-    const body = new THREE.Mesh(new THREE.CylinderGeometry(0.16, 0.16, 0.9, 12), new THREE.MeshStandardMaterial({ color: 0xe8e8f0, metalness: 0.3, roughness: 0.4 })); body.rotation.x = Math.PI / 2; m.add(body);
-    const nose = new THREE.Mesh(new THREE.ConeGeometry(0.16, 0.35, 12), new THREE.MeshStandardMaterial({ color: 0xe8243c })); nose.rotation.x = Math.PI / 2; nose.position.z = 0.62; m.add(nose);
-    for (let k = 0; k < 4; k++) { const fin = new THREE.Mesh(new THREE.BoxGeometry(0.02, 0.22, 0.25), new THREE.MeshStandardMaterial({ color: 0xe8243c })); fin.position.z = -0.35; fin.rotation.z = k * Math.PI / 2; fin.position.x = Math.cos(k * Math.PI / 2) * 0.16; fin.position.y = Math.sin(k * Math.PI / 2) * 0.16; m.add(fin); }
-    m.position.copy(head); m.traverse(o => { if (o.isMesh) o.castShadow = true; }); scene.add(m);
+    const m = makeRocket(new THREE.Color(p.color).getHex());
+    m.position.copy(head); scene.add(m);
     const v = new THREE.Vector3(Math.sin(p.yaw), 0.6, Math.cos(p.yaw)).normalize().multiplyScalar(14);
     G.missiles.push({ m, v, tgt, owner: p, t: 0 }); FX.sound('launch');
     if (p.kind !== 'bot') tip(`${p.name}: razzo${tgt ? ' su ' + tgt.name : ''}!`);
@@ -539,10 +550,30 @@ function useItem(p) {
     else { FX.beam(head, head.clone().add(new THREE.Vector3(Math.sin(p.yaw) * 20, 0, Math.cos(p.yaw) * 20))); }
   } else if (it === 'fulmine') {
     shake(0.6);
-    for (const q of G.players) if (q !== p && !q.done) { FX.lightning(q.pos.clone()); viewFx({ k: 'light', x: r2(q.pos.x), y: r2(q.pos.y), z: r2(q.pos.z) }); knock(q, q.pos.clone().add(new THREE.Vector3(0.1, 0, 0.1)), 2, 2.2); p.kos++; p.score++; }
+    for (const q of G.players) if (q !== p) { FX.lightning(q.pos.clone()); viewFx({ k: 'light', x: r2(q.pos.x), y: r2(q.pos.y), z: r2(q.pos.z) }); knock(q, q.pos.clone().add(new THREE.Vector3(0.1, 0, 0.1)), 2, 2.2); p.kos++; p.score++; }
     renderBoard(); flashScreen();
   } else if (it === 'calamita') { p.magnet = 9; FX.sparkle(p.ball.pos.clone(), new THREE.Color(2, 0.5, 0.5), 16); if (p.kind !== 'bot') tip(`${p.name}: la tua palla ora cerca la buca`); }
-  else if (it === 'super') { p.superShot = true; FX.sparkle(p.ball.pos.clone(), new THREE.Color(2, 1.8, 0.4), 16); if (p.kind !== 'bot') tip(`${p.name}: prossimo tiro potentissimo!`); }
+  else if (it === 'banana') {
+    // buccia dietro di te: chi ci passa scivola, le palle che ci rotolano sopra deviano
+    const m = makeBanana(); const bx = p.pos.x - Math.sin(p.yaw) * 1.4, bz = p.pos.z - Math.cos(p.yaw) * 1.4;
+    m.position.set(bx, heightAt(bx, bz) + 0.03, bz); m.rotation.y = Math.random() * 6; scene.add(m);
+    G.bananas.push({ m, x: bx, z: bz, owner: p, t: 0 }); FX.sound('item');
+    if (p.kind !== 'bot') tip(`${p.name}: buccia di banana!`);
+  } else if (it === 'gigante') {
+    p.giant = 8; FX.sound('launch'); FX.sparkle(p.pos.clone().setY(p.pos.y + 1), new THREE.Color(2, 1.2, 0.3), 20);
+    if (p.kind !== 'bot') tip(`${p.name} è GIGANTE: travolgi tutti!`);
+  } else if (it === 'scambio') {
+    // la tua palla si scambia con quella più vicina alla buca
+    const c = cupOf(HOLES[G.hole]); let best = null, bd = Math.hypot(p.ball.pos.x - c.x, p.ball.pos.z - c.z);
+    for (const q of G.players) { if (q === p || q.done || q.ball.moving) continue; const d = Math.hypot(q.ball.pos.x - c.x, q.ball.pos.z - c.z); if (d < bd) { bd = d; best = q; } }
+    if (best && !p.ball.moving) {
+      const a = p.ball.pos.clone(), b = best.ball.pos.clone();
+      FX.beam(a.clone().setY(a.y + 0.3), b.clone().setY(b.y + 0.3), new THREE.Color(1.6, 0.6, 2.4)); viewFx({ k: 'beam', a: [r2(a.x), r2(a.y + 0.3), r2(a.z)], b: [r2(b.x), r2(b.y + 0.3), r2(b.z)] });
+      p.ball.pos.copy(b); best.ball.pos.copy(a); p.ball.last = b.clone(); best.ball.last = a.clone();
+      FX.sparkle(a, new THREE.Color(1.6, 0.6, 2.4), 14); FX.sparkle(b, new THREE.Color(1.6, 0.6, 2.4), 14); FX.sound('freeze');
+      tip(`${p.name} si prende la palla di ${best.name}!`);
+    } else { p.item = 'scambio'; if (p.kind !== 'bot') tip('Scambio: la tua palla è già la più vicina (o si sta muovendo)'); }
+  }
   else if (it === 'mina') {
     const m = new THREE.Group();
     const base = new THREE.Mesh(new THREE.CylinderGeometry(0.35, 0.4, 0.12, 16), new THREE.MeshStandardMaterial({ color: 0x3a4030, roughness: 0.7 })); m.add(base);
@@ -551,9 +582,21 @@ function useItem(p) {
     G.mines.push({ m, led, x: p.pos.x, z: p.pos.z, owner: p, armed: false, t: 0 });
   }
 }
+function slip(q) {
+  FX.sound('whack'); FX.puff(q.pos.clone(), new THREE.Color(1, 0.95, 0.4), 8, 0.6);
+  q.fly = { v: new THREE.Vector3(Math.sin(q.yaw) * 3, 6, Math.cos(q.yaw) * 3) }; q.ko = 1.6; q.state = 'ko'; q.spin = 2.4;
+  q.av.play('Death01', { once: true, fade: 0.1 }); q.anim = 'ko';
+}
+function makeBanana() {
+  const g = new THREE.Group(), y = new THREE.MeshStandardMaterial({ color: 0xffd23a, roughness: 0.5 }), br = new THREE.MeshStandardMaterial({ color: 0x6b4a1e, roughness: 0.8 });
+  for (let k = 0; k < 3; k++) { const pg = new THREE.SphereGeometry(0.22, 10, 6, 0, Math.PI * 2, 0, Math.PI / 2); pg.scale(0.45, 0.35, 1.5); const m = new THREE.Mesh(pg, y); m.rotation.y = k * Math.PI * 2 / 3; m.rotation.x = -0.25; m.position.set(Math.sin(k * 2.09) * 0.2, 0, Math.cos(k * 2.09) * 0.2); m.lookAt(0, -0.3, 0); m.rotateX(Math.PI / 2 + 0.6); g.add(m); }
+  const c = new THREE.Mesh(new THREE.SphereGeometry(0.1, 10, 8), y); c.position.y = 0.06; g.add(c);
+  const st = new THREE.Mesh(new THREE.CylinderGeometry(0.03, 0.04, 0.12, 6), br); st.position.y = 0.16; g.add(st);
+  g.traverse(o => { if (o.isMesh) o.castShadow = true; }); return g;
+}
 function freeze(q) {
-  if (q.done) return; FX.sound('freeze');
-  q.frozen = 3.5; q.state = 'walk';
+  FX.sound('freeze');
+  q.frozen = 3.5; q.state = q.done ? 'done' : 'walk';
   if (!q.ice) { q.ice = new THREE.Mesh(new THREE.BoxGeometry(1.3, 2.1, 1.3), new THREE.MeshPhysicalMaterial({ color: 0xbfe8ff, transparent: true, opacity: 0.55, roughness: 0.05, clearcoat: 1, depthWrite: false })); scene.add(q.ice); }
   q.ice.visible = true; q.av.mixer.timeScale = 0;
 }
@@ -562,9 +605,9 @@ function flashScreen() { const d = document.createElement('div'); d.style.cssTex
 function updateProjectiles(dt) {
   for (let i = G.missiles.length - 1; i >= 0; i--) {
     const ms = G.missiles[i]; ms.t += dt;
-    if (ms.tgt && !ms.tgt.done) { const want = ms.tgt.pos.clone().setY(ms.tgt.pos.y + 1).sub(ms.m.position).normalize().multiplyScalar(26); ms.v.lerp(want, Math.min(1, dt * (ms.t < 0.4 ? 1 : 3.2))); }
+    if (ms.tgt) { const want = ms.tgt.pos.clone().setY(ms.tgt.pos.y + 1).sub(ms.m.position).normalize().multiplyScalar(26); ms.v.lerp(want, Math.min(1, dt * (ms.t < 0.4 ? 1 : 3.2))); }
     else ms.v.y -= 6 * dt;
-    ms.m.position.addScaledVector(ms.v, dt); ms.m.lookAt(ms.m.position.clone().add(ms.v));
+    ms.m.position.addScaledVector(ms.v, dt); ms.m.lookAt(ms.m.position.clone().add(ms.v)); ms.m.rotateZ(ms.t * 6); { const fl = ms.m.userData.flame; if (fl) { const k = 0.8 + Math.random() * 0.5; fl.scale.set(1, 1, k); ms.m.userData.core.scale.set(0.5, 0.5, 0.7 * k); } }
     FX.trail(ms.m.position.clone().addScaledVector(ms.v, -0.03), new THREE.Color(2, 1.1, 0.4), 0.5, 0.25); if (Math.random() < 0.7) FX.trail(ms.m.position, new THREE.Color(0.75, 0.75, 0.78), 0.6, 1.1, true);
     const hitGround = ms.m.position.y < heightAt(ms.m.position.x, ms.m.position.z) + 0.2;
     const hitTgt = ms.tgt && ms.m.position.distanceTo(ms.tgt.pos.clone().setY(ms.tgt.pos.y + 1)) < 1.2;
@@ -577,6 +620,13 @@ function updateProjectiles(dt) {
     bm.m.scale.setScalar(1 + Math.max(0, bm.t - 1.2) * Math.abs(Math.sin(bm.t * 30)) * 0.3);
     if (bm.t > 1.9) { scene.remove(bm.m); G.bombs.splice(i, 1); boom(bm.m.position.clone(), 5.5, bm.owner); }
   }
+  for (const bn of G.bananas) {
+    bn.t += dt; if (bn.t < 0.6) continue;
+    for (const q of G.players) if (!(q.ko > 0) && !q.fly && Math.hypot(q.pos.x - bn.x, q.pos.z - bn.z) < 0.9) { bn.done = true; slip(q); if (bn.owner !== q) { bn.owner.kos++; bn.owner.score++; renderBoard(); } break; }
+    for (const q of G.players) { const b = q.ball; if (!q.done && b.moving && !b.air && Math.hypot(b.pos.x - bn.x, b.pos.z - bn.z) < 0.7 && !bn.hitBall) { bn.hitBall = true; const a = (Math.random() < 0.5 ? -1 : 1) * (0.6 + Math.random() * 0.6), ca = Math.cos(a), sa = Math.sin(a); const vx = b.vel.x * ca - b.vel.z * sa, vz = b.vel.x * sa + b.vel.z * ca; b.vel.x = vx; b.vel.z = vz; FX.sound('bounce'); setTimeout(() => bn.hitBall = false, 400); } }
+    if (bn.done || bn.t > 60) { scene.remove(bn.m); bn.done = true; }
+  }
+  G.bananas = G.bananas.filter(b => !b.done);
   for (const mn of G.mines) { mn.t += dt; if (mn.t > 1) mn.armed = true; mn.led.visible = Math.floor(mn.t * (mn.armed ? 3 : 8)) % 2 === 0; }
   G.mines = G.mines.filter(m => !m.done);
 }
@@ -584,14 +634,21 @@ function updateProjectiles(dt) {
 // ---------- computer ----------
 function botThink(p, dt) {
   const inp = p.input; inp.x = inp.y = 0; inp.btn = false;
-  if (p.done || G.phase !== 'play' || p.ko > 0 || p.frozen > 0) return;
+  if (G.phase !== 'play' || p.ko > 0 || p.frozen > 0) return;
+  if (p.done) { // ha finito: va a dare mazzate e usa i poteri
+    if (p.item && Math.random() < dt * 0.5) inp.item = true;
+    const foe = nearestFoe(p, 200); if (!foe) return;
+    const dx = foe.pos.x - p.pos.x, dz = foe.pos.z - p.pos.z, d = Math.hypot(dx, dz);
+    if (d > 1.6) steer(p, dx, dz); else if (Math.random() < dt * 2) { p.yaw = Math.atan2(dx, dz); inp.btn = !p.btnWas; }
+    return;
+  }
   p.botT = (p.botT || 0) - dt;
-  if (p.item && p.botT < 0 && !['calamita', 'super'].includes(p.item) && Math.random() < dt * 0.7) inp.item = true;
+  if (p.item && p.botT < 0 && !['calamita', 'scambio'].includes(p.item) && Math.random() < dt * 0.7) inp.item = true;
   const b = p.ball;
   if (p.state === 'addr' || p.state === 'charge') {
     if (!p.plan) p.plan = botPlan(p);
     const pl = p.plan;
-    if (['calamita', 'super'].includes(p.item)) { inp.item = true; p.plan = null; return; }
+    if (['calamita', 'scambio'].includes(p.item) && !p.triedItem) { inp.item = true; p.triedItem = true; p.plan = null; return; }
     const da = lerpAngle(0, pl.yaw - p.aimYaw, 1);
     if (Math.abs(da) > 0.01) { p.aimYaw += clamp(da, -dt * 2, dt * 2); return; }
     if (p.state === 'addr') { inp.btn = true; return; }
@@ -754,13 +811,15 @@ resize(); renderLobby(); document.querySelectorAll('#gfx .chip').forEach(x => x.
 requestAnimationFrame(frame);
 (async () => {
   let a = 0, b = 0; const prog = () => { $('#bar').style.width = ((a * 0.5 + b * 0.5) * 100) + '%'; };
-  await Promise.all([loadAvatarLibrary(p => { a = p; prog(); }), (LITE ? Promise.resolve() : loadNature(scene, { mobile: GFX === 'bassa', plants: QL.plants, trees: QL.trees, onProgress: p => { b = p; prog(); } }))]);
+  await Promise.all([loadAvatarLibrary(p => { a = p; prog(); }), (LITE ? Promise.resolve() : loadNature(scene, { mobile: GFX === 'bassa', plants: QL.plants, trees: QL.trees, avoid: propZones(), onProgress: p => { b = p; prog(); } }))]);
+  if (!LITE) await loadProps(scene, { mobile: GFX === 'bassa' }).catch(e => console.warn('arredo', e));
   // riflessi dal cielo
   const pm = new THREE.PMREMGenerator(renderer); const envScene = new THREE.Scene(); envScene.add(sky.clone()); scene.environment = pm.fromScene(envScene, 0.04).texture; pm.dispose();
   // prepara subito gli effetti (fuori vista), così la prima esplosione non blocca il gioco
+  { const pre = [makeRocket(0xff3355), makeBanana()]; pre.forEach((o, k) => { o.position.set(k * 3, -300, 0); scene.add(o); }); setTimeout(() => pre.forEach(o => scene.remove(o)), 4000); }
   { const far = new THREE.Vector3(0, -300, 0); FX.explosion(far, 5); FX.splash(far); FX.confetti(far); FX.beam(far, far.clone().add(new THREE.Vector3(1, 0, 0))); FX.lightning(far); }
   $('#load').classList.add('hide'); $('#lobby').classList.remove('hide'); G.phase = 'lobby';
-  if (DEBUG) { window.__G = G; window.__cam = camera; window.__sim = simulate; window.__setCam = (a) => { camPos.set(a[0], a[1], a[2]); camLook.set(a[3], a[4], a[5]); }; window.__HOLES = HOLES; window.__boom = (x, z) => boom(new THREE.Vector3(x, heightAt(x, z), z), 5, null); }
+  if (DEBUG) { window.__G = G; window.__cam = camera; window.__sim = simulate; window.__setCam = (a) => { camPos.set(a[0], a[1], a[2]); camLook.set(a[3], a[4], a[5]); }; window.__HOLES = HOLES; window.__use = (i, it) => { const p = G.players[i]; p.item = it; useItem(p); }; window.__sunk = i => playerSunk(G.players[i]); window.__boom = (x, z) => boom(new THREE.Vector3(x, heightAt(x, z), z), 5, null); }
   if (Q.has('cam')) { $('#lobby').classList.add('hide'); const c = Q.get('cam').split(',').map(Number); G.phase = 'still'; camPos.set(c[0], c[1], c[2]); camLook.set(c[3], c[4], c[5]); updateCamera = () => { camera.position.copy(camPos); camera.lookAt(camLook); sky.position.copy(camera.position); placeSun(camLook, 60); }; }
   if (Q.has('auto')) {
     const n = +(Q.get('bots') || 3);

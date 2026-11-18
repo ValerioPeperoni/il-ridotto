@@ -35,16 +35,47 @@ export function buildWorld(scene, QL) {
   const terrain = terrainMesh(QL.step); scene.add(terrain);
 
   // ---------- buche: bandiera, coppa, tee ----------
+  const flagTime = { value: 0 };
+  const COLS = ['#ff4d6d', '#ffc93a', '#3d7bff', '#2ec27e', '#9a5cff', '#ff7b3d'];
+  // asta a strisce bianche e rosse
+  const poleTex = (() => { const c = document.createElement('canvas'); c.width = 8; c.height = 128; const g = c.getContext('2d'); for (let k = 0; k < 8; k++) { g.fillStyle = k % 2 ? '#f6f6f6' : '#e8243c'; g.fillRect(0, k * 16, 8, 16); } const t = new THREE.CanvasTexture(c); t.colorSpace = THREE.SRGBColorSpace; return t; })();
+  const poleMat = new THREE.MeshStandardMaterial({ map: poleTex, roughness: 0.35 });
+  const goldMat = new THREE.MeshStandardMaterial({ color: 0xffcf3a, metalness: 0.8, roughness: 0.25 });
+  const flagGeo = new THREE.PlaneGeometry(1.5, 1.0, 20, 8); flagGeo.translate(0.75, 0, 0);
+  // bandiera di stoffa che sventola (nel vertex shader: costa zero alla CPU)
+  function flagMat(color, n) {
+    const c = document.createElement('canvas'); c.width = 256; c.height = 170; const g = c.getContext('2d');
+    g.fillStyle = color; g.beginPath(); g.moveTo(0, 0); g.lineTo(256, 0); g.lineTo(206, 85); g.lineTo(256, 170); g.lineTo(0, 170); g.closePath(); g.fill();
+    g.fillStyle = 'rgba(255,255,255,.22)'; g.fillRect(0, 0, 256, 18); g.fillStyle = 'rgba(0,0,0,.12)'; g.fillRect(0, 152, 256, 18);
+    g.font = '700 110px Fredoka, Arial'; g.textAlign = 'center'; g.textBaseline = 'middle'; g.lineWidth = 12; g.strokeStyle = 'rgba(0,0,0,.25)'; g.strokeText(n, 100, 92); g.fillStyle = '#fff'; g.fillText(n, 100, 92);
+    const t = new THREE.CanvasTexture(c); t.colorSpace = THREE.SRGBColorSpace;
+    const m = new THREE.MeshStandardMaterial({ map: t, side: THREE.DoubleSide, alphaTest: 0.5, transparent: false, roughness: 0.85 });
+    m.onBeforeCompile = sh => {
+      sh.uniforms.uT = flagTime;
+      sh.vertexShader = sh.vertexShader.replace('#include <common>', '#include <common>\nuniform float uT;').replace('#include <begin_vertex>', `#include <begin_vertex>
+        float fw = position.x / 1.5;
+        transformed.z += (sin(uT * 5.5 + position.x * 3.2 - position.y * 1.2) * 0.16 + sin(uT * 9.0 + position.x * 6.0) * 0.04) * fw;
+        transformed.y -= fw * fw * 0.12;
+        transformed.x -= abs(sin(uT * 5.5 + position.x * 3.2)) * 0.06 * fw;`);
+    };
+    m.customProgramCacheKey = () => 'flag';
+    return m;
+  }
+  // colonna di luce sulla buca: si vede da lontano, come un segnalino
+  const beamGeo = new THREE.CylinderGeometry(0.32, 0.32, 30, 20, 1, true); beamGeo.translate(0, 15, 0);
+  const beamTex = (() => { const c = document.createElement('canvas'); c.width = 4; c.height = 128; const g = c.getContext('2d'); const gr = g.createLinearGradient(0, 128, 0, 0); gr.addColorStop(0, 'rgba(255,255,255,0.45)'); gr.addColorStop(0.3, 'rgba(255,255,255,0.18)'); gr.addColorStop(1, 'rgba(255,255,255,0)'); g.fillStyle = gr; g.fillRect(0, 0, 4, 128); return new THREE.CanvasTexture(c); })();
+  const ringTex = (() => { const c = document.createElement('canvas'); c.width = c.height = 128; const g = c.getContext('2d'); const gr = g.createRadialGradient(64, 64, 20, 64, 64, 64); gr.addColorStop(0, 'rgba(255,255,255,0)'); gr.addColorStop(0.75, 'rgba(255,255,255,0.9)'); gr.addColorStop(0.85, 'rgba(255,255,255,0.35)'); gr.addColorStop(1, 'rgba(255,255,255,0)'); g.fillStyle = gr; g.fillRect(0, 0, 128, 128); return new THREE.CanvasTexture(c); })();
   const flags = HOLES.map((h, i) => {
     const g = new THREE.Group(); const cx = h.green[0] + h.cup[0], cz = h.green[1] + h.cup[1]; g.position.set(cx, h.cupY, cz);
+    const col = new THREE.Color(COLS[i]);
     const cup = new THREE.Mesh(new THREE.CircleGeometry(CUP_R, 28), new THREE.MeshBasicMaterial({ color: 0x0c140c, polygonOffset: true, polygonOffsetFactor: -2 })); cup.rotation.x = -Math.PI / 2; cup.position.y = 0.03; g.add(cup);
-    const rim = new THREE.Mesh(new THREE.RingGeometry(CUP_R, CUP_R + 0.05, 28), new THREE.MeshBasicMaterial({ color: 0xffffff, polygonOffset: true, polygonOffsetFactor: -2 })); rim.rotation.x = -Math.PI / 2; rim.position.y = 0.03; g.add(rim);
-    const pole = new THREE.Mesh(new THREE.CylinderGeometry(0.04, 0.04, 3.2, 8), new THREE.MeshStandardMaterial({ color: 0xf4f4f4 })); pole.position.y = 1.6; pole.castShadow = true; g.add(pole);
-    const fg = new THREE.PlaneGeometry(1.3, 0.85, 12, 4); fg.translate(0.65, 0, 0);
-    const flag = new THREE.Mesh(fg, new THREE.MeshStandardMaterial({ color: [0xff4d6d, 0xffc93a, 0x3d7bff, 0x2ec27e, 0x9a5cff, 0xff7b3d][i], side: THREE.DoubleSide, roughness: 0.8 }));
-    flag.position.y = 2.75; flag.castShadow = true; g.add(flag); g.userData.flag = flag; g.userData.base = fg.attributes.position.array.slice();
-    // numero sulla bandiera
-    const num = new THREE.Mesh(new THREE.PlaneGeometry(0.5, 0.5), new THREE.MeshBasicMaterial({ map: textTex(String(i + 1), '#fff'), transparent: true, side: THREE.DoubleSide, depthWrite: false })); num.position.set(0.6, 2.75, 0.02); g.add(num);
+    const rim = new THREE.Mesh(new THREE.RingGeometry(CUP_R, CUP_R + 0.06, 28), new THREE.MeshBasicMaterial({ color: 0xffffff, polygonOffset: true, polygonOffsetFactor: -2 })); rim.rotation.x = -Math.PI / 2; rim.position.y = 0.03; g.add(rim);
+    const glow = new THREE.Mesh(new THREE.PlaneGeometry(2.6, 2.6), new THREE.MeshBasicMaterial({ map: ringTex, color: col, transparent: true, depthWrite: false, blending: THREE.AdditiveBlending, polygonOffset: true, polygonOffsetFactor: -3 })); glow.rotation.x = -Math.PI / 2; glow.position.y = 0.04; g.add(glow);
+    const beam = new THREE.Mesh(beamGeo, new THREE.MeshBasicMaterial({ map: beamTex, color: col, transparent: true, depthWrite: false, blending: THREE.AdditiveBlending, side: THREE.DoubleSide, fog: false })); g.add(beam);
+    const pole = new THREE.Mesh(new THREE.CylinderGeometry(0.045, 0.05, 3.4, 10), poleMat); pole.position.y = 1.7; pole.castShadow = true; g.add(pole);
+    const top = new THREE.Mesh(new THREE.SphereGeometry(0.09, 14, 10), goldMat); top.position.y = 3.44; g.add(top);
+    const flag = new THREE.Mesh(flagGeo, flagMat(COLS[i], String(i + 1))); flag.position.set(0.03, 2.85, 0); flag.castShadow = true; g.add(flag);
+    g.userData.flag = flag; g.userData.glow = glow; g.userData.beam = beam;
     scene.add(g);
     // tee: due segnaposto
     const dx = h.mid[0] - h.tee[0], dz = h.mid[1] - h.tee[1], l = Math.hypot(dx, dz);
@@ -58,13 +89,15 @@ export function buildWorld(scene, QL) {
 
   function update(t) {
     waterNormal.offset.set(t * 0.004, t * 0.003);
-    for (const f of flags) { const fl = f.userData.flag, a = fl.geometry.attributes.position, base = f.userData.base; for (let i = 0; i < a.count; i++) { const x = base[i * 3]; a.setZ(i, Math.sin(t * 5 + x * 3) * 0.12 * x); } a.needsUpdate = true; }
+    flagTime.value = t;
+    for (const f of flags) { const k = 1 + Math.sin(t * 3) * 0.08; f.userData.glow.scale.setScalar(k); f.userData.beam.material.opacity = 0.75 + Math.sin(t * 2.2) * 0.2; }
   }
   return { sky, sun, hemi, placeSun, water, waterNormal, terrain, flags, update, SUN_DIR };
 }
 export const ITEMS = {
   razzo: { icon: '🚀', name: 'Razzo', w: 3 }, bomba: { icon: '💣', name: 'Bomba', w: 3 }, gelo: { icon: '❄️', name: 'Gelo', w: 3 },
-  fulmine: { icon: '🌩️', name: 'Fulmine', w: 1 }, calamita: { icon: '🧲', name: 'Calamita', w: 2 }, super: { icon: '⚡', name: 'Super tiro', w: 2 }, mina: { icon: '🎯', name: 'Mina', w: 2 },
+  fulmine: { icon: '🌩️', name: 'Fulmine', w: 1 }, calamita: { icon: '🧲', name: 'Calamita', w: 2, own: true }, mina: { icon: '🎯', name: 'Mina', w: 2 },
+  banana: { icon: '🍌', name: 'Banana', w: 3 }, gigante: { icon: '🍄', name: 'Gigante', w: 2 }, scambio: { icon: '🔄', name: 'Scambio', w: 1, own: true },
 };
 const boxTex = (() => { const c = document.createElement('canvas'); c.width = c.height = 128; const g = c.getContext('2d'); const gr = g.createLinearGradient(0, 0, 128, 128); gr.addColorStop(0, '#ffd84a'); gr.addColorStop(1, '#ff9a2e'); g.fillStyle = gr; g.fillRect(0, 0, 128, 128); g.strokeStyle = '#fff'; g.lineWidth = 10; g.strokeRect(6, 6, 116, 116); g.font = '700 86px Fredoka, Arial'; g.textAlign = 'center'; g.textBaseline = 'middle'; g.fillStyle = '#fff'; g.strokeStyle = '#b5560a'; g.lineWidth = 8; g.strokeText('?', 64, 70); g.fillText('?', 64, 70); const t = new THREE.CanvasTexture(c); t.colorSpace = THREE.SRGBColorSpace; return t; })();
 export const boxGeo = new THREE.BoxGeometry(0.9, 0.9, 0.9), boxMat = new THREE.MeshStandardMaterial({ map: boxTex, roughness: 0.35, emissive: 0x553300, emissiveIntensity: 0.4 });
@@ -78,3 +111,36 @@ export function makeClub(color) {
   return g;
 }
 
+// ---------- razzo a cartone: corpo tornito, alette, oblò, fiamma ----------
+export function makeRocket(color = 0xe8243c) {
+  const g = new THREE.Group(); // punta verso +z
+  const prof = [[0, -0.55], [0.13, -0.55], [0.17, -0.45], [0.2, -0.2], [0.21, 0.1], [0.2, 0.3], [0.16, 0.48], [0.1, 0.62], [0.04, 0.72], [0, 0.75]];
+  const curve = new THREE.SplineCurve(prof.map(([r, y]) => new THREE.Vector2(r, y)));
+  const body = new THREE.LatheGeometry(curve.getSpacedPoints(40).map(p => new THREE.Vector2(Math.max(0.001, p.x), p.y)), 24);
+  body.rotateX(Math.PI / 2);
+  // colori a fasce con una texture: bianco, punta colorata, fascia colorata
+  const c = document.createElement('canvas'); c.width = 4; c.height = 128; const cg = c.getContext('2d'); const hex = '#' + new THREE.Color(color).getHexString();
+  cg.fillStyle = '#f4f4f8'; cg.fillRect(0, 0, 4, 128); cg.fillStyle = hex; cg.fillRect(0, 0, 4, 32); cg.fillRect(0, 96, 4, 14); cg.fillStyle = '#c9ccd6'; cg.fillRect(0, 118, 4, 10);
+  const tx = new THREE.CanvasTexture(c); tx.colorSpace = THREE.SRGBColorSpace;
+  const bm = new THREE.MeshStandardMaterial({ map: tx, roughness: 0.35, metalness: 0.1 });
+  g.add(new THREE.Mesh(body, bm));
+  // oblò
+  const win = new THREE.Mesh(new THREE.SphereGeometry(0.075, 16, 10), new THREE.MeshStandardMaterial({ color: 0x5ec8ff, roughness: 0.05, metalness: 0.3, emissive: 0x1a5a90, emissiveIntensity: 0.6 }));
+  win.scale.set(1, 1, 0.45); win.position.set(0, 0.195, 0.18); win.rotation.x = -0.1; g.add(win);
+  const ring = new THREE.Mesh(new THREE.TorusGeometry(0.08, 0.018, 8, 20), new THREE.MeshStandardMaterial({ color: 0xc9ccd6, metalness: 0.8, roughness: 0.3 })); ring.position.copy(win.position); ring.rotation.x = Math.PI / 2 - 0.1; g.add(ring);
+  // alette curve
+  const fs = new THREE.Shape(); fs.moveTo(0, 0); fs.quadraticCurveTo(0.22, -0.05, 0.26, -0.3); fs.lineTo(0.2, -0.32); fs.quadraticCurveTo(0.1, -0.2, 0, -0.18); fs.closePath();
+  const fg = new THREE.ExtrudeGeometry(fs, { depth: 0.025, bevelEnabled: true, bevelThickness: 0.008, bevelSize: 0.008, bevelSegments: 2 }); fg.translate(0, 0, -0.0125);
+  const finM = new THREE.MeshStandardMaterial({ color, roughness: 0.4 });
+  fg.rotateX(Math.PI / 2); fg.translate(0.14, 0, -0.2);
+  for (let k = 0; k < 3; k++) { const f = new THREE.Mesh(fg, finM); f.rotation.z = k * Math.PI * 2 / 3 + Math.PI / 2; g.add(f); }
+  // ugello e fiamma
+  const noz = new THREE.Mesh(new THREE.CylinderGeometry(0.11, 0.15, 0.12, 16, 1, true), new THREE.MeshStandardMaterial({ color: 0x4a4e5a, metalness: 0.7, roughness: 0.35, side: THREE.DoubleSide })); noz.rotation.x = Math.PI / 2; noz.position.z = -0.6; g.add(noz);
+  const flameG = new THREE.ConeGeometry(0.12, 0.6, 14, 1, true); flameG.rotateX(-Math.PI / 2); flameG.translate(0, 0, -0.95);
+  const flame = new THREE.Mesh(flameG, new THREE.MeshBasicMaterial({ color: new THREE.Color(2.2, 1.2, 0.3), transparent: true, opacity: 0.9, blending: THREE.AdditiveBlending, depthWrite: false, toneMapped: false }));
+  const core = new THREE.Mesh(flameG, new THREE.MeshBasicMaterial({ color: new THREE.Color(2.5, 2.4, 1.6), transparent: true, opacity: 0.9, blending: THREE.AdditiveBlending, depthWrite: false, toneMapped: false })); core.scale.set(0.5, 0.5, 0.7); core.position.z = -0.25;
+  g.add(flame, core); g.userData.flame = flame; g.userData.core = core;
+  g.traverse(o => { if (o.isMesh && o !== flame && o !== core) o.castShadow = true; });
+  g.scale.setScalar(1.25);
+  return g;
+}

@@ -48,7 +48,7 @@ export function predict(b0, tMax = 3, dt = 1 / 240) {
 export function solve(from, tx, tz, flight, spin) {
   let vx = (tx - from.x) / flight, vz = (tz - from.z) / flight;
   let vy = (T.H + T.r - from.y + 0.5 * G * flight * flight) / flight;
-  for (let it = 0; it < 14; it++) {
+  for (let it = 0; it < 24; it++) {
     const b = mkBall(from.x, from.y, from.z, vx, vy, vz, spin.wx, spin.wy, spin.wz), ev = [];
     let t = 0, land = null, net = false;
     while (t < 3) {
@@ -64,5 +64,6 @@ export function solve(from, tx, tz, flight, spin) {
     if (Math.abs(ex) < 0.005 && Math.abs(ez) < 0.005 && Math.abs(et) < 0.02) break;
     vx += ex / land.t; vz += ez / land.t; vy += 0.45 * G * et;
   }
+  if (!isFinite(vx + vy + vz) || Math.hypot(vx, vy, vz) > 45) { vx = (tx - from.x) / flight; vz = (tz - from.z) / flight; vy = (T.H + T.r - from.y + 0.5 * G * flight * flight) / flight; }
   return { vx, vy, vz };
 }

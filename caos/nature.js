@@ -32,7 +32,7 @@ function windify(mat, amp) {
   mat.customProgramCacheKey = () => 'wind' + amp;
 }
 
-export async function loadNature(scene, { mobile = false, plants = 1, trees = 1, onProgress } = {}) {
+export async function loadNature(scene, { mobile = false, plants = 1, trees = 1, avoid = [], onProgress } = {}) {
   const ld = new GLTFLoader(), src = {};
   const names = Object.keys(KINDS); let n = 0;
   await Promise.all(names.map(async k => { src[k] = (await ld.loadAsync('assets/nature/' + k + '.gltf')).scene; onProgress && onProgress(++n / names.length); }));
@@ -40,7 +40,7 @@ export async function loadNature(scene, { mobile = false, plants = 1, trees = 1,
   const place = { }; for (const k of names) place[k] = [];
   const nearHole = (x, z, m) => HOLES.some(h => fairDist(h, x, z) < m);
   const nearGreenOrTee = (x, z, m) => HOLES.some(h => Math.hypot(x - h.green[0], z - h.green[1]) < GREEN_R + m || Math.hypot(x - h.tee[0], z - h.tee[1]) < m);
-  const land = (x, z) => surfAt(x, z) === S.ROUGH && heightAt(x, z) > WATER + 0.6;
+  const land = (x, z) => surfAt(x, z) === S.ROUGH && heightAt(x, z) > WATER + 0.6 && avoid.every(a => Math.hypot(a.x - x, a.z - z) > a.r + 2.5);
   const pick = a => a[Math.floor(R() * a.length)];
   // alberi: a gruppi (boschetti) nel rough, lontani dai corridoi
   for (let i = 0; i < 3400; i++) {

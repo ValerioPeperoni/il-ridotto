@@ -3,6 +3,7 @@
 import * as THREE from 'three';
 import { heightAt } from './course.js';
 import { loadNature, wind } from './nature.js';
+import { propZones, loadProps } from './props.js';
 import * as FX from './fx.js';
 import { buildWorld, boxGeo, boxMat, makeClub } from './world.js';
 import { loadSportLibrary as loadAvatarLibrary, makeSportsmate } from '../avatar/sport.js';
@@ -22,7 +23,8 @@ export async function startPhoneView(canvas, ui, onProgress) {
   function resize() { const w = canvas.clientWidth || innerWidth, h = canvas.clientHeight || innerHeight; renderer.setSize(w, h, false); camera.aspect = w / h; camera.fov = w < h ? 68 : 55; camera.updateProjectionMatrix(); }
   addEventListener('resize', resize); resize();
   let a = 0, b = 0; const prog = () => onProgress && onProgress(a * 0.5 + b * 0.5);
-  await Promise.all([loadAvatarLibrary(p => { a = p; prog(); }), loadNature(scene, { mobile: true, plants: 0.15, trees: 0.45, onProgress: p => { b = p; prog(); } })]);
+  await Promise.all([loadAvatarLibrary(p => { a = p; prog(); }), loadNature(scene, { mobile: true, plants: 0.15, trees: 0.45, avoid: propZones(), onProgress: p => { b = p; prog(); } })]);
+  await loadProps(scene, { mobile: true }).catch(e => console.warn('arredo', e));
   { const pm = new THREE.PMREMGenerator(renderer), es = new THREE.Scene(); es.add(W_.sky.clone()); scene.environment = pm.fromScene(es, 0.04).texture; pm.dispose(); }
 
   // prepara subito gli effetti (fuori vista), così la prima esplosione non blocca il gioco

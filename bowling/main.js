@@ -5,6 +5,7 @@ import { RenderPass } from 'three/addons/postprocessing/RenderPass.js';
 import { UnrealBloomPass } from 'three/addons/postprocessing/UnrealBloomPass.js';
 import { OutputPass } from 'three/addons/postprocessing/OutputPass.js';
 import { GLTFLoader } from 'three/addons/loaders/GLTFLoader.js';
+import { RoundedBoxGeometry } from 'three/addons/geometries/RoundedBoxGeometry.js';
 import { L, SPECIALS, newBall, step as laneStep, pinSpots, heightAt } from './lane.js';
 import * as Pins from './pins.js';
 import * as Sc from './score.js';
@@ -49,12 +50,25 @@ const laneTex = ctex(256, 2048, (g, w, h) => {
 const laneMat = new THREE.MeshPhysicalMaterial({ map: laneTex, roughness: 0.22, clearcoat: 1, clearcoatRoughness: 0.03, envMapIntensity: 0.55 });
 const whiteGloss = new THREE.MeshPhysicalMaterial({ color: 0xf4f7ff, roughness: 0.18, clearcoat: 1 });
 const navy = new THREE.MeshStandardMaterial({ color: 0x2b3566, roughness: 0.5 });
-const pinTex = ctex(64, 512, (g, w, h) => { g.fillStyle = '#ffffff'; g.fillRect(0, 0, w, h); const v = y => h * (1 - y / 0.381); g.fillStyle = '#e8243c'; g.fillRect(0, v(0.262), w, v(0.252) - v(0.262)); g.fillRect(0, v(0.243), w, v(0.233) - v(0.243)); });
-const pinMat = new THREE.MeshPhysicalMaterial({ map: pinTex, roughness: 0.15, clearcoat: 1, clearcoatRoughness: 0.05 });
+// birillo regolamentare (profilo USBC, in pollici), curva morbida e superficie laccata
+const PIN_PROF = [[0, 1.015], [0.75, 1.414], [1.5, 1.72], [2.25, 1.953], [3.375, 2.255], [4.5, 2.383], [5.875, 2.255], [7.25, 1.945], [8.625, 1.47], [9.375, 1.208], [10.125, 0.97], [10.875, 0.898], [11.75, 0.95], [12.625, 1.141], [13.5, 1.273], [14.2, 1.13], [14.65, 0.82], [14.92, 0.42], [15, 0]];
+const pinTex = ctex(256, 1024, (g, w, h) => {
+  const v = y => h * (1 - y / 0.381);
+  const gr = g.createLinearGradient(0, 0, 0, h); gr.addColorStop(0, '#ffffff'); gr.addColorStop(1, '#f4f1ea'); g.fillStyle = gr; g.fillRect(0, 0, w, h);
+  g.fillStyle = '#d81e34';
+  g.fillRect(0, v(0.2735), w, v(0.2635) - v(0.2735)); g.fillRect(0, v(0.2555), w, v(0.2495) - v(0.2555));
+  // piccola corona sul davanti, come i birilli veri
+  g.save(); g.translate(w * 0.25, v(0.20)); g.fillStyle = '#d81e34'; g.beginPath(); g.moveTo(-18, 10); g.lineTo(-18, -6); g.lineTo(-9, 2); g.lineTo(0, -12); g.lineTo(9, 2); g.lineTo(18, -6); g.lineTo(18, 10); g.closePath(); g.fill(); g.restore();
+});
+const pinMat = new THREE.MeshPhysicalMaterial({ map: pinTex, roughness: 0.28, clearcoat: 1, clearcoatRoughness: 0.06, sheen: 0.2, sheenColor: new THREE.Color(0xffffff), envMapIntensity: 1.0 });
 const pinGeo = (() => {
-  const prof = [[0, 0], [0.026, 0], [0.036, 0.008], [0.048, 0.04], [0.058, 0.08], [0.0605, 0.114], [0.057, 0.15], [0.045, 0.2], [0.03, 0.24], [0.0235, 0.26], [0.024, 0.28], [0.03, 0.31], [0.032, 0.33], [0.029, 0.355], [0.018, 0.374], [0, 0.381]];
-  const pts = []; for (let i = 0; i <= 64; i++) { const y = i / 64 * 0.381; let k = 0; while (k < prof.length - 2 && prof[k + 1][1] < y) k++; const [r0, y0] = prof[k], [r1, y1] = prof[k + 1]; pts.push(new THREE.Vector2(Math.max(0.0001, r0 + (r1 - r0) * ((y - y0) / Math.max(1e-6, y1 - y0))), y)); }
-  const g = new THREE.LatheGeometry(pts, 40); g.translate(0, -Pins.PIN.com, 0); return g;
+  const curve = new THREE.SplineCurve(PIN_PROF.map(([y, r]) => new THREE.Vector2(r * 0.0254, y * 0.0254)));
+  const pts = curve.getSpacedPoints(110).map(p => new THREE.Vector2(Math.max(0.0002, p.x), p.y));
+  pts[pts.length - 1].set(0.0001, 0.381);
+  pts.unshift(new THREE.Vector2(0.0001, 0)); // fondo chiuso
+  const g = new THREE.LatheGeometry(pts, 48);
+  const pos = g.attributes.position, uv = g.attributes.uv; for (let i = 0; i < pos.count; i++) uv.setY(i, pos.getY(i) / 0.381);
+  g.translate(0, -Pins.PIN.com, 0); g.computeVertexNormals(); return g;
 })();
 function ballTex(color) {
   return ctex(512, 256, (g, w, h) => {
@@ -295,13 +309,19 @@ ballMesh.castShadow = true; scene.add(ballMesh);
 const ballTexCache = {};
 function setBallColor(c) { ballMesh.material.map = ballTexCache[c] || (ballTexCache[c] = ballTex(c)); ballMesh.material.needsUpdate = true; }
 const pinMeshes = pinSpots().map(() => { const m = new THREE.Mesh(pinGeo, pinMat); m.castShadow = true; m.receiveShadow = true; scene.add(m); return m; });
-const rakeMat = new THREE.MeshStandardMaterial({ color: 0x2b3566, metalness: 0.5, roughness: 0.4 });
+const rakeMat = new THREE.MeshStandardMaterial({ color: 0xc9ced8, metalness: 0.85, roughness: 0.28 });
 const rake = new THREE.Group(); rake.visible = false; scene.add(rake);
-{ const bar = new THREE.Mesh(new THREE.BoxGeometry(L.W + 0.5, 0.16, 0.05), rakeMat); rake.add(bar); for (const s of [-1, 1]) { const arm = new THREE.Mesh(new THREE.BoxGeometry(0.04, 0.9, 0.04), rakeMat); arm.position.set(s * (L.W / 2 + 0.22), 0.5, 0); rake.add(arm); } }
+{ const bar = new THREE.Mesh(new RoundedBoxGeometry(L.W + 0.5, 0.18, 0.06, 3, 0.02), rakeMat); bar.castShadow = true; rake.add(bar);
+  const strip = new THREE.Mesh(new THREE.PlaneGeometry(L.W + 0.4, 0.07), new THREE.MeshStandardMaterial({ map: ctex(256, 16, (g, w, h) => { for (let i = 0; i < 16; i++) { g.fillStyle = i % 2 ? '#1d2340' : '#ffcf3a'; g.beginPath(); g.moveTo(i * 16, h); g.lineTo(i * 16 + 8, 0); g.lineTo(i * 16 + 16, 0); g.lineTo(i * 16 + 8, h); g.fill(); } }), roughness: 0.5 })); strip.position.set(0, 0, 0.031); rake.add(strip);
+  for (const s of [-1, 1]) { const arm = new THREE.Mesh(new THREE.CylinderGeometry(0.025, 0.025, 0.95, 10), rakeMat); arm.position.set(s * (L.W / 2 + 0.22), 0.5, 0); rake.add(arm); const hub = new THREE.Mesh(new THREE.SphereGeometry(0.045, 12, 8), rakeMat); hub.position.set(s * (L.W / 2 + 0.22), 0.98, 0); rake.add(hub); } }
 // la macchina rimetti-birilli: scende, solleva i birilli in piedi, poi li rimette giù
 const setter = new THREE.Group(); scene.add(setter);
-{ const plate = new THREE.Mesh(new THREE.BoxGeometry(L.W + 0.15, 0.1, 1.15), new THREE.MeshStandardMaterial({ color: 0x3a4170, metalness: 0.4, roughness: 0.5 })); setter.add(plate);
-  for (const sp of pinSpots()) { const cup = new THREE.Mesh(new THREE.CylinderGeometry(0.07, 0.07, 0.04, 14), new THREE.MeshStandardMaterial({ color: 0x1d2340 })); cup.position.set(sp.x, -0.07, sp.z + 18.75); setter.add(cup); }
+{ const deckMat = new THREE.MeshPhysicalMaterial({ color: 0xd7dce6, metalness: 0.75, roughness: 0.32, clearcoat: 0.6 });
+  const plate = new THREE.Mesh(new RoundedBoxGeometry(L.W + 0.15, 0.09, 1.15, 4, 0.03), deckMat); plate.castShadow = true; setter.add(plate);
+  const top = new THREE.Mesh(new RoundedBoxGeometry(L.W - 0.1, 0.12, 0.9, 4, 0.05), new THREE.MeshStandardMaterial({ color: 0x2b3566, metalness: 0.3, roughness: 0.45 })); top.position.y = 0.1; setter.add(top);
+  const glow = new THREE.Mesh(new THREE.BoxGeometry(L.W + 0.16, 0.02, 0.02), new THREE.MeshBasicMaterial({ color: 0x7fd6ff })); glow.position.set(0, -0.02, 0.58); setter.add(glow);
+  const ringG = new THREE.TorusGeometry(0.062, 0.012, 8, 24); ringG.rotateX(Math.PI / 2); const cupG = new THREE.CylinderGeometry(0.058, 0.052, 0.05, 20);
+  for (const sp of pinSpots()) { const cup = new THREE.Mesh(cupG, new THREE.MeshStandardMaterial({ color: 0x1d2340, roughness: 0.6 })); cup.position.set(sp.x, -0.06, sp.z + 18.75); setter.add(cup); const ring = new THREE.Mesh(ringG, deckMat); ring.position.set(sp.x, -0.05, sp.z + 18.75); setter.add(ring); }
   setter.position.set(0, 1.75, -18.75); }
 
 // ---------- suoni ----------
@@ -485,7 +505,7 @@ function nextThrow(newFrame) {
 function throwBall(inp, src) {
   if (G.phase !== 'aim' || G.released) return;
   const p = G.players[G.cur];
-  let speed = clamp(2.8 + inp.power * 6.7, 2.4, 10.8), hook = clamp(inp.hook, -1, 1), ang = G.aimA + clamp(inp.pull || 0, -0.05, 0.05), loft = 0, note = '';
+  let speed = clamp(2.8 + inp.power * 6.7, 2.4, 10.8), hook = clamp(inp.hook, -1, 1), ang = G.aimA + clamp(inp.pull || 0, -0.06, 0.06), loft = 0, note = '';
   const tm = inp.timing ?? 0;
   if (tm < -0.45) { speed *= 0.8; ang += (Math.random() - .5) * 0.03; note = 'Lasciata troppo presto!'; }
   else if (tm > 1.0) { loft = Math.min(1, (tm - 1.0) * 1.5 + 0.3); ang += (Math.random() - .5) * 0.025; note = 'Volata! Troppo tardi'; }
