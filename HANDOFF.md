@@ -26,6 +26,52 @@ Valerio ha provato tutto: meglio di prima, ma ancora "da beta". Le sue richieste
 - **Golf.** FATTO: col tasto viola (fionda) la levetta e il trascinamento girano ancora la mira; la palla non schizza più in aria sulla buca (entra se rotola sotto 6 m/s o se ci cade dall'alto; altrimenti sfiora e devia; un leggero imbuto attira le palle lente); chi ha finito resta in gioco (corre, prende casse, usa poteri, dà e prende mazzate, ogni colpo vale un punto; i bot che hanno finito vanno a dare fastidio); via il super tiro, nuovi poteri: 🍌 banana (chi la pesta scivola, le palle deviano), 🍄 gigante (8 s, travolgi chi tocchi, immune), 🔄 scambio (la tua palla si scambia con quella più vicina alla buca). Bandiera di stoffa che sventola nello shader, asta a strisce, colonna di luce e alone sulla buca corrente. Razzo a cartone (corpo tornito, alette, oblò, fiamma). Arredo (`caos/props.js`): club house con veranda, insegna e parcheggio (KayKit City Builder Bits, CC0, `assets/city/`), a ogni tee cartello con numero/par/metri, lava-palline, cestino, panchina e golf cart. `propZones()` dice a `loadNature` dove non piantare alberi, così PC e telefono mettono tutto negli stessi punti.
 - **Domanda di Valerio: perché le demo AI sembrano giochi commerciali e i nostri no?** Risposta data: le demo sono una scena sola con asset di artisti e scelte tra tanti tentativi; noi facciamo 5 giochi insieme con controlli via rete; Claude li vede solo da screenshot lenti. Proposte: un gioco alla volta fino a "finito"; animazioni da motion capture (Mixamo, Valerio le scarica con un account Adobe); modelli veri (Kenney Minigolf Kit, Quaternius) e generatori 3D con AI per oggetti specifici.
 
+## 1d. 22/11: metodo nuovo e cosa è stato fatto
+**Metodo concordato con Valerio:** un gioco alla volta, con la lista completa di cosa manca, finito e controllato prima di passare al successivo. Ordine: ping pong → golf → bowling. Non aspettare che sia lui a scoprire i problemi: cercali (registrazioni, controlli automatici, confronto coi giochi di riferimento).
+
+**Strumenti nuovi (in `sviluppo/tools/`):**
+- **Partite registrate:** `pingpong.html` e `golf.html` accettano `?rec`. Il gioco non usa l'orologio e avanza a passi fissi con `window.__adv(n)`. Con `&norender` non disegna e va velocissimo; con `&trace` il ping pong salva ogni passo della palla in `__G.trace`. In registrazione i ritardi passano da `later()`, che segue il tempo del gioco. `registra_partita.py URL fotogrammi cartella ogni` salva i fotogrammi; poi `montage` (ImageMagick) li mette in un foglio da guardare.
+- **Controllo delle traiettorie:** `controlla_traiettorie.py trace.json` segnala i cambi di velocità senza colpo o rimbalzo e la palla ferma a mezz'aria.
+- **Blender senza schermo:** `pip install bpy` funziona nella macchina di Claude, per bake di luci, conversioni e modelli.
+- **Animazioni Mixamo:** `retarget.html` (si apre con un server locale che vede `site/` e `npm/three`) carica un FBX di Mixamo e lo adatta al nostro scheletro copiando le rotazioni rispetto alla posa di riposo. Le dita sono incluse. Salva un JSON di `AnimationClip`, che `avatar/sport.js` carica da `assets/sport/` (lista `EXTRA`). Così sono fatti `Golf_Drive` e `Golf_Drive_B`, scaricati da Valerio. Per il bowling e il ping pong Mixamo non ha niente.
+
+**Ping pong:**
+- **Il bug dei "muri invisibili":** la palla veniva colpita a circa 1 m dalla racchetta (misurato) perché il fendente da spada non passa dove passa la palla.
+- **Braccio guidato:** ora il braccio con la racchetta è guidato da `pong/arm.js`, con cinematica inversa a due ossa, orientamento della mano e piegamento del busto se la palla è bassa. Il percorso (preparazione → impatto → accompagnamento) è in `STROKE` di `game.js`, nel sistema del corpo. All'impatto la testa della racchetta è sulla palla: errore medio 10 cm su 107 colpi.
+- **Posizione del giocatore:** il personaggio si piazza con `placeFor()` usando `CONTACT`. L'impatto è controllato a ogni passo della fisica (`t0 + n/480`), non a ogni fotogramma.
+- **Correzione a metà volo:** tolta.
+- **Gesto dal telefono:**
+  - `sw0` porta `dir` (+1 dritto = racchetta da destra a sinistra, cioè rotazione antioraria attorno alla verticale; −1 rovescio);
+  - `sw1`, 50 ms dopo, porta forza, su/giù, polso e verso, e arriva prima dell'impatto;
+  - verso sbagliato = colpo a vuoto (`G.strict`);
+  - un solo tentativo per palla, finestra `HIT_EARLY` 0.45 s;
+  - sul telefono c'è il tasto "Dritto e rovescio al contrario?" (`ridotto-pongflip`).
+- **Palazzetto:** tabellone col punteggio sul muro, ombre morbide finte, riflessi da `fromScene`, seggiolone dell'arbitro.
+- **Da fare:** facce e personaggi più belli, gambe che si spostano di lato invece di correre in avanti, prima persona del telefono.
+
+**Golf:**
+- **Swing vero:** è `Golf_Drive_B`. Mentre carichi il personaggio va indietro col bastone in proporzione alla potenza (`golfPose`). Quando tiri, la palla parte all'istante dell'impatto (`SWING.impact` 1.17 s di clip) tramite `pendingShot` e `fireShot`. Durante lo swing si sta fermi.
+- **Poteri:** via la banana (era uguale alla mina). Il gigante ora si vede anche sul telefono (bit 128 nei flag del `cv`).
+- **Rete e telefono:**
+  - **Mazzate perse:** i tocchi brevissimi non si perdono più (`input.press`).
+  - **Oggetti in corsa:** il tasto oggetto usa `pointerdown`, perché il `click` non arriva mentre un altro dito è sulla levetta.
+  - **Zoom:** niente zoom con due dita o doppio tocco; se scatta, si rimette a posto.
+- **Buca:** palla quasi ferma entro 1.7 raggi della buca = dentro, subito.
+- **Mazzate equilibrate:** dopo una mazzata si è intoccabili per 2.5 s (il personaggio lampeggia); chi ha finito tramortisce per meno tempo; i punti si danno solo se il colpo va a segno (`knock` restituisce true o false).
+- **Terreno (rifatto `assets/terrain.jpg` con `/tmp/bake.py`):**
+  - fairway a scacchi;
+  - roccia sui pendii ripidi;
+  - sabbia bagnata sulla riva;
+  - bordo dei bunker;
+  - conche più scure;
+  - sottobosco;
+  - sentieri.
+
+**Bowling:**
+- **Fossa aperta:** la pista finisce a `L.deckEnd`, dietro c'è la fossa aperta (fondo a −0.4, tenda), così palla e birilli non spariscono più "dentro il pavimento".
+- **Birilli:** tolto lo sheen dal materiale (pesante).
+- **Da fare:** grafica della sala, animazioni del lancio, lancio che a volte non parte.
+
 ## 2. Che cos'è il progetto
 Una raccolta di giochi da festa nel browser. Il **PC o la TV** è lo schermo comune, i **telefoni** fanno da controller e si collegano inquadrando un QR. Niente account, niente installazioni.
 - Sito: https://valeriopeperoni.github.io/il-ridotto/

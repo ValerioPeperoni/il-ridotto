@@ -1,0 +1,65 @@
+<!DOCTYPE html><html><body>
+<script type="importmap">{"imports":{"three":"./site/vendor/three.module.js","three/addons/":"./site/vendor/jsm/"}}</script>
+<script type="module">
+import * as THREE from 'three';
+import { FBXLoader } from './npm/examples/jsm/loaders/FBXLoader.js';
+import { GLTFLoader } from 'three/addons/loaders/GLTFLoader.js';
+
+const MAP = { Hips: 'pelvis', Spine: 'spine_01', Spine1: 'spine_02', Spine2: 'spine_03', Neck: 'neck_01', Head: 'Head',
+  LeftShoulder: 'clavicle_l', LeftArm: 'upperarm_l', LeftForeArm: 'lowerarm_l', LeftHand: 'hand_l',
+  RightShoulder: 'clavicle_r', RightArm: 'upperarm_r', RightForeArm: 'lowerarm_r', RightHand: 'hand_r',
+  LeftUpLeg: 'thigh_l', LeftLeg: 'calf_l', LeftFoot: 'foot_l', LeftToeBase: 'ball_l',
+  RightUpLeg: 'thigh_r', RightLeg: 'calf_r', RightFoot: 'foot_r', RightToeBase: 'ball_r' };
+for (const s of ['Left', 'Right']) { const t = s === 'Left' ? 'l' : 'r';
+  for (const [m, u] of [['Thumb', 'thumb'], ['Index', 'index'], ['Middle', 'middle'], ['Ring', 'ring'], ['Pinky', 'pinky']]) for (let k = 1; k <= 3; k++) MAP[`${s}Hand${m}${k}`] = `${u}_0${k}_${t}`; }
+
+window.retarget = async (fbxUrl, name, fps = 30) => {
+  const fbx = await new FBXLoader().loadAsync(fbxUrl);
+  const gl = await new GLTFLoader().loadAsync('./site/assets/sport/Superhero_Male_FullBody.gltf');
+  const tgtRoot = gl.scene; tgtRoot.updateMatrixWorld(true);
+  const T = {}; tgtRoot.traverse(o => { if (o.isBone) T[o.name] = o; });
+  const S = {}; fbx.traverse(o => { if (o.isBone) S[o.name.replace(/^mixamorig\d*:?/, '')] = o; });
+  const pairs = Object.entries(MAP).filter(([s, t]) => S[s] && T[t]);
+  // pose di riposo (prima di far partire l'animazione)
+  fbx.updateMatrixWorld(true);
+  const wq = o => o.getWorldQuaternion(new THREE.Quaternion());
+  const srcRest = {}, tgtRest = {};
+  for (const [s, t] of pairs) { srcRest[s] = wq(S[s]); tgtRest[t] = wq(T[t]); }
+  const srcHip0 = S.Hips.getWorldPosition(new THREE.Vector3()), tgtHip0 = T.pelvis.getWorldPosition(new THREE.Vector3());
+  const scale = tgtHip0.y / srcHip0.y;
+  const clip = fbx.animations[0]; const mixer = new THREE.AnimationMixer(fbx); const act = mixer.clipAction(clip); act.play();
+  const n = Math.round(clip.duration * fps) + 1, times = [], Q = {}, P = [];
+  for (const [, t] of pairs) Q[t] = [];
+  // ordine genitori → figli
+  const order = []; tgtRoot.traverse(o => { if (o.isBone) { const p = pairs.find(x => x[1] === o.name); if (p) order.push(p); } });
+  for (let f = 0; f < n; f++) {
+    const time = Math.min(clip.duration, f / fps); mixer.setTime(time); fbx.updateMatrixWorld(true); times.push(time);
+    for (const [s, t] of order) {
+      const delta = wq(S[s]).multiply(srcRest[s].clone().invert());
+      const want = delta.multiply(tgtRest[t]);
+      const parentQ = wq(T[t].parent);
+      T[t].quaternion.copy(parentQ.invert().multiply(want)); T[t].updateMatrixWorld(true);
+      Q[t].push(...T[t].quaternion.toArray());
+    }
+    // posizione del bacino: spostamento rispetto al riposo, in scala, nel sistema del genitore
+    const hp = S.Hips.getWorldPosition(new THREE.Vector3()).sub(srcHip0).multiplyScalar(scale).add(tgtHip0);
+    const loc = T.pelvis.parent.worldToLocal(hp.clone()); P.push(loc.x, loc.y, loc.z);
+  }
+  const tracks = Object.entries(Q).map(([t, v]) => new THREE.QuaternionKeyframeTrack(t + '.quaternion', times, v));
+  tracks.push(new THREE.VectorKeyframeTrack('pelvis.position', times, P));
+  const out = new THREE.AnimationClip(name, clip.duration, tracks);
+  return JSON.stringify(THREE.AnimationClip.toJSON(out));
+};
+window.ready = true;
+</script></body></html>
+<script type="module">
+import * as THREE from 'three';
+import { GLTFLoader } from 'three/addons/loaders/GLTFLoader.js';
+window.handTrack = async (name) => {
+  const gl = await new GLTFLoader().loadAsync('./site/assets/sport/Superhero_Male_FullBody.gltf');
+  const clip = THREE.AnimationClip.parse(await (await fetch('./site/assets/sport/' + name + '.json')).json());
+  const m = new THREE.AnimationMixer(gl.scene); m.clipAction(clip).play(); let hand; gl.scene.traverse(o => { if (o.name === 'hand_r') hand = o; });
+  const out = []; for (let t = 0; t < clip.duration; t += 1 / 30) { m.setTime(t); gl.scene.updateMatrixWorld(true); const p = hand.getWorldPosition(new THREE.Vector3()); out.push([+t.toFixed(3), +p.x.toFixed(3), +p.y.toFixed(3), +p.z.toFixed(3)]); }
+  return JSON.stringify(out);
+};
+</script>

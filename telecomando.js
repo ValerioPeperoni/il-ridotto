@@ -1,5 +1,11 @@
+// niente zoom con due dita o doppio tocco: su iPhone il meta viewport non basta
+for (const ev of ['gesturestart', 'gesturechange', 'gestureend']) document.addEventListener(ev, e => e.preventDefault(), { passive: false });
+document.addEventListener('touchmove', e => { if (e.touches.length > 1) e.preventDefault(); }, { passive: false });
+let lastTap = 0; document.addEventListener('touchend', e => { const n = Date.now(); if (n - lastTap < 300 && !e.target.closest('input')) e.preventDefault(); lastTap = n; }, { passive: false });
+// se lo zoom è comunque scattato, si rimette a posto da solo
+if (window.visualViewport) visualViewport.addEventListener('resize', () => { if (visualViewport.scale > 1.01) { const m = document.querySelector('meta[name=viewport]'); const c = m.content; m.content = c + ',minimum-scale=1'; setTimeout(() => { m.content = c; }, 50); } });
 // versione: se il telefono ha in memoria file vecchi, si ricarica da solo con quelli nuovi
-const BUILD = '202611221308';
+const BUILD = '202611221325';
 fetch('build.txt?' + Date.now(), { cache: 'no-store' }).then(r => r.ok ? r.text() : '').then(v => { v = (v || '').trim(); if (v && v !== BUILD && sessionStorage.getItem('ridotto-reload') !== v) { sessionStorage.setItem('ridotto-reload', v); const u = new URL(location.href); u.searchParams.set('_v', v); location.replace(u.href); } }).catch(() => { });
 // Telefono come controller di movimento (bowling; in futuro ping pong).
 import { joinRoom } from './net.js';
@@ -338,7 +344,8 @@ function drawPow(p) { const el = $('#pBar'); el.classList.toggle('hide', p < 0);
   area.addEventListener('pointermove', e => { if (ad == null) return; const dd = (e.clientX - ad) * 0.006; acc += dd; if (V3) V3.turn(dd); ad = e.clientX; const now = performance.now(); if (now - sent > 40 && Math.abs(acc) > 0.002) { sent = now; net && net.send({ t: 'turn', d: +acc.toFixed(4) }); acc = 0; } });
   const end = () => { ad = null; if (acc) { net && net.send({ t: 'turn', d: +acc.toFixed(4) }); acc = 0; } }; area.addEventListener('pointerup', end); area.addEventListener('pointercancel', end); }
 cBtn.addEventListener('pointerup', cUp); cBtn.addEventListener('pointercancel', cUp); cBtn.addEventListener('contextmenu', e => e.preventDefault());
-$('#cItem').onclick = () => { net && net.send({ t: 'use' }); vibrate(30); };
+// pointerdown e non click: il click non arriva se un altro dito è sulla levetta (cioè mentre corri)
+$('#cItem').addEventListener('pointerdown', e => { e.preventDefault(); net && net.send({ t: 'use' }); vibrate(30); });
 function caosState(m) {
   if (m.phase === 'lobby') { show('wait'); $('#waitT').textContent = 'Aspetta che parta la partita'; return; }
   show('caos');

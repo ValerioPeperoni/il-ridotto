@@ -13,6 +13,8 @@
 html,body{margin:0;height:100%;background:radial-gradient(ellipse at top,#1b0f2c,#07060c 70%);color:var(--ink);font-family:"Cormorant Garamond",Georgia,serif;overflow:hidden;touch-action:none;user-select:none;-webkit-user-select:none;-webkit-touch-callout:none}
 button{font:inherit;color:inherit}
 .hide{display:none!important}
+html,body{touch-action:manipulation;overscroll-behavior:none}
+#caos,#cv3d,#pong,#bowl{touch-action:none}
 .scr{position:fixed;inset:0;display:flex;flex-direction:column;align-items:center;padding:max(14px,env(safe-area-inset-top)) 16px max(14px,env(safe-area-inset-bottom));gap:10px}
 h1{margin:6px 0 0;font-family:"IM Fell English SC",serif;font-weight:400;font-size:40px;text-shadow:0 0 10px var(--neon),0 0 26px var(--neon)}
 .sub{font-style:italic;opacity:.8;text-align:center;font-size:17px}
@@ -160,6 +162,6 @@ input{background:#fff;color:var(--ink);border:none;box-shadow:0 3px 0 rgba(0,0,0
 </div>
 <script src="vendor/peerjs.min.js"></script>
 <script type="importmap">{"imports":{"three":"./vendor/three.module.js","three/addons/":"./vendor/jsm/"}}</script>
-<script type="module" src="telecomando.js?v=202611221308"></script>
+<script type="module" src="telecomando.js?v=202611221325"></script>
 </body>
 </html>

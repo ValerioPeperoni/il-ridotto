@@ -17,7 +17,7 @@ const Q = new URLSearchParams(location.search);
 const DEBUG = Q.has('debug');
 const MOBILE = matchMedia('(pointer:coarse)').matches, LITE = Q.has('lite'), SPEED = +(Q.get('speed') || 1);
 // qualità grafica: bassa / media / alta (si sceglie nella sala, ricarica la pagina)
-let GFX = (() => { try { return localStorage.getItem('ridotto-gfx'); } catch (e) { return null; } })() || (MOBILE ? 'bassa' : 'media');
+let GFX = Q.get('gfx') || (() => { try { return localStorage.getItem('ridotto-gfx'); } catch (e) { return null; } })() || (MOBILE ? 'bassa' : 'media');
 const QL = { bassa: { pr: 1, shadow: 0, bloom: false, plants: 0.35, trees: 0.55, step: 2 }, media: { pr: 1.25, shadow: 1024, bloom: false, plants: 0.65, trees: 0.85, step: 1.5 }, alta: { pr: 1.6, shadow: 2048, bloom: true, plants: 1, trees: 1, step: 1.25 } }[GFX] || { pr: 1.25, shadow: 1024, bloom: false, plants: 0.65, trees: 0.85, step: 1.5 };
 const $ = s => document.querySelector(s);
 const clamp = (v, a, b) => Math.max(a, Math.min(b, v));
@@ -199,7 +199,7 @@ function onPhone(id, m) {
   }
   const p = G.players.find(x => x.conn === id); if (!p) return;
   if (m.t === 'joy') { p.input.x = clamp(+m.x || 0, -1, 1); p.input.y = clamp(+m.y || 0, -1, 1); p.input.cy = m.cy != null ? +m.cy : null; }
-  else if (m.t === 'btn') { p.input.btn = !!m.on; }
+  else if (m.t === 'btn') { p.input.btn = !!m.on; if (m.on) p.input.press = true; }
   else if (m.t === 'turn') { p.input.aim += clamp(+m.d || 0, -1, 1); }
   else if (m.t === 'sling') { p.input.sling = m.on ? { dx: clamp(+m.dx || 0, -1.5, 1.5), pow: clamp(+m.pow || 0, 0, 1) } : null; }
   else if (m.t === 'use') { p.input.item = true; }
@@ -213,7 +213,7 @@ function sendViews(dt) {
   if (!viewers.length || !['intro', 'play', 'results', 'over'].includes(G.phase)) return;
   const ready = G.players.filter(p => p.pos && p.ball);
   const P = ready.map(p => [r2(p.pos.x), r2(p.pos.y), r2(p.pos.z), r2(p.yaw), p.clip || 'Idle', p.clipN || 0, r2(p.ball.pos.x), r2(p.ball.pos.y), r2(p.ball.pos.z),
-    (p.done ? 1 : 0) | (p.frozen > 0 ? 2 : 0) | (p.ko > 0 ? 4 : 0) | (p.ball.moving ? 8 : 0) | ((p.state === 'addr' || p.state === 'charge') ? 16 : 0) | (p.state === 'charge' ? 32 : 0) | (p.superShot ? 64 : 0),
+    (p.done ? 1 : 0) | (p.frozen > 0 ? 2 : 0) | (p.ko > 0 ? 4 : 0) | (p.ball.moving ? 8 : 0) | ((p.state === 'addr' || p.state === 'charge') ? 16 : 0) | (p.state === 'charge' ? 32 : 0) | (p.superShot ? 64 : 0) | (p.giant > 0 ? 128 : 0),
     r2(p.aimYaw || 0), r2(p.charge || 0), r2(p.landX || 0), r2(p.landZ || 0), p.item ? ITEMS[p.item].icon : '']);
   const snap = { t: 'cv', ph: G.phase, h: G.hole, P, B: boxes.map(b => b.gone ? 0 : 1),
     M: G.missiles.map(m => [r2(m.m.position.x), r2(m.m.position.y), r2(m.m.position.z)]), Bo: G.bombs.map(m => [r2(m.m.position.x), r2(m.m.position.y), r2(m.m.position.z)]), Mi: G.mines.map(m => [r2(m.x), r2(m.z)]) };
@@ -275,7 +275,7 @@ function startHole() {
     p.ball = { pos: new THREE.Vector3(bx, heightAt(bx, bz) + BALL_R, bz), vel: new THREE.Vector3(), air: false, moving: false, last: null, inWater: false };
     p.ball.last = p.ball.pos.clone();
     p.pos = new THREE.Vector3(bx - Math.sin(yaw) * 1.2 - Math.cos(yaw) * 0.6, 0, bz - Math.cos(yaw) * 1.2 + Math.sin(yaw) * 0.6); p.pos.y = heightAt(p.pos.x, p.pos.z);
-    p.vel = new THREE.Vector3(); p.yaw = yaw; p.aimYaw = yaw; p.state = 'walk'; p.strokes = 0; p.done = false; p.item = null; p.ko = 0; p.frozen = 0; p.charge = 0; p.chargeT = 0; p.superShot = false; p.magnet = 0; p.swipeCd = 0; p.fly = null; p.giant = 0; if (p.baseScale) p.av.root.scale.setScalar(p.baseScale);
+    p.vel = new THREE.Vector3(); p.yaw = yaw; p.aimYaw = yaw; p.state = 'walk'; p.strokes = 0; p.done = false; p.item = null; p.ko = 0; p.frozen = 0; p.charge = 0; p.chargeT = 0; p.superShot = false; p.magnet = 0; p.swipeCd = 0; p.fly = null; p.giant = 0; p.pendingShot = null; p.golfAct = null; if (p.baseScale) p.av.root.scale.setScalar(p.baseScale);
     p.av.root.visible = true; p.ballMesh.visible = true; p.ballRing.visible = true; p.ballPin.visible = true;
     p.av.play('Idle', { fade: 0.1 }); p.anim = 'Idle';
     unfreeze(p);
@@ -361,9 +361,13 @@ function updatePlayer(p, dt) {
     p.fly.v.y -= 20 * dt; p.pos.addScaledVector(p.fly.v, dt);
     const gh = heightAt(p.pos.x, p.pos.z); if (p.pos.y <= gh && p.fly.v.y < 0) { p.pos.y = gh; p.fly = null; FX.puff(p.pos.clone(), undefined, 6, 0.8); }
   }
-  if (p.ko > 0) { p.ko -= dt; if (p.ko <= 0) { p.av.play('Idle', { fade: 0.3 }); p.anim = 'Idle'; p.state = p.done ? 'done' : 'walk'; } }
+  if (p.ko > 0) { p.ko -= dt; if (p.ko <= 0) { p.av.play('Idle', { fade: 0.3 }); p.anim = 'Idle'; p.state = p.done ? 'done' : 'walk'; p.immune = G.time + 2.5; } }
+  // appena rialzato si è intoccabili per un attimo (si vede lampeggiare): niente mazzate a catena
+  if (p.av) { const imm = (p.immune || 0) > G.time && p.ko <= 0; p.av.root.visible = !imm || Math.floor(G.time * 10) % 2 === 0; }
   if (p.giant > 0) { p.giant -= dt; const k = p.giant > 0 ? Math.min(2.2, p.av.root.scale.x / p.baseScale + dt * 4) : 1; p.av.root.scale.setScalar(p.baseScale * Math.max(1, k)); if (p.giant <= 0) p.av.root.scale.setScalar(p.baseScale); }
   if (p.frozen > 0) { p.frozen -= dt; if (p.frozen <= 0) unfreeze(p); }
+  if (p.pendingShot && G.time >= p.pendingShot.at) fireShot(p);
+  if (p.state === 'swing' && G.time > (p.swingEnd || 0) && !p.pendingShot) p.state = 'walk';
   const stunned = p.ko > 0 || p.frozen > 0 || p.fly;
   // oggetto
   if (inp.item) { inp.item = false; if (p.item && !stunned && G.phase === 'play') useItem(p); }
@@ -396,12 +400,14 @@ function updatePlayer(p, dt) {
       p.slingOn = false; p.slingMode = false;
       if (p.charge > 0.04) shoot(p); else { p.state = 'addr'; p.charge = 0; }
     }
-    if (p.state === 'addr' && inp.btn && !p.btnWas) { p.state = 'charge'; p.chargeT = 0; }
+    if (p.state === 'addr' && inp.btn && (!p.btnWas || inp.press)) { p.state = 'charge'; p.chargeT = 0; }
     if (p.state === 'charge' && !p.slingMode) {
       p.chargeT += dt; p.charge = 1 - Math.abs(1 - (p.chargeT / 1.1) % 2); // va su e giù
       if (!inp.btn) shoot(p);
     }
-    playAnim(p, p.state === 'charge' ? '1H_Ranged_Aiming' : 'Idle_B');
+    golfPose(p);
+  } else if (p.state === 'swing') {
+    // durante lo swing si resta fermi
   } else if (!stunned && !p.done || (p.done && !stunned)) {
     // corsa
     if (inp.cy != null) { _f.set(Math.sin(inp.cy), 0, Math.cos(inp.cy)); _r.set(-_f.z, 0, _f.x); } else camAxes(); // telefono con la sua visuale: rispetto alla sua telecamera
@@ -416,12 +422,12 @@ function updatePlayer(p, dt) {
     if (!p.fly) playAnim(p, p.done && sp < 0.5 ? (p.anim === 'Cheer' ? 'Cheer' : 'Idle') : sp > 4 ? 'Running_A' : sp > 0.5 ? 'Walking_A' : 'Idle');
     if (p.av.mixer) { const a = p.av.mixer._actions.find(x => x.isRunning() && x.getClip().name === 'Sprint_Loop'); if (a) a.timeScale = sp / 7; }
     // mazzata a chi è vicino (lontano dalla palla)
-    if (inp.btn && !p.btnWas && (dBall > 3 || p.done) && p.swipeCd <= 0 && G.phase === 'play' && G.holeT > 2) swipe(p);
+    if ((inp.press || (inp.btn && !p.btnWas)) && (dBall > 3 || p.done) && p.swipeCd <= 0 && G.phase === 'play' && G.holeT > 1) swipe(p);
     // da gigante travolgi chi tocchi
-    if (p.giant > 0) for (const q of G.players) if (q !== p && !(q.ko > 0) && q.pos.distanceTo(p.pos) < 1.9) { knock(q, p.pos, 12, 2.2); p.kos++; p.score++; FX.sound('whack'); shake(0.25); renderBoard(); }
+    if (p.giant > 0) for (const q of G.players) if (q !== p && !(q.ko > 0) && q.pos.distanceTo(p.pos) < 1.9) { if (knock(q, p.pos, 12, 2.2)) { p.kos++; p.score++; FX.sound('whack'); shake(0.25); renderBoard(); } }
   }
   p.idleT = moveIn ? 0 : (p.idleT || 0) + dt;
-  p.btnWas = inp.btn;
+  p.btnWas = inp.btn; inp.press = false;
   // terreno, alberi, bordi
   if (!p.fly) p.pos.y = heightAt(p.pos.x, p.pos.z);
   for (const tr of trunksNear(p.pos.x, p.pos.z)) { const dx = p.pos.x - tr.x, dz = p.pos.z - tr.z, d = Math.hypot(dx, dz), r = tr.r + 0.35; if (d < r && d > 1e-4) { p.pos.x = tr.x + dx / d * r; p.pos.z = tr.z + dz / d * r; } }
@@ -447,14 +453,34 @@ function autoAim(p) {
   const tgt = dc < 70 || pastMid || Math.hypot(b.x - h.tee[0], b.z - h.tee[1]) > Math.hypot(h.mid[0] - h.tee[0], h.mid[1] - h.tee[1]) ? [c.x, c.z] : h.mid;
   return Math.atan2(tgt[0] - b.x, tgt[1] - b.z);
 }
+// Swing vero (animazione Mixamo "Golf Drive" adattata): mentre carichi il personaggio va indietro col bastone
+// quanto la potenza; quando tiri la palla parte nell'istante dell'impatto.
+const SWING = { clip: 'Golf_Drive_B', address: 0.2, top: 0.95, impact: 1.17, speed: 1.7 };
+function golfPose(p) {
+  if (p.anim !== 'golf' || !p.golfAct) { p.golfAct = p.av.play(SWING.clip, { once: true, fade: 0.2 }); p.anim = 'golf'; }
+  if (!p.golfAct) { playAnim(p, 'Idle_B'); return; }
+  const k = p.state === 'charge' ? p.charge : 0, e = k * k * (3 - 2 * k);
+  p.golfAct.timeScale = 0; p.golfAct.time = SWING.address + (SWING.top - SWING.address) * e;
+}
 function shoot(p) {
-  const b = p.ball, power = Math.max(0.04, p.charge);
-  b.last = b.pos.clone(); b.vel.copy(shotVel(p, power, p.aimYaw)); b.moving = true; b.air = !onGreen(b.pos); b.inWater = false; b.ghost = p.superShot; b.superT = p.superShot ? 4 : 0;
-  p.superShot = false; p.triedItem = false; p.strokes++; p.state = 'swing'; p.charge = 0; p.swingT = 0.5;
-  p.av.play('TreeChopping_Loop', { once: true, fade: 0.08, speed: 1.5, then: 'Idle_Loop' }); p.anim = 'swing';
-  FX.sound(onGreen(b.pos) ? 'putt' : 'hit', 0.8 + power * 0.4); FX.sound('swish', power);
+  const power = Math.max(0.04, p.charge), yaw = p.aimYaw, putt = onGreen(p.ball.pos);
+  p.state = 'swing'; p.charge = 0;
+  let delay = 0.1;
+  if (p.golfAct && p.anim === 'golf') {
+    if (putt) p.golfAct.time = Math.max(p.golfAct.time, SWING.impact - 0.16 * SWING.speed);
+    delay = Math.max(0.08, (SWING.impact - p.golfAct.time) / SWING.speed); p.golfAct.timeScale = SWING.speed;
+    const act = p.golfAct; setTimeout(() => { if (p.anim === 'golf' && p.golfAct === act) { playAnim(p, 'Idle'); p.golfAct = null; } }, 1600);
+  }
+  p.pendingShot = { at: G.time + delay, power, yaw };
+  p.swingEnd = G.time + delay + 0.45;
+  FX.sound('swish', power);
+}
+function fireShot(p) {
+  const s = p.pendingShot; p.pendingShot = null; const b = p.ball, power = s.power;
+  b.last = b.pos.clone(); b.vel.copy(shotVel(p, power, s.yaw)); b.moving = true; b.air = !onGreen(b.pos); b.inWater = false; b.ghost = p.superShot; b.superT = p.superShot ? 4 : 0;
+  p.superShot = false; p.triedItem = false; p.strokes++;
+  FX.sound(onGreen(b.pos) ? 'putt' : 'hit', 0.8 + power * 0.4);
   if (power > 0.9) FX.sparkle(b.pos.clone(), new THREE.Color(2, 1.8, 0.6), 10);
-  setTimeout(() => { if (p.state === 'swing') p.state = 'walk'; }, 550);
   renderBoard();
 }
 function updateBall(p, dt) {
@@ -480,6 +506,8 @@ function updateBall(p, dt) {
     if (b.inWater) {
       FX.splash(b.pos.clone().setY(WATER)); viewFx({ k: 'splash', x: r2(b.pos.x), y: WATER, z: r2(b.pos.z) }); p.strokes++; b.pos.copy(b.last); b.vel.set(0, 0, 0); b.moving = false; b.inWater = false; b.ghost = false;
       if (p.kind !== 'bot') tip(`${p.name}: in acqua! Torni indietro (+1)`); renderBoard();
+    } else if (!b.air && b.vel.lengthSq() < 0.25 && Math.hypot(b.pos.x - cupOf(HOLES[G.hole]).x, b.pos.z - cupOf(HOLES[G.hole]).z) < CUP_R * 1.7) {
+      playerSunk(p); return; // ferma (o quasi) sul bordo: è dentro, si segna subito
     } else if (!b.air && b.vel.lengthSq() < 0.006) {
       const n = normalAt(b.pos.x, b.pos.z); if (n.y > 0.985 || b.vel.lengthSq() < 0.0005) { b.vel.set(0, 0, 0); b.moving = false; b.ghost = false; }
     }
@@ -494,12 +522,13 @@ function updateBall(p, dt) {
 
 // ---------- mazzate, oggetti ----------
 function knock(p, from, force, ko = 2.4) {
-  if (p.ko > 0 || p.giant > 0) return;
+  if (p.ko > 0 || p.giant > 0 || (p.immune || 0) > G.time) return false;
   if (DEBUG) console.log('knock', p.name, new Error().stack.split('\n')[2]);
   const d = p.pos.clone().sub(from); d.y = 0; const l = d.length() || 1; d.multiplyScalar(1 / l);
   p.fly = { v: new THREE.Vector3(d.x * force, 5 + force * 0.5, d.z * force) }; p.ko = ko; p.state = 'ko';
   p.av.play(Math.random() < 0.5 ? 'Death_A' : 'Death_B', { once: true, fade: 0.1 }); p.anim = 'ko';
   FX.sparkle(p.pos.clone().setY(p.pos.y + 1.4), new THREE.Color(2, 2, 0.6), 10);
+  return true;
 }
 function swipe(p) {
   p.swipeCd = 0.9; FX.sound('swish', 1);
@@ -507,7 +536,7 @@ function swipe(p) {
   const fx = Math.sin(p.yaw), fz = Math.cos(p.yaw);
   for (const q of G.players) {
     if (q === p) continue; const dx = q.pos.x - p.pos.x, dz = q.pos.z - p.pos.z, d = Math.hypot(dx, dz);
-    if (d < 2.2 && (dx * fx + dz * fz) / (d || 1) > 0.2) { knock(q, p.pos, 9); p.kos++; p.score++; FX.sound('whack'); shake(0.3); renderBoard(); }
+    if (d < 2.2 && (dx * fx + dz * fz) / (d || 1) > 0.2) { if (!knock(q, p.pos, 9, p.done ? 1.4 : 2.4)) continue; p.kos++; p.score++; FX.sound('whack'); shake(0.3); renderBoard(); }
   }
   for (const q of G.players) { // anche le palle degli altri vicine volano via
     const b = q.ball; if (q.done || q === p) continue; const dx = b.pos.x - p.pos.x, dz = b.pos.z - p.pos.z, d = Math.hypot(dx, dz);
@@ -518,7 +547,7 @@ function boom(pos, r, owner) {
   FX.explosion(pos.clone().setY(pos.y + 0.4), r, { shake }); viewFx({ k: 'boom', x: r2(pos.x), y: r2(pos.y + 0.4), z: r2(pos.z), r });
   for (const q of G.players) {
     const d = q.pos.distanceTo(pos);
-    if (d < r) { knock(q, pos, 14 * (1 - d / r) + 6, 2.6); if (owner && owner !== q) { owner.kos++; owner.score++; } }
+    if (d < r) { if (knock(q, pos, 14 * (1 - d / r) + 6, 2.6) && owner && owner !== q) { owner.kos++; owner.score++; } }
     const b = q.ball; const db = b.pos.distanceTo(pos);
     if (!q.done && db < r * 1.2) { const dir = b.pos.clone().sub(pos); dir.y = 0; dir.normalize(); b.last = b.moving ? b.last : b.pos.clone(); b.vel.set(dir.x * 12 * (1 - db / (r * 1.2)) + dir.x * 3, 7, dir.z * 12 * (1 - db / (r * 1.2)) + dir.z * 3); b.moving = true; b.air = true; }
   }
@@ -550,7 +579,7 @@ function useItem(p) {
     else { FX.beam(head, head.clone().add(new THREE.Vector3(Math.sin(p.yaw) * 20, 0, Math.cos(p.yaw) * 20))); }
   } else if (it === 'fulmine') {
     shake(0.6);
-    for (const q of G.players) if (q !== p) { FX.lightning(q.pos.clone()); viewFx({ k: 'light', x: r2(q.pos.x), y: r2(q.pos.y), z: r2(q.pos.z) }); knock(q, q.pos.clone().add(new THREE.Vector3(0.1, 0, 0.1)), 2, 2.2); p.kos++; p.score++; }
+    for (const q of G.players) if (q !== p) { FX.lightning(q.pos.clone()); viewFx({ k: 'light', x: r2(q.pos.x), y: r2(q.pos.y), z: r2(q.pos.z) }); if (knock(q, q.pos.clone().add(new THREE.Vector3(0.1, 0, 0.1)), 2, 2.2)) { p.kos++; p.score++; } }
     renderBoard(); flashScreen();
   } else if (it === 'calamita') { p.magnet = 9; FX.sparkle(p.ball.pos.clone(), new THREE.Color(2, 0.5, 0.5), 16); if (p.kind !== 'bot') tip(`${p.name}: la tua palla ora cerca la buca`); }
   else if (it === 'banana') {
@@ -744,9 +773,11 @@ function updateCamera(dt) {
 }
 
 // ---------- ciclo ----------
-let last = performance.now(), slow = 0, wasPhase = '';
+// ?rec: si avanza a passi fissi da fuori (per registrare e guardare le partite)
+const REC = Q.has('rec'); let simNow = 0;
+let last = REC ? 0 : performance.now(), slow = 0, wasPhase = '';
 function frame(now) {
-  requestAnimationFrame(frame);
+  if (!REC) requestAnimationFrame(frame);
   let dt = clamp((now - last) / 1000, 0, 0.05); last = now; G.time += dt;
   if (dt > 1 / 35) slow += dt; else slow = Math.max(0, slow - dt * 0.5);
   if (slow > 2.5 && PR > 0.7) { PR = Math.max(0.7, PR - 0.2); renderer.setPixelRatio(PR); resize(); slow = 0; }
@@ -758,6 +789,7 @@ function frame(now) {
   FX.updateFx(dt, camera);
   updateCamera(dt);
   updateTags();
+  if (Q.has('norender') || window.__noRender) return;
   if (composer) composer.render(); else renderer.render(scene, camera);
 }
 function simStep(dt) {
@@ -808,7 +840,7 @@ function updateAimPreview() {
 
 // ---------- avvio ----------
 resize(); renderLobby(); document.querySelectorAll('#gfx .chip').forEach(x => x.classList.toggle('sel', x.dataset.q === GFX));
-requestAnimationFrame(frame);
+if (!REC) requestAnimationFrame(frame); else window.__adv = (n = 1, dt = 1 / 30) => { for (let i = 0; i < n; i++) { simNow += dt * 1000; frame(simNow); } };
 (async () => {
   let a = 0, b = 0; const prog = () => { $('#bar').style.width = ((a * 0.5 + b * 0.5) * 100) + '%'; };
   await Promise.all([loadAvatarLibrary(p => { a = p; prog(); }), (LITE ? Promise.resolve() : loadNature(scene, { mobile: GFX === 'bassa', plants: QL.plants, trees: QL.trees, avoid: propZones(), onProgress: p => { b = p; prog(); } }))]);

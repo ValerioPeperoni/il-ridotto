@@ -60,7 +60,7 @@ const pinTex = ctex(256, 1024, (g, w, h) => {
   // piccola corona sul davanti, come i birilli veri
   g.save(); g.translate(w * 0.25, v(0.20)); g.fillStyle = '#d81e34'; g.beginPath(); g.moveTo(-18, 10); g.lineTo(-18, -6); g.lineTo(-9, 2); g.lineTo(0, -12); g.lineTo(9, 2); g.lineTo(18, -6); g.lineTo(18, 10); g.closePath(); g.fill(); g.restore();
 });
-const pinMat = new THREE.MeshPhysicalMaterial({ map: pinTex, roughness: 0.28, clearcoat: 1, clearcoatRoughness: 0.06, sheen: 0.2, sheenColor: new THREE.Color(0xffffff), envMapIntensity: 1.0 });
+const pinMat = new THREE.MeshPhysicalMaterial({ map: pinTex, roughness: 0.28, clearcoat: 1, clearcoatRoughness: 0.06, envMapIntensity: 1.0 });
 const pinGeo = (() => {
   const curve = new THREE.SplineCurve(PIN_PROF.map(([y, r]) => new THREE.Vector2(r * 0.0254, y * 0.0254)));
   const pts = curve.getSpacedPoints(110).map(p => new THREE.Vector2(Math.max(0.0002, p.x), p.y));
@@ -88,16 +88,21 @@ function buildHall() {
   const darkWood = new THREE.MeshStandardMaterial({ color: 0x1c2140, roughness: 0.55, metalness: 0.1 });
   for (const [i, lx] of LANES_X.entries()) {
     const grp = new THREE.Group(); grp.position.x = lx;
-    const lane = new THREE.Mesh(new THREE.BoxGeometry(L.W, 0.06, 19.4), laneMat); lane.position.set(0, -0.03, -9.7); lane.receiveShadow = true; grp.add(lane);
+    const laneLen = -L.deckEnd; // la pista finisce dove finisce il piano dei birilli: dietro c'è la fossa aperta
+    const lane = new THREE.Mesh(new THREE.BoxGeometry(L.W, 0.06, laneLen), laneMat); lane.position.set(0, -0.03, -laneLen / 2); lane.receiveShadow = true; grp.add(lane);
     if (lx === 0) mainLaneMesh = lane;
-    const deckM = new THREE.Mesh(new THREE.BoxGeometry(L.W, 0.06, 1.6), laneMat); deckM.position.set(0, -0.03, -20.2); deckM.receiveShadow = true; grp.add(deckM);
     for (const s of [-1, 1]) {
-      const gut = new THREE.Mesh(new THREE.CylinderGeometry(L.gutter / 2, L.gutter / 2, 20.2, 20, 1, true, -Math.PI / 2, Math.PI), new THREE.MeshPhysicalMaterial({ color: 0x2a2f4a, roughness: 0.35, metalness: 0.05, clearcoat: 0.6, side: THREE.DoubleSide }));
-      gut.rotation.x = Math.PI / 2; gut.position.set(s * (L.half + L.gutter / 2), -0.005, -9.7); gut.receiveShadow = true; grp.add(gut);
+      const gut = new THREE.Mesh(new THREE.CylinderGeometry(L.gutter / 2, L.gutter / 2, laneLen, 20, 1, true, -Math.PI / 2, Math.PI), new THREE.MeshPhysicalMaterial({ color: 0x2a2f4a, roughness: 0.35, metalness: 0.05, clearcoat: 0.6, side: THREE.DoubleSide }));
+      gut.rotation.x = Math.PI / 2; gut.position.set(s * (L.half + L.gutter / 2), -0.005, -laneLen / 2); gut.receiveShadow = true; grp.add(gut);
       const cap = new THREE.Mesh(new THREE.BoxGeometry(0.1, 0.08, 21), darkWood); cap.position.set(s * (L.half + L.gutter + 0.05), 0.0, -10); cap.receiveShadow = true; grp.add(cap);
       const strip = new THREE.Mesh(new THREE.BoxGeometry(0.018, 0.012, 21), neon(MASK_COLORS[i], 0.9)); strip.position.set(s * (L.half + L.gutter + 0.05), 0.046, -10); grp.add(strip);
     }
-    const pit = new THREE.Mesh(new THREE.BoxGeometry(L.W + 2 * L.gutter + 0.2, 0.6, 1.4), new THREE.MeshStandardMaterial({ color: 0x07080f })); pit.position.set(0, -0.32, -21.7); grp.add(pit);
+    // fossa aperta dietro i birilli: fondo scuro più in basso, pareti laterali e tenda in fondo (dove cadono palla e birilli)
+    { const pw = L.W + 2 * L.gutter + 0.2, pz0 = L.deckEnd, pz1 = L.deckEnd - 1.62, pm = new THREE.MeshStandardMaterial({ color: 0x0a0b14, roughness: 0.9 });
+      const floor = new THREE.Mesh(new THREE.BoxGeometry(pw, 0.05, pz0 - pz1), pm); floor.position.set(0, -0.425, (pz0 + pz1) / 2); floor.receiveShadow = true; grp.add(floor);
+      const lip = new THREE.Mesh(new THREE.BoxGeometry(pw, 0.4, 0.04), pm); lip.position.set(0, -0.22, pz0 - 0.02); grp.add(lip);
+      const curtain = new THREE.Mesh(new THREE.PlaneGeometry(pw, 1.7), new THREE.MeshStandardMaterial({ map: ctex(256, 64, (g, w, h) => { for (let x = 0; x < w; x++) { const v = 14 + 10 * Math.sin(x * 0.35) + 4 * Math.sin(x * 1.3); g.fillStyle = `rgb(${v},${v},${v + 8})`; g.fillRect(x, 0, 1, h); } }), roughness: 1 }));
+      curtain.position.set(0, 0.42, pz1 + 0.03); grp.add(curtain); }
     // mascherone: pannello scuro con cornice luminosa e numero
     const mask = new THREE.Mesh(new THREE.BoxGeometry(L.W + 2 * L.gutter + 0.3, 1.1, 0.35), new THREE.MeshStandardMaterial({ map: maskTex(i), roughness: 0.6 }));
     mask.position.set(0, 1.75, -19.95); grp.add(mask);
@@ -688,7 +693,7 @@ function sweepStep(dt) {
       // caduti: la sbarra li spinge nella fossa
       const pz = Math.min(sp.p0.z, rake.position.z - 0.08 - (t > SW.rakeDown ? 0 : 99));
       if (t > SW.rakeDown && rake.position.y < 0.3) { sp.p0.z = Math.min(sp.p0.z, rake.position.z - 0.08); }
-      m.position.set(sp.p0.x, sp.p0.z < -19.3 ? Math.max(-0.5, sp.p0.y - (t - SW.rakeDown) * 1.5) : sp.p0.y, sp.p0.z);
+      m.position.set(sp.p0.x, sp.p0.z < -19.3 ? Math.max(-0.4 + 0.06, sp.p0.y - (t - SW.rakeDown) * 1.5) : sp.p0.y, sp.p0.z);
       m.quaternion.copy(sp.q0); m.visible = m.position.y > -0.45; void pz;
     } else m.visible = false;
   }
@@ -797,7 +802,7 @@ function frame(now) {
       const bb = deck.ball; if (bb) { ballMesh.position.copy(bb.position); ballMesh.quaternion.copy(bb.quaternion); }
       if (G.rec && G.rec.length < 400) G.rec.push({ b: [ballMesh.position.clone(), ballMesh.quaternion.clone()], p: deck.pins.map(q => [q.position.x, q.position.y, q.position.z, q.quaternion.x, q.quaternion.y, q.quaternion.z, q.quaternion.w]) });
       if (Pins.settled(deck)) finishThrow();
-    } else { G.deckT += dt; if (G.ball.fell) ballMesh.position.y -= dt * 2; if (G.deckT > 1.4) { G.noDeck = false; finishThrow(); } }
+    } else { G.deckT += dt; if (G.ball.fell) ballMesh.position.y = Math.max(-0.4 + L.R, ballMesh.position.y - dt * 2); if (G.deckT > 1.4) { G.noDeck = false; finishThrow(); } }
   }
   if (G.phase === 'replay') {
     G.repT += dt; const k = Math.min(G.rec.length - 1, Math.floor(G.repT * 60 * 0.4)), f = G.rec[k];

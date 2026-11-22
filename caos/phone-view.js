@@ -131,6 +131,7 @@ export async function startPhoneView(canvas, ui, onProgress) {
       p.pos.lerp(_ext, 1 - Math.exp(-dt * 16)); p.yaw = lerpA(p.yaw, p.tyaw, k); p.bpos.lerp(p.btgt, 1 - Math.exp(-dt * 16));
       p.av.root.position.copy(p.pos); p.av.root.rotation.y = p.yaw; p.av.update(dt);
       p.av.mixer.timeScale = p.flags & 2 ? 0 : 1;
+      { const g = p.flags & 128 ? 2.2 : 1; p.gs = (p.gs || 1) + (g - (p.gs || 1)) * Math.min(1, dt * 6); if (p.bs == null) p.bs = p.av.root.scale.x; p.av.root.scale.setScalar(p.bs * p.gs); }
       p.ball.position.copy(p.bpos); p.ball.visible = !(p.flags & 1);
       p.bBlob.position.set(p.bpos.x, heightAt(p.bpos.x, p.bpos.z) + 0.03, p.bpos.z); p.bBlob.visible = p.ball.visible;
       p.pBlob.position.set(p.pos.x, heightAt(p.pos.x, p.pos.z) + 0.03, p.pos.z);

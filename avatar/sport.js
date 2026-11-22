@@ -12,6 +12,7 @@ export const KIT = ['#3d7bff', '#ff5c9a', '#ffcf3a', '#2ec27e', '#9a5cff', '#ff6
 export const DEFAULT_SPORT = { body: 'M', skin: 1, hair: 'SimpleParted', hairColor: 1, beard: false, shirt: '#3d7bff', shorts: '#1d2340', shoes: '#f4f6fb' };
 
 let LIB = null;
+const EXTRA = ['Golf_Drive', 'Golf_Drive_B'];
 export async function loadSportLibrary(onProgress) {
   if (LIB) return LIB;
   const ld = new GLTFLoader();
@@ -22,6 +23,8 @@ export async function loadSportLibrary(onProgress) {
   await Promise.all(keys.map(async k => { out[k] = await ld.loadAsync(DIR + files[k]); onProgress && onProgress(++n / keys.length); }));
   const clips = {};
   for (const k of ['ual1', 'ual2']) for (const c of out[k].animations) clips[c.name] = c;
+  // animazioni da Mixamo già adattate al nostro scheletro (vedi sviluppo/tools/retarget.html)
+  await Promise.all(EXTRA.map(async n => { try { const j = await (await fetch(DIR + n + '.json')).json(); clips[n] = THREE.AnimationClip.parse(j); } catch (e) { } }));
   LIB = { src: out, clips };
   return LIB;
 }

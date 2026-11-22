@@ -101,6 +101,8 @@ for (const h of HOLES) { const dx = h.green[0] - h.mid[0], dz = h.green[1] - h.m
 
 // ---------- texture del terreno, disegnata una volta ----------
 const PX = 6; // pixel per metro
+const _nrm = new THREE.Vector3();
+const hash2 = (i, j) => { const h = Math.sin(i * 127.1 + j * 311.7) * 43758.5453; return h - Math.floor(h); };
 export function terrainTexture(compute) {
   // di solito si carica l'immagine già pronta (calcolarla sul telefono richiede troppi secondi)
   if (!compute) { const t = new THREE.TextureLoader().load('assets/terrain.jpg', undefined, undefined, () => { const c = terrainTexture(true); t.image = c.image; t.needsUpdate = true; }); t.colorSpace = THREE.SRGBColorSpace; t.anisotropy = 8; t.flipY = false; return t; }
@@ -113,17 +115,38 @@ export function terrainTexture(compute) {
     let [r, gg, b] = col[s];
     const n = fbm(x * 0.15, z * 0.15, 3) - 0.5, n2 = fbm(x * 0.6 + 9, z * 0.6, 2) - 0.5;
     let k = 1 + n * 0.22 + n2 * 0.08;
-    if (s === S.FAIR || s === S.GREEN || s === S.TEE) {
-      // strisce del taglio dell'erba, nella direzione della buca
-      const stripe = Math.floor((x * 0.7 + z * 0.7) / (s === S.GREEN ? 1.6 : 3.2)) % 2 === 0;
-      k *= stripe ? 1.06 : 0.95;
-    }
+    if (s === S.FAIR || s === S.TEE) {
+      // taglio dell'erba a scacchi, come sui campi veri
+      const a = Math.floor((x * 0.7 + z * 0.7) / 3.4) % 2 === 0, bb = Math.floor((x * 0.7 - z * 0.7) / 3.4) % 2 === 0;
+      k *= a !== bb ? 1.065 : 0.95;
+    } else if (s === S.GREEN) { const a = Math.floor((x * 0.7 + z * 0.7) / 1.4) % 2 === 0; k *= a ? 1.05 : 0.96; }
     if (s === S.ROUGH) { const dry = fbm(x * 0.03 + 50, z * 0.03, 2); r += (dry - 0.45) * 50; gg += (dry - 0.45) * 15; }
+    if (s === S.ROUGH) {
+      // sottobosco più scuro dove ci sono i boschetti (stessa mappa di densità degli alberi)
+      const dens = fbm(x * 0.03 + 11, z * 0.03 - 4, 3);
+      if (dens > 0.46) { const t = Math.min(1, (dens - 0.46) / 0.12); r = r * (1 - t * 0.35) + 30 * t; gg = gg * (1 - t * 0.3); b = b * (1 - t * 0.3); k *= 1 + (n2 * 0.25) * t; }
+    }
     if (s === S.SAND) k = 1 + n2 * 0.12;
+    // pendii ripidi: roccia a strati
+    if (s === S.ROUGH) { const ny = normalAt(x, z, _nrm).y; if (ny < 0.9) { const t = Math.min(1, (0.9 - ny) / 0.18), band = 0.9 + 0.1 * Math.sin(h * 5 + n * 3); r = r * (1 - t) + 128 * band * t; gg = gg * (1 - t) + 116 * band * t; b = b * (1 - t) + 98 * band * t; } }
     if (h < 0.8 && s !== S.SAND) { const t = Math.max(0, Math.min(1, (0.8 - h) / 1.2)); r = r * (1 - t) + 196 * t; gg = gg * (1 - t) + 180 * t; b = b * (1 - t) + 130 * t; } // spiaggia
+    if (h < WATER + 0.35 && h > WATER - 0.3) { const t = 1 - Math.abs(h - WATER - 0.02) / 0.33; r = r * (1 - t * 0.35); gg = gg * (1 - t * 0.3); b = b * (1 - t * 0.2); } // sabbia bagnata
+    // bordo erboso più scuro attorno ai bunker
+    if (s !== S.SAND) for (const hole of HOLES) for (const [bx, bz, br] of hole.bunkers) { const dd = Math.hypot(x - bx, z - bz) / br; if (dd > 0.95 && dd < 1.25) k *= 0.9 + (dd - 0.95) * 0.33; }
+    // ombra delle conche, luce sui dossi (occlusione finta dal terreno)
+    { const avg = (heightAt(x + 3, z) + heightAt(x - 3, z) + heightAt(x, z + 3) + heightAt(x, z - 3)) / 4; k *= 1 - Math.max(-0.08, Math.min(0.16, (avg - h) * 0.22)); }
     const o = (py * cw + px) * 4; d[o] = r * k; d[o + 1] = gg * k; d[o + 2] = b * k; d[o + 3] = 255;
   }
   g.putImageData(img, 0, 0);
+  // sentieri del golf cart: dal green alla buca dopo
+  g.lineCap = 'round'; g.lineJoin = 'round';
+  const P = (x, z) => [(x - X0) * sx, (z - Z0) * sx];
+  for (let i = 0; i + 1 < HOLES.length; i++) {
+    const a = HOLES[i].green, b2 = HOLES[i + 1].tee, mx = (a[0] + b2[0]) / 2 + (b2[1] - a[1]) * 0.15, mz = (a[1] + b2[1]) / 2 - (b2[0] - a[0]) * 0.15;
+    for (const [w, st] of [[3.2, 'rgba(120,100,70,0.35)'], [2.4, 'rgba(214,196,160,0.95)']]) {
+      g.strokeStyle = st; g.lineWidth = w * sx; g.beginPath(); g.moveTo(...P(a[0] + (b2[0] - a[0]) * 0.12, a[1] + (b2[1] - a[1]) * 0.12)); g.quadraticCurveTo(...P(mx, mz), ...P(b2[0] - (b2[0] - a[0]) * 0.12, b2[1] - (b2[1] - a[1]) * 0.12)); g.stroke();
+    }
+  }
   const t = new THREE.CanvasTexture(c); t.colorSpace = THREE.SRGBColorSpace; t.anisotropy = 8; t.flipY = false;
   return t;
 }
