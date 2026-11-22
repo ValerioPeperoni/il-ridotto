@@ -6,6 +6,7 @@ import { ShaderPass } from 'three/addons/postprocessing/ShaderPass.js';
 import { UnrealBloomPass } from 'three/addons/postprocessing/UnrealBloomPass.js';
 import { OutputPass } from 'three/addons/postprocessing/OutputPass.js';
 import { T, mkBall, step, predict, solve, copy } from './ball.js';
+import { makeArm } from './arm.js';
 import { savedProfile } from '../avatar/avatar.js';
 import { loadSportLibrary as loadAvatarLibrary, makeSportsmate, randomSport as randomLook } from '../avatar/sport.js';
 const BOTS = [{ name: 'Topspin' }, { name: 'La Contessa' }, { name: 'Muro' }, { name: 'Nonna Pina' }, { name: 'Er Taglio' }];
@@ -23,7 +24,7 @@ const gauss = () => (Math.random() + Math.random() + Math.random() - 1.5) / 1.5;
 const renderer = new THREE.WebGLRenderer({ canvas: $('#gl'), antialias: true });
 renderer.setPixelRatio(Math.min(devicePixelRatio, MOBILE ? 1.3 : 1.5));
 renderer.shadowMap.enabled = true; renderer.shadowMap.type = THREE.PCFSoftShadowMap;
-renderer.toneMapping = THREE.ACESFilmicToneMapping;
+renderer.toneMapping = THREE.ACESFilmicToneMapping; renderer.toneMappingExposure = 0.92;
 const scene = new THREE.Scene(); scene.background = new THREE.Color(0xeef2f8); scene.fog = new THREE.Fog(0xeef2f8, 14, 40);
 
 const camera = new THREE.PerspectiveCamera(55, 1, 0.05, 60);
@@ -82,8 +83,36 @@ function buildHall() {
   // panchina e borse a bordo campo (dettagli)
   const benchM = new THREE.MeshStandardMaterial({ color: 0xe8a33d, roughness: 0.6 });
   for (const s of [-1, 1]) { const b = new THREE.Mesh(new THREE.BoxGeometry(0.4, 0.06, 2), benchM); b.position.set(s * 4.2, 0.45, 0); b.castShadow = true; scene.add(b); for (const z of [-0.8, 0.8]) { const l = new THREE.Mesh(new THREE.BoxGeometry(0.35, 0.45, 0.05), frame); l.position.set(s * 4.2, 0.22, z); scene.add(l); } const bag = new THREE.Mesh(new THREE.CapsuleGeometry(0.14, 0.4, 4, 10), new THREE.MeshStandardMaterial({ color: s > 0 ? 0xff5c9a : 0x2ec27e })); bag.rotation.z = Math.PI / 2; bag.position.set(s * 4.2, 0.62, 0.4); scene.add(bag); }
+  // ombre morbide finte sotto gli oggetti (ambient occlusion dipinta): danno "peso" al tavolo e alle transenne
+  const aoTex = ctex(128, 128, (g, w, h) => { const gr = g.createRadialGradient(64, 64, 4, 64, 64, 64); gr.addColorStop(0, 'rgba(0,0,0,0.55)'); gr.addColorStop(0.6, 'rgba(0,0,0,0.25)'); gr.addColorStop(1, 'rgba(0,0,0,0)'); g.fillStyle = gr; g.fillRect(0, 0, w, h); });
+  const aoMat = new THREE.MeshBasicMaterial({ map: aoTex, transparent: true, depthWrite: false, opacity: 0.8 });
+  const ao = (x, z, w, d, o = 0.8) => { const m = new THREE.Mesh(new THREE.PlaneGeometry(w, d), aoMat.clone()); m.material.opacity = o; m.rotation.x = -Math.PI / 2; m.position.set(x, 0.006, z); m.renderOrder = 1; scene.add(m); };
+  ao(0, 0, T.W + 1.0, T.L + 1.2, 0.75);
+  for (const [x, z, w, d] of [[0, -5.5, 6.6, 0.8], [0, 5.5, 6.6, 0.8], [-3, 0, 0.8, 11.6], [3, 0, 0.8, 11.6]]) ao(x, z, w, d, 0.5);
+  for (const s2 of [-1, 1]) ao(s2 * 4.2, 0, 0.9, 2.6, 0.6);
+  // tabellone col punteggio sulla parete di fondo (si aggiorna da solo)
+  const sbC = document.createElement('canvas'); sbC.width = 512; sbC.height = 192; const sbT = new THREE.CanvasTexture(sbC); sbT.colorSpace = THREE.SRGBColorSpace;
+  const sb = new THREE.Mesh(new THREE.PlaneGeometry(4, 1.5), new THREE.MeshBasicMaterial({ map: sbT, toneMapped: false })); sb.position.set(0, 5.2, -11.94); scene.add(sb);
+  const sbFrame = new THREE.Mesh(new THREE.BoxGeometry(4.3, 1.8, 0.12), new THREE.MeshStandardMaterial({ color: 0x1d2340, roughness: 0.4 })); sbFrame.position.set(0, 5.2, -12.0); scene.add(sbFrame);
+  G_board.draw = () => {
+    const g = sbC.getContext('2d'); g.fillStyle = '#0d1228'; g.fillRect(0, 0, 512, 192);
+    const P = G.players || []; g.font = '600 30px Fredoka, Arial'; g.textAlign = 'center'; g.fillStyle = '#9fb3ff';
+    g.fillText((P[0] && P[0].name || '').slice(0, 12), 128, 40); g.fillText((P[1] && P[1].name || '').slice(0, 12), 384, 40);
+    g.font = '700 110px Fredoka, Arial'; g.fillStyle = '#ff5a3d'; g.fillText(String(G.score ? G.score[0] : 0), 128, 150); g.fillStyle = '#38e8ff'; g.fillText(String(G.score ? G.score[1] : 0), 384, 150);
+    g.fillStyle = '#ffcf3a'; g.font = '700 50px Fredoka, Arial'; g.fillText(':', 256, 135); sbT.needsUpdate = true;
+  };
+  // seggiolone dell'arbitro accanto alla rete
+  { const m = new THREE.MeshStandardMaterial({ color: 0x3d7bff, roughness: 0.5 }), w = new THREE.MeshStandardMaterial({ color: 0xf4f4f4, roughness: 0.4 });
+    const g = new THREE.Group(); g.position.set(-3.7, 0, 0);
+    for (const [x, z] of [[-0.25, -0.25], [0.25, -0.25], [-0.25, 0.25], [0.25, 0.25]]) { const l = new THREE.Mesh(new THREE.CylinderGeometry(0.025, 0.03, 1.1, 8), w); l.position.set(x, 0.55, z); g.add(l); }
+    const seat = new THREE.Mesh(new THREE.BoxGeometry(0.6, 0.08, 0.6), m); seat.position.y = 1.12; g.add(seat);
+    const back = new THREE.Mesh(new THREE.BoxGeometry(0.6, 0.5, 0.06), m); back.position.set(0, 1.4, 0); back.rotation.y = Math.PI / 2; back.position.x = -0.28; g.add(back);
+    g.traverse(o => { if (o.isMesh) o.castShadow = true; }); scene.add(g); ao(-3.7, 0, 1.2, 1.2, 0.6); }
+  // fasci di luce dalle vetrate (additivi, molto leggeri)
+  const shaftT = ctex(64, 256, (g, w, h) => { const gr = g.createLinearGradient(0, 0, 0, h); gr.addColorStop(0, 'rgba(255,250,235,0.35)'); gr.addColorStop(1, 'rgba(255,250,235,0)'); g.fillStyle = gr; g.fillRect(0, 0, w, h); });
+  for (let k = 0; k < 4; k++) { const sh = new THREE.Mesh(new THREE.PlaneGeometry(2.2, 9), new THREE.MeshBasicMaterial({ map: shaftT, transparent: true, depthWrite: false, blending: THREE.AdditiveBlending, side: THREE.DoubleSide, opacity: 0.5 })); sh.position.set(-9 + k * 6, 4.5, -10.5); sh.rotation.set(-0.55, 0, 0.25); scene.add(sh); }
   // luci morbide
-  scene.add(new THREE.HemisphereLight(0xffffff, 0xd8c8b0, 1.1));
+  scene.add(new THREE.HemisphereLight(0xffffff, 0xd8c8b0, 0.55));
   const key = new THREE.DirectionalLight(0xfff4e6, 1.6); key.position.set(2.5, 7, 3); key.castShadow = true; Object.assign(key.shadow.camera, { left: -4, right: 4, top: 6, bottom: -6, near: 1, far: 20 }); key.shadow.mapSize.set(MOBILE ? 1024 : 2048, MOBILE ? 1024 : 2048); key.shadow.bias = -0.0005; key.shadow.normalBias = 0.02; scene.add(key);
   const fill = new THREE.DirectionalLight(0xdfe8ff, 0.5); fill.position.set(-4, 5, -3); scene.add(fill);
 }
@@ -160,14 +189,17 @@ function snd(type, v = 1) {
 }
 
 // ---------- stato ----------
+const G_board = { draw: () => { } };
 const G = {
-  phase: 'lobby', players: [], level: 1, target: 11, assist: true, score: [0, 0], server: 0, serves: 0, time: 0,
+  phase: 'lobby', players: [], level: 1, target: 11, assist: true, strict: true, score: [0, 0], server: 0, serves: 0, time: 0,
   ball: null, charge: [0, 0], fire: false, lastHitter: -1, bounces: [], ideal: null, pendingHit: null, serving: false, toss: null,
   camPos: new THREE.Vector3(0, 3, 5), camLook: new THREE.Vector3(0, 0.8, 0), crowd: null, stillT: 0,
 };
 // side: giocatore 0 = vicino (z>0), 1 = lontano (z<0)
 const sideZ = i => i === 0 ? 1 : -1;
 buildHall();
+// riflessi presi dal palazzetto stesso (pavimento e tavolo lucidi)
+{ const pm = new THREE.PMREMGenerator(renderer); const rt = pm.fromScene(scene, 0.03, 0.1, 40); scene.environment = rt.texture; pm.dispose(); G_board.draw(); }
 
 // personaggi del camerino; il giocatore vicino, se umano, gioca in prima persona
 const avatars = [];
@@ -186,30 +218,63 @@ function setupAvatars() {
     hand.add(racket); racket.scale.setScalar(1.3); racket.rotation.set(0, 0, 0); racket.position.set(0, 0.06, 0.02);
     av.play('Idle_B');
     avatars.push({ av, racket, x: av.root.position.x, vx: 0, swingT: -1, swingDir: 1, anim: 'Idle_B' });
+    avatars[avatars.length - 1].arm = makeArm(av, racket);
   });
   const fp = G.view !== 'tv' && G.players[0] && G.players[0].kind !== 'cpu';
   if (avatars[0]) avatars[0].av.root.visible = !fp;
   fpRacket.visible = fp;
+}
+// Percorso della racchetta nel sistema del corpo (x = sinistra, y = su, z = avanti): preparazione, impatto, accompagnamento.
+const STROKE = {
+  1: { back: [-0.62, 0.9, 0.0], follow: [0.28, 1.38, 0.3], upB: [-0.6, 0.55, -0.4], upC: [-0.92, 0.12, 0.38], upF: [0.35, 0.85, 0.3], faceB: [-0.7, 0.05, 0.7], faceC: [0, -0.12, 1], faceF: [0.7, 0, 0.6], pole: [-0.6, -0.8, -0.3], twB: -0.45, twF: 0.4 },
+  [-1]: { back: [0.3, 0.88, 0.12], follow: [-0.5, 1.25, 0.42], upB: [0.6, 0.65, 0.3], upC: [0.92, 0.12, 0.38], upF: [-0.3, 0.9, 0.3], faceB: [0.6, 0, 0.75], faceC: [0, -0.12, 1], faceF: [-0.6, 0, 0.75], pole: [-0.2, -0.85, 0.3], twB: 0.4, twF: -0.35 },
+};
+const READY = { head: [-0.18, 1.0, 0.42], up: [-0.35, 0.85, 0.25], face: [0.05, 0, 1], pole: [-0.6, -0.8, -0.1] };
+const _V = (a) => new THREE.Vector3(a[0], a[1], a[2]);
+function toWorld(a, i, v, dirOnly) { const k = i === 0 ? -1 : 1; const w = new THREE.Vector3(v.x * k, v.y, v.z * k); return dirOnly ? w : w.add(a.av.root.position); }
+const ease = t => t * t * (3 - 2 * t);
+function strokeArm(a, i, uo) {
+  if (!a.arm) return;
+  const u = uo != null ? uo : a.hitT != null ? G.time - a.hitT : 9, S = STROKE[a.swingDir || 1];
+  const C = CONTACT[(a.swingDir || 1) > 0 ? 'A' : 'B'];
+  const contactL = new THREE.Vector3(...C.off);
+  const contactW = a.hitPt ? new THREE.Vector3(...a.hitPt) : toWorld(a, i, contactL);
+  let head, up, face, pole = _V(S.pole), tw = 0;
+  const RH = toWorld(a, i, _V(READY.head)), RU = _V(READY.up), RF = _V(READY.face);
+  if (u < -0.34 || u > 0.75) { head = RH; up = RU; face = RF; pole = _V(READY.pole); }
+  else if (u < -0.14) { const k = ease((u + 0.34) / 0.2); head = RH.clone().lerp(toWorld(a, i, _V(S.back)), k); up = RU.clone().lerp(_V(S.upB), k); face = RF.clone().lerp(_V(S.faceB), k); tw = S.twB * k; }
+  else if (u < 0) { const k = (u + 0.14) / 0.14, kk = k * k; const B = toWorld(a, i, _V(S.back)); head = B.clone().lerp(contactW, kk); head.y += Math.sin(k * Math.PI) * -0.05; up = _V(S.upB).lerp(_V(S.upC), kk); face = _V(S.faceB).lerp(_V(S.faceC), kk); tw = S.twB * (1 - kk); }
+  else if (u < 0.22) { const k = Math.sqrt(u / 0.22); head = contactW.clone().lerp(toWorld(a, i, _V(S.follow)), k); up = _V(S.upC).lerp(_V(S.upF), k); face = _V(S.faceC).lerp(_V(S.faceF), k); tw = S.twF * k; }
+  else { const k = ease((u - 0.22) / 0.53); head = toWorld(a, i, _V(S.follow)).lerp(RH, k); up = _V(S.upF).lerp(RU, k); face = _V(S.faceF).lerp(RF, k); tw = S.twF * (1 - k); }
+  a.arm.apply({ head, racketUp: toWorld(a, i, up, true), face: toWorld(a, i, face, true), pole: toWorld(a, i, pole, true), twist: tw, k: 1, leftAxis: toWorld(a, i, new THREE.Vector3(1, 0, 0), true) });
 }
 function animateAvatars(dt) {
   avatars.forEach((a, i) => {
     const s = sideZ(i);
     // si sposta verso il punto dove colpirà (con dolcezza: niente tremolii)
     let tx = 0.25 * (i === 0 ? 1 : -1), tz = T.L / 2 + 0.65;
-    if (G.ideal && G.ideal.who === i && G.ideal.z != null) { tx = G.ideal.x - 0.42 * (i === 0 ? 1 : -1) * (G.ideal.side || 1); tz = clamp(Math.abs(G.ideal.z) + 0.42, T.L / 2 + 0.28, T.L / 2 + 1.5); }
-    else if (G.serving && G.server === i) { tx = 0.35 * (i === 0 ? 1 : -1); tz = T.L / 2 + 0.5; }
-    tx = clamp(tx, -1.3, 1.3);
-    const want = Math.abs(tx - a.x) < 0.04 ? 0 : clamp((tx - a.x) * 6, -3.5, 3.5);
-    a.vx += (want - a.vx) * Math.min(1, dt * 8); a.x += a.vx * dt;
-    a.z = a.z ?? T.L / 2 + 0.65; const wz = Math.abs(tz - a.z) < 0.04 ? 0 : clamp((tz - a.z) * 5, -3, 3); a.vz = (a.vz || 0) + (wz - (a.vz || 0)) * Math.min(1, dt * 8); a.z += a.vz * dt;
+    const id = G.ideal && G.ideal.who === i && G.ideal.rx != null ? G.ideal : (G.pendingHit && G.pendingHit.who === i && G.pendingHit.id && G.pendingHit.id.rx != null ? G.pendingHit.id : null);
+    if (id) { tx = id.rx; tz = Math.max(T.L / 2 + 0.25, Math.abs(id.rz)); }
+    else if (G.serving && G.server === i) { tx = 0.35 * (i === 0 ? 1 : -1); tz = T.L / 2 + 0.3 + contactOf(i, 1, false, true).off[2]; }
+    tx = clamp(tx, -1.6, 1.6);
+    const want = Math.abs(tx - a.x) < 0.02 ? 0 : clamp((tx - a.x) * 7, -4, 4);
+    a.vx += (want - a.vx) * Math.min(1, dt * 10); a.x += a.vx * dt;
+    a.z = a.z ?? T.L / 2 + 0.65; const wz = Math.abs(tz - a.z) < 0.02 ? 0 : clamp((tz - a.z) * 7, -5, 5); a.vz = (a.vz || 0) + (wz - (a.vz || 0)) * Math.min(1, dt * 10); a.z += a.vz * dt;
+    // ultimo quarto di secondo: aggiustamento fine, così la racchetta prende la palla esattamente
+    if (id && id.t - G.time < 0.35 && id.t - G.time > -0.05) { const k = Math.min(1, dt * 16); a.x += (tx - a.x) * k; a.z += (tz - a.z) * k; }
     a.av.root.position.set(a.x, 0, s * a.z);
-    // animazioni
-    let anim = window.__idle || 'Block';
-    if (a.pend) { a.pend.wait -= dt; if (a.pend.wait <= 0) { const pd = a.pend; a.pend = null; a.swingT = 0; a.swingDir = pd.side; a.up = pd.up; snd('swish', pd.p); a.anim = 'swing'; a.av.play(pd.smash ? 'OverhandThrow' : pd.side > 0 ? (Math.random() < 0.5 ? 'Sword_Regular_A' : 'Sword_Regular_C') : 'Sword_Regular_B', { once: true, fade: 0.08, speed: pd.smash ? 1.7 : 1.35 + Math.random() * 0.3 }); } }
-    if (a.swingT >= 0) { a.swingT += dt; if (a.swingT > 0.55) a.swingT = -1; }
-    else if (Math.abs(a.vx) > 0.6) anim = (a.vx * (i === 0 ? -1 : 1)) > 0 ? 'Running_Strafe_Right' : 'Running_Strafe_Left';
-    if (a.swingT < 0 && !a.pend && anim !== a.anim) { a.anim = anim; a.av.play(anim, { fade: 0.15 }); }
+    // animazioni: gambe e busto dall'animazione, braccio della racchetta guidato (vedi arm.js)
+    let anim = 'Sword_Idle';
+    if (a.pend) { a.pend.wait -= dt; if (a.pend.wait <= 0) { const pd = a.pend; a.pend = null; a.swingT = 0; a.swingDir = pd.side; a.up = pd.up; snd('swish', pd.p); a.hitT = pd.hitT; a.hitPt = pd.pt; } }
+    if (a.swingT >= 0) { a.swingT += dt; if (a.swingT > 0.9) a.swingT = -1; }
+    if (Math.abs(a.vx) > 1.2 || Math.abs(a.vz || 0) > 1.2) anim = 'Jog_Fwd_Loop';
+    if (anim !== a.anim) { a.anim = anim; a.av.play(anim, { fade: 0.2 }); }
     a.av.update(dt);
+    strokeArm(a, i);
+    if (DEBUG && G.hitInfo && G.hitInfo.who === i && !G.hitInfo.done && a.hitT != null && Math.abs(G.time - G.hitInfo.t) < 0.05) {
+      const H = G.hitInfo; H.done = true; a.av.mixer.update(0); strokeArm(a, i, H.t - a.hitT); const rp = a.racket.localToWorld(new THREE.Vector3(0, 0.08, 0)); a.av.mixer.update(0); strokeArm(a, i);
+      (G.log = G.log || []).push(`${G.time.toFixed(2)} CONTACT ${i} dt=${(G.time - H.t).toFixed(3)} dist=${rp.distanceTo(new THREE.Vector3(...H.p)).toFixed(2)} racket=${[rp.x, rp.y, rp.z].map(v => v.toFixed(2))} ball=${H.p.map(v => v.toFixed(2))}`);
+    }
   });
   // racchetta in prima persona: si prepara dal lato dove arriva la palla (dritto a destra, rovescio a sinistra)
   // e colpisce con un gesto vero: dritto da destra a sinistra, rovescio da sinistra a destra
@@ -261,12 +326,10 @@ function onPhone(id, m) {
   if (m.t === 'sync') { const rtt = (performance.now() - m.h) / 1000; if (rtt < 1) p.lat = p.lat * 0.7 + (rtt / 2) * 0.3; return; }
   if (m.t === 'pq') { const i = G.players.indexOf(p); G.pq = G.pq || []; G.pq[i] = m.q; return; }
   if (m.t === 'toss') { const i = G.players.indexOf(p); if (G.phase === 'serve' && G.server === i && !G.toss) toss(); return; }
-  if (m.t === 'sw0') { const i = G.players.indexOf(p); swing(i, { time: G.time - (p.lat || 0.05) - (m.ago || 0) / 1000 }); return; }
-  if (m.t === 'sw') {
-    const i = G.players.indexOf(p);
-    // la direzione viene da come è girata la racchetta (il telefono) in quel momento
-    swing(i, { time: G.time - (p.lat || 0.04) - (m.ago || 0) / 1000, p: clamp(+m.p || 0.5, 0.05, 1.4), vert: clamp(+m.vert || 0, -1, 1), twist: clamp(+m.twist || 0, -1, 1), yaw: m.yaw || 0 });
-  }
+  if (m.t === 'sw0') { const i = G.players.indexOf(p); swing(i, { time: G.time - (p.lat || 0.05) - (m.ago || 0) / 1000, dir: +m.dir || 0 }); return; }
+  if (m.t === 'sw1') { const i = G.players.indexOf(p); swing(i, { detail: true, p: clamp(+m.p || 0.5, 0.05, 1.4), vert: clamp(+m.vert || 0, -1, 1), twist: clamp(+m.twist || 0, -1, 1), dir: +m.dir || 0 }); return; }
+  if (m.t === 'sw') { const i = G.players.indexOf(p); swing(i, { detail: true, p: clamp(+m.p || 0.5, 0.05, 1.4), vert: clamp(+m.vert || 0, -1, 1), twist: clamp(+m.twist || 0, -1, 1), dir: +m.dir || 0 }); }
+
 }
 setInterval(() => { for (const p of G.players) if (p.kind === 'phone' && p.online) send(p, { t: 'sync', h: performance.now() }); }, 2000);
 function sendState() {
@@ -307,10 +370,11 @@ function startMatch() {
   G.view = G.players.filter(p => p.kind !== 'cpu').length === 2 ? 'tv' : 'behind';
   setupAvatars(); updateScore();
   big(`${G.players[G.server].name} batte`, 1300);
-  setTimeout(beginServe, 1400);
+  later(beginServe, 1400);
 }
-function updateScore() { $('#ptA').textContent = G.score[0]; $('#ptB').textContent = G.score[1]; $('#srvA').classList.toggle('on', G.server === 0); $('#srvB').classList.toggle('on', G.server === 1); }
+function updateScore() { G_board.draw(); $('#ptA').textContent = G.score[0]; $('#ptB').textContent = G.score[1]; $('#srvA').classList.toggle('on', G.server === 0); $('#srvB').classList.toggle('on', G.server === 1); }
 function beginServe() {
+  G._mark = (G._mark || '') + 'S';
   G.phase = 'serve'; G.serving = true; G.lastHitter = -1; G.bounces = []; G.ideal = null; G.pendingHit = null; G.stillT = 0;
   const i = G.server, s = sideZ(i), a = avatars[i];
   G.ball = mkBall(a.x - 0.12 * s, 0.95, s * (T.L / 2 + 0.25)); G.toss = null; G.ball.held = true;
@@ -320,12 +384,14 @@ function beginServe() {
   sendState();
   // il computer lancia subito; chi gioca lancia la palla col tasto (o dopo qualche secondo)
   const sv = G.serveId = (G.serveId || 0) + 1;
-  setTimeout(() => { if (G.phase === 'serve' && G.serveId === sv && !G.toss) toss(); }, p.kind === 'cpu' ? 700 : 7000);
+  later(() => { if (G.phase === 'serve' && G.serveId === sv && !G.toss) toss(); }, p.kind === 'cpu' ? 700 : 7000);
 }
 function toss() {
-  const b = G.ball; b.held = false; b.vy = 2.3; G.toss = { t0: G.time };
-  // momento ideale: quando ricade all'altezza di partenza + 10 cm
-  G.ideal = { who: G.server, t: G.time + (2.3 + Math.sqrt(2.3 * 2.3 - 2 * 9.81 * 0.1)) / 9.81, x: b.x, y: 1.05, serve: true };
+  G._mark = (G._mark || '') + 'T';
+  const b = G.ball; b.held = false; b.vy = 2.3; b.vx = b.vz = 0; G.toss = { t0: G.time };
+  // momento ideale: quando ricade all'altezza della racchetta nel colpo di dritto (il personaggio sta fermo)
+  const cy = contactOf(G.server, 1, false, true).off[1], drop = b.y - cy;
+  G.ideal = { who: G.server, t: G.time + (2.3 + Math.sqrt(2.3 * 2.3 + 2 * 9.81 * drop)) / 9.81, x: b.x, y: cy, z: b.z, serve: true, side: 1 };
   if (G.players[G.server].kind === 'cpu') scheduleCpu(G.server);
 }
 function scheduleCpu(i) {
@@ -340,48 +406,99 @@ function scheduleCpu(i) {
     else if (Math.random() < 0.08 && G.level >= 1) { p = 0.12; vert = 0.1; }
   }
   // anche il computer sbaglia: più spesso contro i colpi forti e ai livelli facili
-  const errP = id.serve ? 0 : [0.13, 0.08, 0.045][G.level] + Math.max(0, (G.incomingSpeed || 0) - 10) * 0.025 + (G.fire ? 0.15 : 0);
+  const errP = id.serve ? 0 : [0.11, 0.065, 0.035][G.level] + Math.max(0, (G.incomingSpeed || 0) - 10) * 0.025 + (G.fire ? 0.15 : 0);
   const miss = Math.random() < errP ? (Math.random() < 0.5 ? 'long' : Math.random() < 0.6 ? 'wide' : 'net') : null;
   G.cpuSwing = { who: i, at: id.t + HIT_BEST + dt, sw: { p, vert, twist: rnd(-0.2, 0.2), aim, miss } };
 }
 // Colpo "alla Wii": conta l'INIZIO del gesto. Se parti in una finestra larga prima del momento giusto,
 // la racchetta prende la palla nel punto giusto (il ritardo del Wi-Fi non conta più). Forza, alto/basso
 // ed effetto arrivano dal gesto completo, se arriva in tempo.
-const HIT_EARLY = 0.65, HIT_LATE = 0.12, HIT_BEST = -0.16;
+const HIT_EARLY = 0.45, HIT_LATE = 0.12, HIT_BEST = -0.16;
+// Dove si trova la testa della racchetta, rispetto ai piedi, nel momento del colpo (misurato sulle animazioni a velocità 1.3).
+// x = sinistra del personaggio, z = davanti. Così il personaggio si piazza in modo che racchetta e palla si incontrino davvero.
+const SWING_SPEED = 1.0;
+const CONTACT = { A: { t: 0.14, off: [-0.5, 0.92, 0.38] }, B: { t: 0.14, off: [0.1, 0.9, 0.4] }, O: { t: 0.14, off: [-0.42, 1.1, 0.45] }, S: { t: 0.14, off: [-0.38, 1.12, 0.42] } };
+// Per ogni personaggio si misura davvero, sulla sua animazione, dove sta la testa della racchetta (calibrazione all'inizio).
+function calibrate(a) {
+  const av = a.av, p0 = av.root.position.clone(), r0 = av.root.rotation.y; av.root.position.set(0, 0, 0); av.root.rotation.y = 0;
+  const out = {}, v = new THREE.Vector3();
+  for (const [key, clip, yLo, yHi] of [['A', 'Sword_Regular_A', 0.8, 1.15], ['B', 'Sword_Regular_B', 0.62, 1.1], ['S', 'Sword_Regular_A', 0.98, 1.3]]) {
+    let best = null; const samples = [];
+    for (let ct = 0.1; ct < 0.46; ct += 0.01) {
+      const act = av.play(clip, { once: true, solo: true, speed: 1 }); if (!act) break; act.timeScale = 0; act.time = ct; av.mixer.update(0); av.root.updateMatrixWorld(true);
+      a.racket.localToWorld(v.set(0, 0.08, 0));
+      if (v.z > 0.45 && v.y > 0.6 && v.y < 1.4) samples.push({ clip, t: ct / SWING_SPEED, off: [v.x, v.y, v.z] });
+      if (v.y < yLo || v.y > yHi) continue;
+      const score = v.z - Math.abs(v.x + (key === 'B' ? -0.1 : 0.15)) * 0.3; // davanti, poco di lato
+      if (!best || score > best.score) best = { score, t: ct, off: [v.x, v.y, v.z] };
+    }
+    out[key] = best ? { clip, t: best.t / SWING_SPEED, off: best.off } : CONTACT[key === 'S' ? 'A' : key];
+    out[key + 's'] = samples;
+  }
+  av.root.position.copy(p0); av.root.rotation.y = r0; av.play('Sword_Idle', { solo: true });
+  a.contact = out;
+  if (DEBUG) (G.log = G.log || []).push(`calib ${JSON.stringify(out)}`);
+}
+function contactOf(i, side, smash, serve) { return CONTACT[serve ? 'S' : smash ? 'O' : side > 0 ? 'A' : 'B']; }
+// il punto del gesto (tra quelli misurati) in cui la racchetta è all'altezza della palla
+function contactAt(i, side, y) {
+  const a = avatars[i], list = a && a.contact && a.contact[(side > 0 ? 'A' : 'B') + 's'];
+  if (!list || !list.length) return contactOf(i, side, false);
+  const zMax = Math.max(...list.map(c => c.off[2]));
+  let best = null, bs = 1e9; for (const c of list) { const sc = Math.abs(c.off[1] - y) * 3 + (zMax - c.off[2]); if (sc < bs) { bs = sc; best = c; } }
+  return best;
+}
+function placeFor(id, i, side, smash) {
+  const c = contactOf(i, side, smash), k = i === 0 ? -1 : 1; // giocatore 0 è girato di 180°
+  id.rx = id.x - c.off[0] * k; id.rz = id.z - c.off[2] * k; id.contact = c;
+}
 function swing(i, sw) {
   const a = avatars[i]; if (!a) return;
   const t = sw.time ?? G.time;
   const ph = G.pendingHit;
-  // dettagli di un gesto già iniziato: si aggiornano forza e direzione, non si rifà il colpo
-  // i dettagli del gesto arrivano dopo il colpo (Wi-Fi): si corregge la traiettoria appena partita
-  const lh = G.lastHit;
-  if (sw.p != null && lh && lh.who === i && !lh.re && G.time - lh.hitAt < 0.28 && G.lastHitter === i && G.phase === 'rally' && (!G.serving || G.bounces.length === 0)) {
-    lh.re = true; Object.assign(lh.sw, { p: sw.p, vert: sw.vert ?? lh.sw.vert, twist: sw.twist ?? 0, yaw: sw.yaw ?? lh.sw.yaw }); G.serving = lh.serve; doHit(lh); return;
+  // dettagli di un gesto già iniziato (arrivano 50 ms dopo l'inizio): forza, verso, su/giù; il colpo non si rifà
+  if (sw.detail) {
+    if (ph && ph.who === i && !ph.done) {
+      Object.assign(ph.sw, { p: sw.p ?? ph.sw.p, vert: sw.vert ?? ph.sw.vert, twist: sw.twist ?? ph.sw.twist, yaw: sw.yaw ?? ph.sw.yaw });
+      if (sw.dir && !ph.dir) { ph.dir = sw.dir; if (G.strict && ph.dir !== ph.side) ph.wrong = true; }
+    }
+    return;
   }
-  if (ph && ph.who === i && !ph.done && t - ph.t0 < 0.7) { Object.assign(ph.sw, sw.p != null ? { p: sw.p, vert: sw.vert ?? ph.sw.vert, twist: sw.twist ?? 0, yaw: sw.yaw ?? ph.sw.yaw } : {}); return; }
   if (G.phase !== 'serve' && G.phase !== 'rally') { startSwingAnim(i, sw); return; }
   if (G.serving && G.server === i && !G.toss) { toss(); return; } // senza tasto, il primo gesto lancia la palla
   const id = G.ideal; if (!id || id.who !== i) { startSwingAnim(i, sw); return; }
   const d = t - id.t;
+  if (d < -1.0) return;                       // ancora in preparazione: non conta
+  if (id.tried && !id.serve) return;          // un solo tentativo per palla
+  id.tried = true;
   if (d < -HIT_EARLY || d > HIT_LATE) { startSwingAnim(i, sw); if (G.players[i].kind !== 'cpu') shotTip(d < 0 ? 'Troppo presto!' : 'Troppo tardi!'); return; }
-  const W = HIT_EARLY;
-  G.pendingHit = { who: i, at: Math.max(G.time, id.t), d: d - HIT_BEST, W, sw: { p: 0.65, vert: 0.2, twist: 0, yaw: 0, ...sw }, t0: t, side: sideOf(i, id) };
+  const W = HIT_EARLY, side = sideOf(i, id);
+  G.pendingHit = { who: i, at: Math.max(G.time, id.t), d: d - HIT_BEST, W, sw: { p: 0.65, vert: 0.2, twist: 0, yaw: 0, ...sw }, t0: t, side, dir: sw.dir || 0, id };
+  // dritto quando serviva il rovescio (o viceversa): colpo a vuoto
+  if (G.strict && sw.dir && sw.dir !== side && !id.serve) G.pendingHit.wrong = true;
   // l'animazione parte in modo da arrivare sulla palla proprio al momento giusto
-  startSwingAnim(i, sw, Math.max(0, id.t - G.time), G.pendingHit.side);
+  startSwingAnim(i, sw, Math.max(0, id.t - G.time), side);
 }
 // dritto o rovescio: dipende da che lato del corpo arriva la palla (destrorso)
 function sideOf(i, id) { if (id && id.side) return id.side; const a = avatars[i]; if (!a || !id) return 1; const rel = (id.x - a.x) * (i === 0 ? 1 : -1); return rel >= -0.05 ? 1 : -1; }
 function startSwingAnim(i, sw, lead = 0, side) {
   const a = avatars[i]; if (!a) return;
   if ((a.swingT >= 0 && a.swingT < 0.25) || a.pend) return;
-  a.pend = { wait: Math.max(0, lead - 0.14), side: side ?? (G.ideal ? sideOf(i, G.ideal) : 1), up: sw.vert || 0, p: sw.p || 0.6, smash: (sw.p || 0) >= 0.95 && (sw.vert || 0) < -0.15 && G.ideal && G.ideal.y > 1.05 };
+  const smash = false; // la schiacciata ha un'altra posa: per ora tutti i colpi usano dritto/rovescio
+  const serve = !!(G.ideal && G.ideal.serve && G.ideal.who === i), c = (G.ideal && G.ideal.who === i && G.ideal.contact && (side ?? 1) === G.ideal.side) ? G.ideal.contact : contactOf(i, side ?? 1, smash, serve);
+  const id0 = G.ideal && G.ideal.who === i ? G.ideal : null;
+  a.pend = { pt: id0 && id0.z != null && lead > 0 ? [id0.x, id0.y, id0.z] : null, hitT: G.time + (lead > 0 ? lead : 0.14), wait: Math.max(0, lead - 0.34), side: side ?? (G.ideal ? sideOf(i, G.ideal) : 1), up: sw.vert || 0, p: sw.p || 0.6, smash, serve, c };
 }
 
 // colpo: dalla posizione attuale della palla verso il campo avversario
 function doHit(h) {
-  if (DEBUG) (G.log = G.log || []).push(`${G.time.toFixed(2)} HIT by ${h.who} d=${h.d.toFixed(3)} y=${G.ball.y.toFixed(2)} z=${G.ball.z.toFixed(2)}`);
+  if (h.wrong) { // gesto sbagliato: la racchetta passa ma non prende la palla
+    G.pendingHit = null; if (G.players[h.who].kind !== 'cpu') shotTip(h.side > 0 ? 'Era un DRITTO! Racchetta da destra a sinistra' : 'Era un ROVESCIO! Racchetta da sinistra a destra'); return;
+  }
+  G._mark = (G._mark || '') + 'H';
+  G.hitInfo = { who: h.who, t: h.at, p: [G.ball.x, G.ball.y, G.ball.z] };
+  if (DEBUG) { const rp = avatars[h.who] ? avatars[h.who].racket.localToWorld(new THREE.Vector3(0, 0.08, 0)) : null; (G.log = G.log || []).push(`${G.time.toFixed(2)} HIT by ${h.who} d=${h.d.toFixed(3)} y=${G.ball.y.toFixed(2)} z=${G.ball.z.toFixed(2)} side=${h.side} rd=${rp ? rp.distanceTo(new THREE.Vector3(G.ball.x, G.ball.y, G.ball.z)).toFixed(2) : '-'} av=${avatars[h.who].x.toFixed(2)},${avatars[h.who].z.toFixed(2)} tgt=${h.id && h.id.rx != null ? h.id.rx.toFixed(2) + ',' + h.id.rz.toFixed(2) : '-'} sw=${avatars[h.who].swingT.toFixed(3)} ball=${G.ball.x.toFixed(2)}`); }
   const i = h.who, s = sideZ(i), b = G.ball, sw = h.sw, q = 1 - Math.abs(h.d) / h.W;
-  if (!h.re) { h.hitAt = G.time; h.serve = G.serving; G.lastHit = h; }
   const left = i === 0 ? -1 : 1; // la sinistra di chi colpisce, in coordinate x
   let type = 'drive', p = sw.p, vert = sw.vert;
   if (G.serving) type = 'serve';
@@ -389,7 +506,7 @@ function doHit(h) {
   else if (vert > 0.75 && p < 0.35) type = 'lob';
   else if (vert < -0.3 && p < 0.75) type = 'chop';
   else if (p < 0.15) type = 'drop';
-  const noise = 0.03 + (1 - q) * 0.16 + Math.max(0, p - 1.05) * 0.12 + (b.y < 0.85 && type === 'smash' ? 0.2 : 0);
+  const noise = 0.03 + (1 - q) * 0.3 + Math.max(0, p - 1.05) * 0.12 + (b.y < 0.85 && type === 'smash' ? 0.2 : 0);
   const u = clamp(h.d / (h.d < 0 ? 0.49 : 0.28), -1, 1), side = h.side || 1;
   let tx = sw.aim != null ? sw.aim : -u * 0.62 * left * side + b.x * 0.12 + (sw.yaw && Math.abs(sw.yaw) < 1 ? sw.yaw * 0.15 : 0);
   tx = clamp(tx + gauss() * noise, -0.78, 0.78);
@@ -410,10 +527,9 @@ function doHit(h) {
   // flight < 0 = velocità media: il tempo di volo dipende dalla distanza
   if (flight < 0) flight = Math.hypot(tx - b.x, tz - b.z) / -flight;
   // barra carica: i colpi a tempo la riempiono; piena + schiacciata (o colpo perfetto) = colpo di fuoco
-  if (!h.re) G.charge[i] = Math.min(1, G.charge[i] + (q > 0.8 ? 0.25 : 0.1));
-  let fire = h.re && G.fire;
-  if (h.re && fire) { flight /= 1.35; spin.wx *= 1.4; label = '🔥 COLPO DI FUOCO'; }
-  else if (!h.re && G.charge[i] >= 1 && (type === 'smash' || q > 0.85) && type !== 'lob' && type !== 'drop') { fire = true; G.charge[i] = 0; flight /= 1.35; spin.wx *= 1.4; label = '🔥 COLPO DI FUOCO'; big('🔥 Fuoco!', 900); snd('cheer'); }
+  G.charge[i] = Math.min(1, G.charge[i] + (q > 0.8 ? 0.25 : 0.1));
+  let fire = false;
+  if (G.charge[i] >= 1 && (type === 'smash' || q > 0.85) && type !== 'lob' && type !== 'drop') { fire = true; G.charge[i] = 0; flight /= 1.35; spin.wx *= 1.4; label = '🔥 COLPO DI FUOCO'; big('🔥 Fuoco!', 900); snd('cheer'); }
   G.fire = fire; updateCharge();
   let v = solve({ x: b.x, y: b.y, z: b.z }, tx, tz, flight, spin);
   if (sw.miss === 'net') { const tn = Math.abs(b.z) / Math.max(4, Math.abs(v.vz)); v = { vx: v.vx, vy: (T.H + 0.08 - b.y + 0.5 * 9.81 * tn * tn) / tn, vz: -s * Math.max(4, Math.abs(v.vz)) }; }
@@ -432,7 +548,7 @@ function doHit(h) {
   }
   Object.assign(b, { vx: v.vx, vy: v.vy, vz: v.vz, wx: spin.wx, wy: spin.wy, wz: spin.wz });
   G.netHit = false; G.lastHitter = i; G.bounces = []; G.ideal = null; G.pendingHit = null; G.incomingSpeed = Math.hypot(v.vx, v.vy, v.vz);
-  if (!h.re) snd('hit', p);
+  snd('hit', p);
   if (G.players[i].kind !== 'cpu') shotTip(`${label} · ${(G.incomingSpeed * 3.6).toFixed(0)} km/h` + (q > 0.8 ? ' · tempo perfetto' : ''));
   planReceive();
 }
@@ -458,7 +574,7 @@ function doServe(i, p, tx, q, sw = {}) {
   Object.assign(b, { vx: v.vx, vy: v.vy, vz: v.vz, ...spin });
   if (DEBUG) (G.log = G.log || []).push(`${G.time.toFixed(2)} SERVE v=${[v.vx, v.vy, v.vz].map(x => x.toFixed(2))} best=${!!best} p=${p.toFixed(2)} tx=${tx} b=${[b.x, b.y, b.z].map(x => x.toFixed(2))}`);
   G.netHit = false; G.lastHitter = i; G.bounces = []; G.ideal = null; G.pendingHit = null; G.toss = null; G.phase = 'rally';
-  if (!(G.lastHit && G.lastHit.re)) snd('hit', 0.6); planReceive();
+  snd('hit', 0.6); planReceive();
   if (G.players[i].kind !== 'cpu') shotTip(`Battuta ${fast > 0.66 ? 'forte' : fast > 0.33 ? 'media' : 'corta'}${Math.abs(want2.x) > 0.35 ? ' angolata' : ''}${Math.abs(side) > 0.4 ? ' con effetto' : ''} · ${(Math.hypot(v.vx, v.vy, v.vz) * 3.6).toFixed(0)} km/h`);
 }
 // prevede dove e quando l'avversario potrà colpire
@@ -472,10 +588,12 @@ function planReceive() {
   const second = tb[needed] ? tb[needed].time : 9;
   const after = pr.pts.filter(q => q.t > bounce.time + 0.03 && q.t < second - 0.02);
   // come un giocatore vero: si colpisce dietro la fine del tavolo, all'altezza comoda (vicino al punto più alto)
+  const a0 = avatars[r], dir0 = r === 0 ? 1 : -1;
   let hit = null, best = 1e9;
   for (const q of after) {
-    const dz = s * q.z - T.L / 2; if (dz < 0.05 || dz > 1.0 || q.y < 0.8 || q.y > 1.55) continue;
-    const c = Math.abs(dz - 0.32) + Math.abs(q.y - 1.05) * 0.8; if (c < best) { best = c; hit = q; }
+    const dz = s * q.z - T.L / 2; if (dz < 0.05 || dz > 1.1 || q.y < 0.7 || q.y > 1.55) continue;
+    const sd = a0 ? ((q.x - a0.x) * dir0 >= -0.12 ? 1 : -1) : 1, wantY = contactOf(r, sd, false).off[1];
+    const c = Math.abs(dz - 0.35) * 0.5 + Math.abs(q.y - wantY) * 3; if (c < best) { best = c; hit = q; }
   }
   // palla corta: ci si allunga sopra il bordo del tavolo
   if (!hit) for (const q of after) { if (s * q.z > T.L / 2 - 0.45 && q.y > T.H + 0.1 && (!hit || q.y > hit.y)) hit = q; }
@@ -484,6 +602,7 @@ function planReceive() {
   // dritto o rovescio si decide subito, da dove arriva la palla rispetto a dove sei: poi ti sposti di conseguenza
   const side = a ? ((hit.x - a.x) * dir >= -0.12 ? 1 : -1) : 1;
   G.ideal = { who: r, t: G.time + hit.t, x: hit.x, y: hit.y, z: hit.z, side };
+  placeFor(G.ideal, r, side, false);
   if (DEBUG) (G.log = G.log || []).push(`${G.time.toFixed(2)} plan ${r} at ${G.ideal.t.toFixed(2)} y=${hit.y.toFixed(2)} z=${hit.z.toFixed(2)}`);
   if (G.players[r].kind === 'cpu') scheduleCpu(r);
 }
@@ -524,13 +643,13 @@ function point(w, why) {
   G.crowdJump = G.time;
   // fine partita?
   const [a, c] = G.score;
-  if ((a >= G.target || c >= G.target) && Math.abs(a - c) >= 2) { setTimeout(endMatch, 1600); sendState(); return; }
+  if ((a >= G.target || c >= G.target) && Math.abs(a - c) >= 2) { later(endMatch, 1600); sendState(); return; }
   // cambio battuta ogni 2 punti (ogni punto ai vantaggi)
   G.serves++;
   const every = (a >= G.target - 1 && c >= G.target - 1) ? 1 : 2;
   if (G.serves >= every) { G.serves = 0; G.server = 1 - G.server; }
   updateScore(); sendState();
-  setTimeout(beginServe, FAST ? 500 : 1700);
+  later(beginServe, FAST ? 500 : 1700);
 }
 function endMatch() {
   G.phase = 'over'; const w = G.score[0] > G.score[1] ? 0 : 1;
@@ -557,7 +676,7 @@ addEventListener('pointermove', e => {
   if (sp > 2.2 && (!G.lastLocalSw || now - G.lastLocalSw > 0.35)) {
     G.lastLocalSw = now;
     const i = localIdx(); if (i < 0) return;
-    swing(i, { time: G.time, p: clamp(sp / 7.5, 0.1, 1.35), vert: clamp(-vy / sp, -1, 1), twist: 0, yaw: vx < 0 ? 1 : -1 });
+    swing(i, { time: G.time, p: clamp(sp / 7.5, 0.1, 1.35), vert: clamp(-vy / sp, -1, 1), twist: 0, yaw: vx < 0 ? 1 : -1, dir: Math.abs(vx) > Math.abs(vy) * 0.5 ? (vx < 0 ? 1 : -1) : 0 });
   }
 });
 addEventListener('pointerdown', () => { ac(); const i = localIdx(); if (i >= 0 && G.phase === 'serve' && G.server === i && !G.toss) toss(); });
@@ -570,21 +689,28 @@ addEventListener('keydown', e => {
 
 // ---------- ciclo ----------
 const _p = new THREE.Vector3(), _l = new THREE.Vector3();
-let last = performance.now(), acc = 0;
+// ?rec: niente orologio vero, si avanza a passi fissi da fuori (registrazione delle partite)
+const REC = Q.has('rec'), timers = [];
+// in registrazione i ritardi seguono il tempo del gioco, non l'orologio
+function later(fn, ms) { if (!REC) return setTimeout(fn, ms); timers.push({ at: G.time + ms / 1000, fn }); }
+let last = REC ? 0 : performance.now(), acc = 0, simNow = 0;
 function frame(now) {
-  requestAnimationFrame(frame);
+  if (!REC) requestAnimationFrame(frame);
   let dt = Math.min(0.05, (now - last) / 1000); last = now; if (FAST) dt *= 2;
   G.time += dt;
+  if (REC) for (let k = timers.length - 1; k >= 0; k--) if (G.time >= timers[k].at) { const f = timers[k].fn; timers.splice(k, 1); f(); }
   if (G.ball && (G.phase === 'serve' || G.phase === 'rally' || G.phase === 'point')) {
     const b = G.ball;
-    if (b.held) { const a = avatars[G.server]; b.x = a.x - 0.12 * sideZ(G.server); b.y = 0.95; }
+    if (b.held) { const a = avatars[G.server], c = contactOf(G.server, 1, false, true), sz = sideZ(G.server); b.x = a.x - sz * c.off[0]; b.z = sz * ((a.z ?? T.L / 2 + 0.65) - c.off[2]); b.y = Math.max(0.95, c.off[1] + 0.1); }
     else {
       acc += dt; let n = 0;
+      const t0 = G.time - dt;
       while (acc > 1 / 480 && n < 60) {
-        const ev = []; step(b, 1 / 480, ev, G.time); acc -= 1 / 480; n++;
+        const ev = [], pv = [b.vx, b.vy, b.vz]; step(b, 1 / 480, ev, G.time); acc -= 1 / 480; n++;
+        if (G.trace) { G.trace.push([+G.time.toFixed(4), +b.x.toFixed(3), +b.y.toFixed(3), +b.z.toFixed(3), +b.vx.toFixed(3), +b.vy.toFixed(3), +b.vz.toFixed(3), ev.map(e => e.t[0]).join('') + (G._mark || '')]); G._mark = ''; }
         if (G.phase !== 'point') for (const e of ev) onEvent(e);
-        if (G.pendingHit && !G.pendingHit.done && G.time >= G.pendingHit.at) { G.pendingHit.done = true; doHit(G.pendingHit); }
-        if (G.serving && G.toss && b.y < 0.75 && b.vy < 0 && G.phase === 'serve') { if (G.players[G.server].kind !== 'cpu') shotTip('Palla caduta: rilancio'); beginServe(); break; }
+        if (G.pendingHit && !G.pendingHit.done && t0 + n / 480 >= G.pendingHit.at) { G.pendingHit.done = true; doHit(G.pendingHit); }
+        if (G.serving && G.toss && b.y < 0.6 && b.vy < 0 && G.phase === 'serve') { if (G.players[G.server].kind !== 'cpu') shotTip('Palla caduta: rilancio'); beginServe(); break; }
       }
       // palla ferma sul tavolo
       if (Math.hypot(b.vx, b.vy, b.vz) < 0.15 && G.phase === 'rally') { G.stillT += dt; if (G.stillT > 0.8) point(b.z > 0 ? 1 : 0, 'Palla morta'); } else G.stillT = 0;
@@ -619,8 +745,10 @@ function updateCamera(dt) {
   camera.position.copy(G.camPos); camera.lookAt(G.camLook);
 }
 
-renderLobby(); resize(); requestAnimationFrame(frame);
+renderLobby(); resize(); if (!REC) requestAnimationFrame(frame);
+if (REC) { window.__adv = (n = 1, dt = 1 / 30) => { for (let i = 0; i < n; i++) { simNow += dt * 1000; frame(simNow); } }; }
 await loadAvatarLibrary(); $('#start').dataset.ready = '1';
+if (Q.has('trace')) G.trace = [];
 if (DEBUG) { window.__G = G; window.__swing = swing; window.__start = startMatch; window.__av = avatars; }
 if (Q.has('auto')) {
   // prova: due computer

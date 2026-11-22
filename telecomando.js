@@ -1,5 +1,5 @@
 // versione: se il telefono ha in memoria file vecchi, si ricarica da solo con quelli nuovi
-const BUILD = '202611180155';
+const BUILD = '202611221308';
 fetch('build.txt?' + Date.now(), { cache: 'no-store' }).then(r => r.ok ? r.text() : '').then(v => { v = (v || '').trim(); if (v && v !== BUILD && sessionStorage.getItem('ridotto-reload') !== v) { sessionStorage.setItem('ridotto-reload', v); const u = new URL(location.href); u.searchParams.set('_v', v); location.replace(u.href); } }).catch(() => { });
 // Telefono come controller di movimento (bowling; in futuro ping pong).
 import { joinRoom } from './net.js';
@@ -212,7 +212,9 @@ drawLane();
 
 
 // ---------- ping pong: il telefono è la racchetta ----------
-let gUp = [0, 1, 0], swingS = null, coolUntil = 0, lefty = store.get('ridotto-lefty') === '1';
+let gUp = [0, 1, 0], swingS = null, coolUntil = 0, lefty = store.get('ridotto-lefty') === '1', pongFlip = store.get('ridotto-pongflip') === '1';
+function drawPFlip() { const b = $('#pFlip'); if (b) b.textContent = pongFlip ? 'Dritto/rovescio invertiti ✓' : 'Dritto e rovescio al contrario?'; }
+setTimeout(() => { const b = $('#pFlip'); if (b) b.onclick = () => { pongFlip = !pongFlip; store.set('ridotto-pongflip', pongFlip ? '1' : '0'); drawPFlip(); }; drawPFlip(); }, 0);
 $('#hand').textContent = lefty ? 'Mancino' : 'Destro';
 $('#hand').onclick = () => { lefty = !lefty; store.set('ridotto-lefty', lefty ? '1' : '0'); $('#hand').textContent = lefty ? 'Mancino' : 'Destro'; };
 function pongMotion(e) {
@@ -221,21 +223,34 @@ function pongMotion(e) {
   const ag = e.accelerationIncludingGravity, la = e.acceleration;
   if (ag && ag.x != null && mag < 2) { const n = norm([ag.x, ag.y, ag.z]); gUp = norm(gUp.map((v, i) => v * 0.9 + n[i] * 0.1)); }
   let lin = la && la.x != null ? [la.x, la.y, la.z] : ag && ag.x != null ? [ag.x - gUp[0] * 9.81, ag.y - gUp[1] * 9.81, ag.z - gUp[2] * 9.81] : [0, 0, 0];
-  // appena il gesto parte lo diciamo subito allo schermo: conta l'inizio, non la fine (così il Wi-Fi non fa ritardo)
-  const linM = Math.hypot(...lin);
-  if (!swingS && (mag > 3.8 || linM > 14) && t > coolUntil) { swingS = { peak: mag, tPeak: t, wPeak: w, acc: [] }; net && net.send({ t: 'sw0', ago: 0 }); vibrate(12); }
+  // appena il gesto parte lo diciamo subito allo schermo: conta l'inizio, non la fine (così il Wi-Fi non fa ritardo).
+  // Il verso conta: dritto = racchetta da destra a sinistra (gira in senso antiorario visto dall'alto), rovescio = il contrario.
+  const linM = Math.hypot(...lin), hand = (lefty ? -1 : 1) * (pongFlip ? -1 : 1);
+  if (!swingS && (mag > 3.8 || linM > 14) && t > coolUntil) {
+    const yr = dot(w, gUp) * hand;
+    swingS = { peak: mag, tPeak: t, wPeak: w, acc: [], t0: t, yawI: 0, lastT: t, sent1: false };
+    net && net.send({ t: 'sw0', ago: 0, dir: Math.abs(yr) > 1.2 ? Math.sign(yr) : 0 }); vibrate(12);
+  }
   if (swingS) {
-    swingS.acc.push({ t, up: dot(lin, gUp) });
-    if (mag > swingS.peak) { swingS.peak = mag; swingS.tPeak = t; swingS.wPeak = w; }
-    if (mag < swingS.peak * 0.7 || t - swingS.tPeak > 0.06) {
-      const s = swingS; swingS = null; coolUntil = t + 0.35;
+    const S = swingS; S.acc.push({ t, up: dot(lin, gUp) }); S.yawI += dot(w, gUp) * hand * (t - S.lastT); S.lastT = t;
+    if (mag > S.peak) { S.peak = mag; S.tPeak = t; S.wPeak = w; }
+    // dopo 50 ms si sa già abbastanza: forza, verso, su/giù, polso. Arriva prima del colpo.
+    if (!S.sent1 && t - S.t0 >= 0.05) {
+      S.sent1 = true;
+      const up = S.acc.reduce((a, b) => a + b.up, 0) / Math.max(1, S.acc.length);
+      const dir = Math.abs(S.yawI) > 0.04 ? Math.sign(S.yawI) : 0;
+      net && net.send({ t: 'sw1', p: Math.max(0.1, Math.min(1.4, S.peak / 13)), vert: Math.max(-1, Math.min(1, up / 10)), twist: Math.max(-1, Math.min(1, S.wPeak[1] / S.peak)), dir });
+      $('#pLast').textContent = dir > 0 ? 'Dritto' : dir < 0 ? 'Rovescio' : 'Colpo';
+    }
+    if (mag < S.peak * 0.7 || t - S.tPeak > 0.06) {
+      const s = S; swingS = null; coolUntil = t + 0.35;
       const ups = s.acc.filter(a => a.t >= s.tPeak - 0.15 && a.t <= s.tPeak + 0.03);
       const vert = Math.max(-1, Math.min(1, ups.reduce((a, b) => a + b.up, 0) / Math.max(1, ups.length) / 12));
-      const yaw = dot(s.wPeak, gUp) / s.peak * (lefty ? -1 : 1);
+      const yaw = dot(s.wPeak, gUp) / s.peak * hand;
       const twist = Math.max(-1, Math.min(1, s.wPeak[1] / s.peak));
       const p = Math.max(0.1, Math.min(1.4, s.peak / 16));
-      net && net.send({ t: 'sw', ago: (performance.now() / 1000 - s.tPeak) * 1000, p, vert, yaw, twist });
-      $('#pLast').textContent = `Colpo: forza ${(p * 100).toFixed(0)}% · ${vert > 0.3 ? 'verso l\'alto' : vert < -0.3 ? 'verso il basso' : 'piatto'}`;
+      net && net.send({ t: 'sw', ago: (performance.now() / 1000 - s.tPeak) * 1000, p, vert, yaw, twist, dir: Math.abs(s.yawI) > 0.04 ? Math.sign(s.yawI) : 0 });
+      $('#pLast').textContent = `${s.yawI > 0.04 ? 'Dritto' : s.yawI < -0.04 ? 'Rovescio' : 'Colpo'} · forza ${(p * 100).toFixed(0)}% · ${vert > 0.3 ? 'verso l\'alto' : vert < -0.3 ? 'verso il basso' : 'piatto'}`;
       vibrate(25);
     }
   }

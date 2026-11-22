@@ -129,6 +129,7 @@ export function makeSportsmate(look = DEFAULT_SPORT, opts = {}) {
     name = ALIAS[name] || name; if (o.then) o = { ...o, then: ALIAS[o.then] || o.then };
     const clip = LIB.clips[name]; if (!clip) return null;
     const a = mixer.clipAction(clip);
+    if (o.solo) { mixer.stopAllAction(); current = null; }
     a.reset(); a.setLoop(o.once ? THREE.LoopOnce : THREE.LoopRepeat); a.clampWhenFinished = !!o.once; a.timeScale = o.speed || 1;
     if (current && current !== a) a.crossFadeFrom(current, o.fade ?? 0.25, false);
     a.play(); current = a;
