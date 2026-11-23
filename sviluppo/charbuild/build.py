@@ -36,13 +36,17 @@ def body_parts(female=False):
     sp3, sp1, pel = P['spine_03'], P['spine_01'], P['pelvis']
     if not female:
         L.append(Part('chest', 'shirt', 'torso', lambda p: sd_ellipsoid(p, sp3 + V(0, 0.0, 0.02), V(0.175, 0.16, 0.125)), 0.07))
-        L.append(Part('belly', 'shirt', 'torso', lambda p: sd_ellipsoid(p, sp1 + V(0, 0.03, 0.015), V(0.155, 0.14, 0.12)), 0.07))
+        L.append(Part('belly', 'shirt', 'torso', lambda p: sd_ellipsoid(p, sp1 + V(0, 0.03, 0.015), V(0.16, 0.15, 0.122)), 0.09))
         L.append(Part('hips', 'shorts', 'torso', lambda p: sd_ellipsoid(p, pel + V(0, -0.02, 0.01), V(0.16, 0.115, 0.115)), 0.05))
     else:
         L.append(Part('chest', 'shirt', 'torso', lambda p: sd_ellipsoid(p, sp3 + V(0, -0.005, 0.015), V(0.155, 0.15, 0.115)), 0.07))
         for s in (-1, 1): L.append(Part('bust', 'shirt', 'torso', (lambda s: lambda p: sd_ellipsoid(p, sp3 + V(0.062 * s, -0.045, 0.085), V(0.06, 0.055, 0.05)))(s), 0.05))
         L.append(Part('belly', 'shirt', 'torso', lambda p: sd_ellipsoid(p, sp1 + V(0, 0.03, 0.01), V(0.135, 0.14, 0.11)), 0.07))
         L.append(Part('hips', 'shorts', 'torso', lambda p: sd_ellipsoid(p, pel + V(0, -0.03, 0.0), V(0.172, 0.12, 0.12)), 0.06))
+    # spalle (trapezio + deltoide) nel tronco: raccordano collo e braccio, niente maniche "a palloncino"
+    for s in (-1, 1):
+        ua = P['upperarm_l' if s > 0 else 'upperarm_r']
+        L.append(Part('shoulder', 'shirt', 'torso', (lambda s, ua: lambda p: sd_roundcone(p, V(s * 0.045, 1.425, -0.02), ua + V(-s * 0.02, -0.02, 0.012), 0.072, 0.066 if not female else 0.06))(s, ua), 0.07))
     L.append(Part('neck', 'skin', 'torso', lambda p: sd_roundcone(p, P['neck_01'] + V(0, -0.04, 0), P['Head'] + V(0, 0.02, 0.005), 0.066, 0.056), 0.05))
     for sd in ('r', 'l'):
         ua, la, ha = P['upperarm_' + sd], P['lowerarm_' + sd], P['hand_' + sd]
@@ -50,9 +54,9 @@ def body_parts(female=False):
         sh = 1 if sd == 'l' else -1
         arm = 'arm_' + sd; leg = 'leg_' + sd
         # (niente 'spalline': si staccavano dal braccio alzato)
-        L.append(Part('sleeve', 'shirt', arm, (lambda ua, la: lambda p: np.maximum(sd_roundcone(p, ua + (la - ua) * 0.08, lerp(ua, la, 0.6), 0.06, 0.057), (p - lerp(ua, la, 0.48)) @ ((la - ua) / np.linalg.norm(la - ua))))(ua, la), 0.0, True))
-        L.append(Part('uarm', 'skin', arm, (lambda ua, la: lambda p: sd_roundcone(p, ua, la, 0.056, 0.048))(ua, la), 0.02))
-        L.append(Part('farm', 'skin', arm, (lambda la, ha: lambda p: sd_roundcone(p, la, ha + V(sh * 0.01, 0, 0), 0.049, 0.038))(la, ha), 0.02))
+        L.append(Part('sleeve', 'shirt', arm, (lambda ua, la: lambda p: np.maximum(sd_roundcone(p, ua + (la - ua) * 0.03, lerp(ua, la, 0.6), 0.064, 0.06), (p - lerp(ua, la, 0.48)) @ ((la - ua) / np.linalg.norm(la - ua))))(ua, la), 0.0, True))
+        L.append(Part('uarm', 'skin', arm, (lambda ua, la: lambda p: sd_roundcone(p, ua, la, 0.059, 0.05))(ua, la), 0.02))
+        L.append(Part('farm', 'skin', arm, (lambda la, ha: lambda p: sd_roundcone(p, la, ha + V(sh * 0.01, 0, 0), 0.051, 0.04))(la, ha), 0.02))
         L.append(Part('shortleg', 'shorts', leg, (lambda th, ca: lambda p: np.maximum(sd_roundcone(p, th + V(0, 0.03, 0), lerp(th, ca, 0.7), 0.1 if female else 0.096, 0.08), (p - lerp(th, ca, 0.6)) @ ((ca - th) / np.linalg.norm(ca - th))))(th, ca), 0.0, True))
         L.append(Part('thigh', 'skin', leg, (lambda th, ca: lambda p: sd_roundcone(p, th, ca, 0.086, 0.062))(th, ca), 0.03))
         L.append(Part('shin', 'skin', leg, (lambda ca, ft: lambda p: sd_roundcone(p, ca, ft + V(0, 0.03, 0), 0.062, 0.045))(ca, ft), 0.03))
@@ -231,14 +235,17 @@ def pack(v, f, parts, extra=None):
     lim = np.zeros((len(v), 2), np.float32)  # tipo (0 tronco, 1 braccio, 2 gamba, 3 fisso), parametro lungo l'osso (o altezza)
     for k in range(len(v)):
         g = groups[k]
-        if g == 'torso': lim[k] = (0, v[k][1] if tags[k] != 'neck' else 10 + v[k][1])
+        if g == 'torso':
+            # sopra il petto: colletto = distanza orizzontale dall'asse del collo (girocollo pulito); sotto: altezza (girovita)
+            if v[k][1] > 1.38: lim[k] = (4, math.hypot(v[k][0], v[k][2] + 0.03))
+            else: lim[k] = (0, v[k][1])
         elif g.startswith('arm_'): lim[k] = (1, seg_t(v[k], P['upperarm_' + g[-1]], P['lowerarm_' + g[-1]]))
         elif g.startswith('leg_'): lim[k] = (2, seg_t(v[k], P['thigh_' + g[-1]], P['calf_' + g[-1]]) if v[k][1] < waist - 0.004 else -1)
         else: lim[k] = (3, 0)
     for k in range(len(v)):
         g, y = groups[k], v[k][1]
         if g == 'torso':
-            if tags[k] == 'neck': regions[k] = 'shirt' if y < P['neck_01'][1] - 0.035 else ('trim' if y < P['neck_01'][1] - 0.02 else 'skin')
+            if y > 1.38: r = math.hypot(v[k][0], v[k][2] + 0.03); regions[k] = 'skin' if r < 0.082 else ('trim' if r < 0.094 else 'shirt')
             else: regions[k] = 'shirt' if y > waist + 0.012 else ('trim' if y > waist - 0.004 else 'shorts')
         elif g.startswith('arm_'):
             sd = g[-1]; t = seg_t(v[k], P['upperarm_' + sd], P['lowerarm_' + sd])

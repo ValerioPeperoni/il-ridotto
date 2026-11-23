@@ -92,7 +92,8 @@ function smGeo(key, d) {
   { const r = b64(d.reg, Uint8Array), a = new Float32Array(r.length * 3), b = new Float32Array(r.length * 2);
     for (let i = 0; i < r.length; i++) { const k = r[i]; if (k >= 1 && k <= 3) a[i * 3 + k - 1] = 1; else if (k === 4) b[i * 2] = 1; else if (k === 5) b[i * 2 + 1] = 1; }
     g.setAttribute('aR1', new THREE.BufferAttribute(a, 3)); g.setAttribute('aR2', new THREE.BufferAttribute(b, 2)); }
-  if (d.lim) g.setAttribute('aLim', new THREE.BufferAttribute(b64(d.lim, Float32Array), 2));
+  if (key.endsWith('body')) g.setAttribute('aLim', new THREE.BufferAttribute(new Float32Array(g.attributes.position.count * 2).fill(5), 2)); // orli calcolati dalla posa di riposo
+  else if (d.lim) g.setAttribute('aLim', new THREE.BufferAttribute(b64(d.lim, Float32Array), 2));
   else g.setAttribute('aLim', new THREE.BufferAttribute(new Float32Array(g.attributes.position.count * 2).fill(3), 2));
   if (d.uv) g.setAttribute('uv', new THREE.BufferAttribute(b64(d.uv, Float32Array), 2));
   g.computeVertexNormals(); g.computeBoundingSphere();
@@ -104,15 +105,23 @@ function smMaterial(look, opts = {}) {
   const m = new THREE.MeshStandardMaterial({ color: 0xffffff, roughness: 0.62, map: opts.map || null });
   m.onBeforeCompile = sh => {
     Object.assign(sh.uniforms, U);
-    sh.vertexShader = sh.vertexShader.replace('#include <common>', '#include <common>\nattribute vec3 aR1; attribute vec2 aR2; attribute vec2 aLim; varying vec3 vR1; varying vec2 vR2; varying vec2 vLim;').replace('#include <begin_vertex>', '#include <begin_vertex>\nvR1 = aR1; vR2 = aR2; vLim = aLim;');
-    sh.fragmentShader = sh.fragmentShader.replace('#include <common>', '#include <common>\nvarying vec3 vR1; varying vec2 vR2; varying vec2 vLim; uniform vec3 uSkin, uShirt, uShorts, uShoes, uSole, uTrim; uniform float uRim;')
+    sh.vertexShader = sh.vertexShader.replace('#include <common>', '#include <common>\nattribute vec3 aR1; attribute vec2 aR2; attribute vec2 aLim; varying vec3 vR1; varying vec2 vR2; varying vec2 vLim; varying vec3 vRest;').replace('#include <begin_vertex>', '#include <begin_vertex>\nvR1 = aR1; vR2 = aR2; vLim = aLim; vRest = position;');
+    sh.fragmentShader = sh.fragmentShader.replace('#include <common>', '#include <common>\nvarying vec3 vR1; varying vec2 vR2; varying vec2 vLim; varying vec3 vRest; uniform vec3 uSkin, uShirt, uShorts, uShoes, uSole, uTrim; uniform float uRim;\nfloat aas(float e, float x) { float f = max(fwidth(x) * 0.7, 1e-5); return smoothstep(e - f, e + f, x); }')
       .replace('#include <map_fragment>', `#include <map_fragment>
         vec3 w1 = step(0.5, vR1); vec2 w2 = step(0.5, vR2);
         // orli netti: maniche, pantaloncini, girovita e colletto decisi pixel per pixel lungo le ossa
         float kind = floor(vLim.x + 0.5), t = vLim.y;
         if (abs(vLim.x - kind) > 0.02) { w2.y = 0.0; kind = 9.0; } // confine tra due parti del corpo: niente orli
-        if (kind < 0.5) { if (t > 9.0) { float y = t - 10.0; w1 = vec3(step(y, 1.512), 0.0, 0.0); w2 = vec2(0.0, step(y, 1.528) * (1.0 - step(y, 1.512))); }
-          else { w1 = vec3(step(1.0361, t), step(t, 1.0201), 0.0); w2 = vec2(0.0, step(1.0201, t) * step(t, 1.0361)); } }
+        if (kind < 0.5) { w1 = vec3(step(1.0361, t), step(t, 1.0201), 0.0); w2 = vec2(0.0, step(1.0201, t) * step(t, 1.0361)); }
+        if (kind > 4.5) {
+          // corpo: tagli dei vestiti decisi sulla posa di riposo (a T), uguali su tutte le parti -> linee pulite e continue
+          vec3 q = vRest; float ax = abs(q.x); w1 = vec3(0.0); w2 = vec2(0.0);
+          if (q.y > 1.2 && ax > 0.235) { w1.x = 1.0 - aas(0.322, ax); w2.y = aas(0.322, ax) * (1.0 - aas(0.334, ax)); }
+          else if (q.y > 1.38) { float r = length(vec2(q.x, q.z + 0.03)) + 0.6 * (1.48 - q.y); w1.x = aas(0.094, r); w2.y = aas(0.082, r) * (1.0 - aas(0.094, r)); }
+          else { float y = q.y; w1.x = aas(1.0361, y); w2.y = aas(0.712, y) * (1.0 - aas(0.731, y));
+                 w1.y = aas(0.731, y) * (1.0 - aas(1.0361, y)); }
+        }
+        else if (kind > 3.5 && kind < 4.5) { w1 = vec3(step(0.094, t), 0.0, 0.0); w2 = vec2(0.0, step(0.082, t) * step(t, 0.094)); }
         else if (kind < 1.5) { w1 = vec3(step(t, 0.44), 0.0, 0.0); w2 = vec2(0.0, step(0.44, t) * step(t, 0.485)); }
         else if (kind < 2.5) { w1 = vec3(0.0, step(t, 0.56), 0.0); w2 = vec2(0.0, step(0.56, t) * step(t, 0.605)); }
         vec3 rc = uSkin; rc = mix(rc, uShirt, w1.x); rc = mix(rc, uShorts, w1.y); rc = mix(rc, uShoes, w1.z); rc = mix(rc, uSole, w2.x); rc = mix(rc, uTrim, w2.y);
@@ -134,13 +143,15 @@ function faceCanvas(look, mode = 'open') {
   // guance
   for (const s of [-1, 1]) { const [x, y] = P(0.5 + s * 0.085, 0.405); const gr = g.createRadialGradient(x, y, 2, x, y, 34); gr.addColorStop(0, 'rgba(255,110,110,0.35)'); gr.addColorStop(1, 'rgba(255,110,110,0)'); g.fillStyle = gr; g.fillRect(x - 40, y - 40, 80, 80); }
   for (const s of [-1, 1]) {
-    const [x, y] = P(0.5 + s * 0.052, 0.475);
+    const [x, y] = P(0.5 + s * 0.056, 0.48);
+    g.save(); g.translate(x, y); g.scale(1.28, 1.28); g.translate(-x, -y);
     if (mode === 'open') {
       g.fillStyle = '#1b1420'; g.beginPath(); g.ellipse(x, y, 25, 37, 0, 0, Math.PI * 2); g.fill();
       g.fillStyle = '#4b3b63'; g.beginPath(); g.ellipse(x, y + 11, 18, 19, 0, 0, Math.PI * 2); g.fill();
       g.fillStyle = '#fff'; g.beginPath(); g.ellipse(x - 7 * s, y - 14, 9, 11.5, 0, 0, Math.PI * 2); g.fill();
       g.beginPath(); g.arc(x + 7 * s, y + 14, 4, 0, Math.PI * 2); g.fill();
     } else { g.strokeStyle = '#1b1420'; g.lineWidth = 5; g.lineCap = 'round'; g.beginPath(); g.arc(x, y - 8, 23, 0.15 * Math.PI, 0.85 * Math.PI); g.stroke(); }
+    g.restore();
     // sopracciglia
     const [bx, by] = P(0.5 + s * 0.058, 0.615); g.strokeStyle = hair; g.lineWidth = 11; g.lineCap = 'round'; g.beginPath(); g.moveTo(bx - 20, by + 4); g.quadraticCurveTo(bx, by - 7, bx + 20, by + 4); g.stroke();
   }
