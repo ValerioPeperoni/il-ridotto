@@ -726,13 +726,24 @@ function big(t, cls = '', ms = 1500) { const el = $('#big'); el.textContent = t;
 function tip(t) { $('#tip').textContent = t; }
 const _v = new THREE.Vector3();
 function updateTags() {
-  const w = innerWidth, h = innerHeight;
+  const w = innerWidth, h = innerHeight, placed = [], list = [];
   for (const p of G.players) {
     if (!p.tag) continue;
     _v.copy(p.pos).y += AV_H + 0.45; _v.project(camera);
     const vis = _v.z < 1 && Math.abs(_v.x) < 1.1 && Math.abs(_v.y) < 1.1 && G.phase !== 'lobby' && G.phase !== 'over';
     p.tag.style.display = vis ? '' : 'none'; if (!vis) continue;
-    p.tag.style.left = ((_v.x + 1) / 2 * w) + 'px'; p.tag.style.top = ((1 - _v.y) / 2 * h) + 'px';
+    list.push({ p, x: (_v.x + 1) / 2 * w, y: (1 - _v.y) / 2 * h });
+  }
+  // etichette vicine: si impilano invece di sovrapporsi (con un piccolo ritardo, niente tremolii)
+  list.sort((a, b) => b.y - a.y);
+  for (const e of list) {
+    let y = e.y;
+    for (let it = 0; it < 6; it++) { const hit = placed.find(o => Math.abs(o.x - e.x) < 96 && Math.abs(o.y - y) < 27); if (!hit) break; y = hit.y - 27; }
+    placed.push({ x: e.x, y });
+    const p = e.p; p._ty = p._ty == null || Math.abs(p._ty - y) > 200 ? y : p._ty + (y - p._ty) * 0.25;
+    p.tag.style.left = e.x + 'px'; p.tag.style.top = p._ty + 'px';
+  }
+  for (const { p } of list) {
     const it = p.tag.querySelector('.it'); const icon = p.item ? ITEMS[p.item].icon : ''; if (it.textContent !== icon) it.textContent = icon; it.style.display = icon ? '' : 'none';
     const pw = p.tag.querySelector('.pw'); pw.style.display = p.state === 'charge' ? '' : 'none'; pw.firstChild.style.width = (p.charge * 100) + '%';
     const st = p.tag.querySelector('.st'); const s = p.frozen > 0 ? '❄️ congelato' : p.ko > 0 ? '💫 KO' : p.done ? '⛳ in buca' : p.state === 'addr' ? 'mira…' : ''; if (st.textContent !== s) st.textContent = s;

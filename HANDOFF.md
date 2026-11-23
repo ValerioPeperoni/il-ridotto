@@ -94,6 +94,28 @@ Valerio ha provato tutto: meglio di prima, ma ancora "da beta". Le sue richieste
   - **Lancio:** procedurale in `deliveryPose()`: piedi con IK (`makeLegs`), rincorsa da z 1.25 a 0.3, scivolata sul piede sinistro con la destra indietro, busto in avanti, braccio da `G.swingFrom` a 1.9 rad, ritorno in piedi dopo 1.7 s. Il personaggio diventa semitrasparente (0.45) solo dopo il rilascio.
   - **Registrazione:** `?rec` come negli altri giochi.
 
+## 1f. 23/11 notte, seconda parte: personaggi rifiniti e campo da golf
+- **Personaggi:**
+  - **Spalle:** nuova parte `shoulder` nel tronco (trapezio + deltoide, dal collo all'attaccatura del braccio). Prima la spalla era solo la manica, e sembrava una manica "a palloncino". Braccia leggermente più piene.
+  - **Orli del corpo:** decisi nello shader dalla posizione nella posa di riposo a T (`vRest = position`, `aLim.x = 5` per le mesh `*body`):
+    - manica: |x| tra 0.322 e 0.334;
+    - girocollo: distanza dall'asse del collo + 0.6·(1.48 − y), bordino tra 0.082 e 0.094;
+    - pantaloncini: y tra 0.712 e 0.731;
+    - maglia/pantaloncini: a y 1.036, senza bordino.
+    - Bordi antialias con `fwidth`. Linee pulite e continue anche dove si toccano parti diverse; prima erano frastagliate.
+  - **Occhi:** il 28% più grandi.
+- **Golf, campo:** `terrain.jpg` si rigenera con `bake.py`.
+  - **Erba:**
+    - taglio a corsie chiare/scure lungo la direzione della buca (fairway 3.6 m, green 1.5 m), al posto della scacchiera;
+    - "primo taglio" attorno al corridoio;
+    - rough meno a chiazze, sottobosco verde scuro invece che marrone.
+  - **Laghetti:** riva larga e dolce (`pondD`, `nearPond`), bordo chiaro, niente roccia né finta occlusione sulle sponde. La spiaggia c'è solo vicino al mare (prima c'era una chiazza di sabbia in mezzo all'isola).
+  - **`nature.js`:**
+    - filari di alberi ai lati di ogni buca (8–15 m dal corridoio) con cespugli;
+    - fiori, felci ed erba raccolti in macchie invece che sparsi;
+    - canne lungo i laghetti.
+  - **Etichette coi nomi:** si impilano invece di sovrapporsi (`updateTags`).
+
 ## 2. Che cos'è il progetto
 Una raccolta di giochi da festa nel browser. Il **PC o la TV** è lo schermo comune, i **telefoni** fanno da controller e si collegano inquadrando un QR. Niente account, niente installazioni.
 - Sito: https://valeriopeperoni.github.io/il-ridotto/
