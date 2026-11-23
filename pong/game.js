@@ -75,10 +75,22 @@ function buildHall() {
     const b = new THREE.Mesh(new THREE.BoxGeometry(len, 0.55, 0.05), m); b.position.set(x, 0.275, z); b.rotation.y = ry; b.castShadow = true; scene.add(b);
   }
   // pareti chiare con grandi vetrate sul cielo
-  const wallT = ctex(1024, 512, (g, w, h) => { g.fillStyle = '#eef2f8'; g.fillRect(0, 0, w, h); g.fillStyle = '#3d7bff'; g.fillRect(0, h * 0.78, w, h * 0.22); g.fillStyle = '#ffcf3a'; g.fillRect(0, h * 0.76, w, 8);
+  const wallT = ctex(1024, 512, (g, w, h) => { g.fillStyle = '#f6f3ee'; g.fillRect(0, 0, w, h);
+    // listelli di legno in basso, fascia arancio e verde acqua
+    for (let x = 0; x < w; x += 14) { g.fillStyle = `hsl(${28 + Math.random() * 6},${45 + Math.random() * 10}%,${54 + Math.random() * 8}%)`; g.fillRect(x, h * 0.74, 11, h * 0.26); }
+    g.fillStyle = '#ffb02e'; g.fillRect(0, h * 0.71, w, 10); g.fillStyle = '#2ec2b0'; g.fillRect(0, h * 0.71 + 10, w, 6);
     for (let i = 0; i < 4; i++) { const x = 40 + i * 250, y = 60, ww = 200, hh = 250; const gr = g.createLinearGradient(0, y, 0, y + hh); gr.addColorStop(0, '#7ec3ff'); gr.addColorStop(1, '#d9efff'); g.fillStyle = gr; g.fillRect(x, y, ww, hh); g.fillStyle = 'rgba(255,255,255,.8)'; g.beginPath(); g.arc(x + 60 + i * 20, y + 80, 26, 0, 7); g.arc(x + 90 + i * 20, y + 70, 30, 0, 7); g.arc(x + 120 + i * 20, y + 84, 24, 0, 7); g.fill(); g.strokeStyle = '#c9d3e6'; g.lineWidth = 10; g.strokeRect(x, y, ww, hh); g.beginPath(); g.moveTo(x + ww / 2, y); g.lineTo(x + ww / 2, y + hh); g.stroke(); } });
   for (const [x, z, ry] of [[0, -12, 0], [0, 12, Math.PI], [-12, 0, Math.PI / 2], [12, 0, -Math.PI / 2]]) { const w = new THREE.Mesh(new THREE.PlaneGeometry(24, 9), new THREE.MeshStandardMaterial({ map: wallT, roughness: 0.9 })); w.position.set(x, 4.5, z); w.rotation.y = ry; scene.add(w); }
   const ceil = new THREE.Mesh(new THREE.PlaneGeometry(24, 24), new THREE.MeshStandardMaterial({ color: 0xdfe5ef })); ceil.rotation.x = Math.PI / 2; ceil.position.y = 9; scene.add(ceil);
+  // festoni colorati e stendardi appesi (palazzetto in festa)
+  for (const [z, ci] of [[-4, 0], [0, 1], [4, 2]]) {
+    const cols = [['#ff5c9a', '#ffcf3a', '#3d7bff', '#2ec27e'], ['#ffcf3a', '#3d7bff', '#ff6a3d', '#9a5cff'], ['#2ec27e', '#ff5c9a', '#ffcf3a', '#3d7bff']][ci];
+    for (let k = 0; k < 40; k++) { const x = -11 + k * 0.56, y = 7.6 - Math.sin((k / 39) * Math.PI) * 0.9; const f = new THREE.Mesh(new THREE.ConeGeometry(0.13, 0.3, 3), new THREE.MeshStandardMaterial({ color: cols[k % 4], roughness: 0.7 })); f.position.set(x, y, z); f.rotation.z = Math.PI; scene.add(f); }
+  }
+  const banT = (c1, c2, txt) => ctex(256, 512, (g, w, h) => { g.fillStyle = c1; g.fillRect(0, 0, w, h); g.fillStyle = c2; g.beginPath(); g.moveTo(0, h * 0.85); g.lineTo(w / 2, h); g.lineTo(w, h * 0.85); g.lineTo(w, h); g.lineTo(0, h); g.fill(); g.fillStyle = '#fff'; g.font = '700 64px Fredoka, Arial'; g.textAlign = 'center'; g.save(); g.translate(w / 2, h * 0.42); g.rotate(-Math.PI / 2); g.fillText(txt, 0, 22); g.restore(); });
+  [['#3d7bff', '#ffcf3a', 'PING'], ['#ff5c9a', '#ffffff', 'PONG'], ['#2ec27e', '#ffcf3a', 'SMASH'], ['#9a5cff', '#ffffff', 'TOPSPIN']].forEach(([c1, c2, t], k) => {
+    const b = new THREE.Mesh(new THREE.PlaneGeometry(1.2, 2.6), new THREE.MeshStandardMaterial({ map: banT(c1, 'rgba(0,0,0,0)', t), roughness: 0.8, side: THREE.DoubleSide })); const sx = k < 2 ? -11.9 : 11.9; b.position.set(sx, 6.2, -5 + (k % 2) * 10); b.rotation.y = sx < 0 ? Math.PI / 2 : -Math.PI / 2; scene.add(b);
+  });
   for (let i = -2; i <= 2; i++) for (const x of [-4, 0, 4]) { const p = new THREE.Mesh(new THREE.PlaneGeometry(2.4, 0.6), new THREE.MeshBasicMaterial({ color: 0xffffff })); p.rotation.x = Math.PI / 2; p.position.set(x, 8.98, i * 4); scene.add(p); }
   // panchina e borse a bordo campo (dettagli)
   const benchM = new THREE.MeshStandardMaterial({ color: 0xe8a33d, roughness: 0.6 });
@@ -92,7 +104,7 @@ function buildHall() {
   for (const s2 of [-1, 1]) ao(s2 * 4.2, 0, 0.9, 2.6, 0.6);
   // tabellone col punteggio sulla parete di fondo (si aggiorna da solo)
   const sbC = document.createElement('canvas'); sbC.width = 512; sbC.height = 192; const sbT = new THREE.CanvasTexture(sbC); sbT.colorSpace = THREE.SRGBColorSpace;
-  const sb = new THREE.Mesh(new THREE.PlaneGeometry(4, 1.5), new THREE.MeshBasicMaterial({ map: sbT, toneMapped: false })); sb.position.set(0, 5.2, -11.94); scene.add(sb);
+  const sb = new THREE.Mesh(new THREE.PlaneGeometry(4, 1.5), new THREE.MeshBasicMaterial({ map: sbT, toneMapped: false })); sb.position.set(0, 5.2, -11.9); scene.add(sb);
   const sbFrame = new THREE.Mesh(new THREE.BoxGeometry(4.3, 1.8, 0.12), new THREE.MeshStandardMaterial({ color: 0x1d2340, roughness: 0.4 })); sbFrame.position.set(0, 5.2, -12.0); scene.add(sbFrame);
   G_board.draw = () => {
     const g = sbC.getContext('2d'); g.fillStyle = '#0d1228'; g.fillRect(0, 0, 512, 192);
@@ -640,6 +652,7 @@ function point(w, why) {
   if (G.let && why !== 'Fuori!') { G.let = false; }
   G.phase = 'point'; G.ideal = null; G.pendingHit = null; G.cpuSwing = null; G.fire = false;
   G.score[w]++; updateScore();
+  { const aw = avatars[w]; if (aw && aw.av.mood) aw.av.mood('happy', 2.2); }
   const hum = G.players[w].kind !== 'cpu';
   big(`${why}`, 1400); tip(`Punto a ${G.players[w].name}`);
   snd(hum || G.view === 'tv' ? 'cheer' : 'aww');

@@ -307,7 +307,7 @@ function playerSunk(p) {
   big(p.strokes === 1 ? 'BUCA IN UNO!' : `${p.name} in buca!`, 'y', 2000);
   tip(`${p.name}: ${p.strokes} colpi${names[p.strokes] ? ' · ' + names[p.strokes] : ''} · +${pts + bonus} punti`);
   const c = cupOf(h); FX.confetti(new THREE.Vector3(c.x, c.y + 0.5, c.z)); FX.sound('cup'); viewFx({ k: 'cup', x: r2(c.x), y: r2(c.y + 0.5), z: r2(c.z), who: p.name });
-  p.av.play('Cheer', { fade: 0.2 }); p.anim = 'Cheer';
+  p.av.play('Cheer', { fade: 0.2 }); p.anim = 'Cheer'; if (p.av.mood) p.av.mood('happy', 4);
   p.ballMesh.visible = false; p.ballRing.visible = false; p.ballPin.visible = false;
   if (G.finishOrder.length === 1 && G.players.length > 1) G.clock = 30;
   renderBoard();

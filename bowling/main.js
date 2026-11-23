@@ -706,6 +706,7 @@ function react() {
   av.root.visible = true; setAvatarOpacity(p, 1); G.fadeAv = false;
   av.root.rotation.y = 0; // si gira verso di noi
   const m = G.mood;
+  if (av.mood && (m === 'great' || m === 'good')) av.mood('happy', 3);
   av.play(m === 'great' ? (Math.random() < 0.5 ? 'Dance_Loop' : 'Yes') : m === 'good' ? 'Yes' : m === 'bad' ? (Math.random() < 0.5 ? 'Idle_No_Loop' : 'Hit_Chest') : 'Interact', { once: m !== 'great' || Math.random() < 0.5, then: 'Idle_Loop' });
   for (const q of G.players) if (q !== p && q.av && m === 'great') q.av.play('Sitting_Talking_Loop', { fade: 0.3 });
 }
