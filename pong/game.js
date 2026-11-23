@@ -6,7 +6,7 @@ import { ShaderPass } from 'three/addons/postprocessing/ShaderPass.js';
 import { UnrealBloomPass } from 'three/addons/postprocessing/UnrealBloomPass.js';
 import { OutputPass } from 'three/addons/postprocessing/OutputPass.js';
 import { T, mkBall, step, predict, solve, copy } from './ball.js';
-import { makeArm } from './arm.js';
+import { makeArm, makeLegs, makeFreeArm } from './arm.js';
 import { savedProfile } from '../avatar/avatar.js';
 import { loadSportLibrary as loadAvatarLibrary, makeSportsmate, randomSport as randomLook } from '../avatar/sport.js';
 const BOTS = [{ name: 'Topspin' }, { name: 'La Contessa' }, { name: 'Muro' }, { name: 'Nonna Pina' }, { name: 'Er Taglio' }];
@@ -35,7 +35,7 @@ composer.addPass(new ShaderPass({ uniforms: { tDiffuse: { value: null } },
   fragmentShader: 'uniform sampler2D tDiffuse; varying vec2 vUv; void main(){ vec4 c = texture2D(tDiffuse, vUv); if (!(c.r == c.r) || !(c.g == c.g) || !(c.b == c.b)) c = vec4(0.0,0.0,0.0,1.0); gl_FragColor = vec4(clamp(c.rgb, 0.0, 60.0), 1.0); }' }));
 composer.addPass(new UnrealBloomPass(new THREE.Vector2(256, 256), 0.12, 0.3, 1.0));
 composer.addPass(new OutputPass());
-function resize() { const w = innerWidth, h = innerHeight; renderer.setSize(w, h, false); composer.setSize(w, h); camera.aspect = w / h; camera.fov = w < h ? 72 : 55; camera.updateProjectionMatrix(); }
+function resize() { const w = innerWidth, h = innerHeight; renderer.setSize(w, h, false); composer.setSize(w, h); camera.aspect = w / h; camera.fov = w < h ? 68 : 50; camera.updateProjectionMatrix(); }
 addEventListener('resize', resize);
 function ctex(w, h, draw, rep) { const c = document.createElement('canvas'); c.width = w; c.height = h; draw(c.getContext('2d'), w, h); const t = new THREE.CanvasTexture(c); t.colorSpace = THREE.SRGBColorSpace; t.anisotropy = 8; if (rep) { t.wrapS = t.wrapT = THREE.RepeatWrapping; t.repeat.set(...rep); } return t; }
 
@@ -218,7 +218,7 @@ function setupAvatars() {
     hand.add(racket); racket.scale.setScalar(1.3); racket.rotation.set(0, 0, 0); racket.position.set(0, 0.06, 0.02);
     av.play('Idle_B');
     avatars.push({ av, racket, x: av.root.position.x, vx: 0, swingT: -1, swingDir: 1, anim: 'Idle_B' });
-    avatars[avatars.length - 1].arm = makeArm(av, racket);
+    { const a = avatars[avatars.length - 1]; a.arm = makeArm(av, racket); a.legs = makeLegs(av); a.larm = makeFreeArm(av); }
   });
   const fp = G.view !== 'tv' && G.players[0] && G.players[0].kind !== 'cpu';
   if (avatars[0]) avatars[0].av.root.visible = !fp;
@@ -264,12 +264,15 @@ function animateAvatars(dt) {
     if (id && id.t - G.time < 0.35 && id.t - G.time > -0.05) { const k = Math.min(1, dt * 16); a.x += (tx - a.x) * k; a.z += (tz - a.z) * k; }
     a.av.root.position.set(a.x, 0, s * a.z);
     // animazioni: gambe e busto dall'animazione, braccio della racchetta guidato (vedi arm.js)
-    let anim = 'Sword_Idle';
+    let anim = 'Idle_Loop';
     if (a.pend) { a.pend.wait -= dt; if (a.pend.wait <= 0) { const pd = a.pend; a.pend = null; a.swingT = 0; a.swingDir = pd.side; a.up = pd.up; snd('swish', pd.p); a.hitT = pd.hitT; a.hitPt = pd.pt; } }
     if (a.swingT >= 0) { a.swingT += dt; if (a.swingT > 0.9) a.swingT = -1; }
-    if (Math.abs(a.vx) > 1.2 || Math.abs(a.vz || 0) > 1.2) anim = 'Jog_Fwd_Loop';
     if (anim !== a.anim) { a.anim = anim; a.av.play(anim, { fade: 0.2 }); }
     a.av.update(dt);
+    // piedi a terra con passi laterali, braccio libero pronto, poi il braccio della racchetta
+    const fwd = new THREE.Vector3(0, 0, i === 0 ? -1 : 1);
+    a.legs.update(fwd, new THREE.Vector3(a.vx, 0, (a.vz || 0) * s), dt);
+    a.larm.apply(toWorld(a, i, new THREE.Vector3(0.2, 1.08, 0.3)), toWorld(a, i, new THREE.Vector3(0.6, -0.6, -0.4), true), 0.85);
     strokeArm(a, i);
     if (DEBUG && G.hitInfo && G.hitInfo.who === i && !G.hitInfo.done && a.hitT != null && Math.abs(G.time - G.hitInfo.t) < 0.05) {
       const H = G.hitInfo; H.done = true; a.av.mixer.update(0); strokeArm(a, i, H.t - a.hitT); const rp = a.racket.localToWorld(new THREE.Vector3(0, 0.08, 0)); a.av.mixer.update(0); strokeArm(a, i);
@@ -738,7 +741,7 @@ function updateCamera(dt) {
   else if (G.view === 'tv') { _p.set(3.4, 2.3, (b ? b.z : 0) * 0.15); _l.set(0, 0.85, (b ? b.z : 0) * 0.25); }
   else { // prima persona: occhi del giocatore vicino, segue un po' la palla
     const ax = avatars[0] ? avatars[0].x : 0;
-    _p.set(ax * 0.8 + 0.1, 1.42, (avatars[0] ? avatars[0].z ?? T.L / 2 + 0.65 : T.L / 2 + 0.65) + 0.2);
+    _p.set(ax * 0.8 + 0.1, 1.45, T.L / 2 + 0.95 + ((avatars[0] && avatars[0].z) ? (avatars[0].z - 2.3) * 0.3 : 0));
     _l.set((b ? b.x : 0) * 0.35 + ax * 0.3, 0.86 + (b ? Math.max(0, b.y - 1) * 0.3 : 0), -0.8);
   }
   const k = 1 - Math.exp(-dt * (G.view === 'tv' ? 4 : 7)); G.camPos.lerp(_p, k); G.camLook.lerp(_l, k);

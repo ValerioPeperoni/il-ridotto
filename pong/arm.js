@@ -42,7 +42,7 @@ export function makeArm(av, racket) {
       // palla bassa o lontana: ci si piega in avanti col busto
       if (leftAxis && SP) {
         S.updateWorldMatrix(true, false); const s0 = S.getWorldPosition(new THREE.Vector3()), need = T.distanceTo(s0) - (l1 + l2 - 0.02);
-        if (need > 0) { const ang = Math.min(0.6, need / 0.45); const qw = worldQ(SP, new THREE.Quaternion()); setWorldQ(SP, new THREE.Quaternion().setFromAxisAngle(leftAxis.clone().normalize(), ang).multiply(qw), k); av.root.updateMatrixWorld(true); }
+        if (need > 0) { const ang = Math.min(0.4, need / 0.6); const qw = worldQ(SP, new THREE.Quaternion()); setWorldQ(SP, new THREE.Quaternion().setFromAxisAngle(leftAxis.clone().normalize(), ang).multiply(qw), k); av.root.updateMatrixWorld(true); }
       }
       // due ossa: gomito sul piano del "pole"
       S.updateWorldMatrix(true, false); const s = S.getWorldPosition(new THREE.Vector3());
@@ -54,6 +54,78 @@ export function makeArm(av, racket) {
       aim(S, E, elbow, k); aim(E, H, wrist, k);
       setWorldQ(H, handQ, k);
       av.root.updateMatrixWorld(true);
+    },
+  };
+}
+
+// ---------- gambe: piedi appoggiati a terra e passi laterali "a scivolo" (come i giocatori veri) ----------
+export function makeLegs(av) {
+  const sides = {};
+  av.root.updateMatrixWorld(true);
+  for (const sd of ['l', 'r']) {
+    const T = av.bones['thigh_' + sd], C = av.bones['calf_' + sd], F = av.bones['foot_' + sd];
+    const l1 = T.getWorldPosition(new THREE.Vector3()).distanceTo(C.getWorldPosition(new THREE.Vector3()));
+    const l2 = C.getWorldPosition(new THREE.Vector3()).distanceTo(F.getWorldPosition(new THREE.Vector3()));
+    sides[sd] = { T, C, F, l1: l1 * 1, l2, p: null, from: new THREE.Vector3(), to: new THREE.Vector3(), t: 1 };
+  }
+  const wq = o => { o.updateWorldMatrix(true, false); const q = new THREE.Quaternion(); o.matrixWorld.decompose(_p, q, _w); return q; };
+  function setWQ(o, qw) { const pq = wq(o.parent).invert(); o.quaternion.copy(pq.multiply(qw)); o.updateMatrixWorld(true); }
+  function aimB(bone, child, target) {
+    bone.updateWorldMatrix(true, true);
+    const p = bone.getWorldPosition(new THREE.Vector3()), c = child.getWorldPosition(new THREE.Vector3());
+    const d = new THREE.Quaternion().setFromUnitVectors(c.sub(p).normalize(), target.clone().sub(p).normalize());
+    setWQ(bone, d.multiply(wq(bone)));
+  }
+  return {
+    // fwd: direzione in cui guarda il corpo (mondo), vel: velocità del corpo, dt
+    update(fwd, vel, dt) {
+      const s = av.root.scale.x, left = new THREE.Vector3(fwd.z, 0, -fwd.x); // sinistra del personaggio
+      const base = av.root.position;
+      const neutral = sd => new THREE.Vector3(base.x, 0, base.z).addScaledVector(left, (sd === 'l' ? 0.17 : -0.17) * s).addScaledVector(fwd, (sd === 'l' ? 0.07 : -0.05) * s);
+      const lead = vel.clone().multiplyScalar(0.13);
+      for (const sd of ['l', 'r']) {
+        const S = sides[sd]; if (!S.p) { S.p = neutral(sd); S.t = 1; }
+        const other = sides[sd === 'l' ? 'r' : 'l'];
+        if (S.t >= 1) {
+          const far = S.p.distanceTo(neutral(sd));
+          if (far > 0.13 * s && (other.t >= 1 || far > 0.42 * s)) { S.from.copy(S.p); S.to.copy(neutral(sd)).add(lead); S.t = 0; }
+        }
+        if (S.t < 1) { S.t = Math.min(1, S.t + dt / 0.13); const e = S.t * S.t * (3 - 2 * S.t); S.p.copy(S.from).lerp(S.to, e); S.lift = Math.sin(S.t * Math.PI) * 0.07 * s; } else S.lift = 0;
+        // caviglia: sopra il punto del piede; ginocchio in avanti e un po' in fuori
+        const footQ = wq(S.F);
+        const ank = new THREE.Vector3(S.p.x, (0.086 * s) + S.lift, S.p.z); // il corpo è abbassato di 7 cm: le ginocchia si piegano un po'
+        const hip = S.T.getWorldPosition(new THREE.Vector3());
+        let d = ank.distanceTo(hip); const l1 = S.l1, l2 = S.l2;
+        const dir = ank.clone().sub(hip).normalize(); d = Math.min(Math.max(d, Math.abs(l1 - l2) + 0.01), l1 + l2 - 0.002);
+        const a = (l1 * l1 - l2 * l2 + d * d) / (2 * d), hh = Math.sqrt(Math.max(0, l1 * l1 - a * a));
+        const pole = fwd.clone().addScaledVector(left, sd === 'l' ? 0.25 : -0.25);
+        const pp = pole.sub(dir.clone().multiplyScalar(pole.dot(dir))).normalize();
+        const knee = hip.clone().addScaledVector(dir, a).addScaledVector(pp, hh), foot = hip.clone().addScaledVector(dir, d);
+        aimB(S.T, S.C, knee); aimB(S.C, S.F, foot); setWQ(S.F, footQ);
+      }
+    },
+  };
+}
+// braccio libero (sinistro) in posa pronta davanti al petto
+export function makeFreeArm(av) {
+  const S = av.bones.upperarm_l, E = av.bones.lowerarm_l, H = av.bones.hand_l;
+  av.root.updateMatrixWorld(true);
+  const l1 = S.getWorldPosition(new THREE.Vector3()).distanceTo(E.getWorldPosition(new THREE.Vector3())), l2 = E.getWorldPosition(new THREE.Vector3()).distanceTo(H.getWorldPosition(new THREE.Vector3()));
+  const wq = o => { o.updateWorldMatrix(true, false); const q = new THREE.Quaternion(); o.matrixWorld.decompose(_p, q, _w); return q; };
+  function setWQ(o, qw, k) { const pq = wq(o.parent).invert(); o.quaternion.slerp(pq.multiply(qw), k); o.updateMatrixWorld(true); }
+  function aimB(bone, child, target, k) {
+    bone.updateWorldMatrix(true, true);
+    const p = bone.getWorldPosition(new THREE.Vector3()), c = child.getWorldPosition(new THREE.Vector3());
+    const d = new THREE.Quaternion().setFromUnitVectors(c.sub(p).normalize(), target.clone().sub(p).normalize());
+    setWQ(bone, d.multiply(wq(bone)), k);
+  }
+  return {
+    apply(T, pole, k = 1) {
+      const s = S.getWorldPosition(new THREE.Vector3()); let d = T.distanceTo(s); const dir = T.clone().sub(s).normalize();
+      d = Math.min(Math.max(d, Math.abs(l1 - l2) + 0.01), l1 + l2 - 0.005);
+      const a = (l1 * l1 - l2 * l2 + d * d) / (2 * d), hh = Math.sqrt(Math.max(0, l1 * l1 - a * a));
+      const pp = pole.clone().sub(dir.clone().multiplyScalar(pole.dot(dir))).normalize();
+      aimB(S, E, s.clone().addScaledVector(dir, a).addScaledVector(pp, hh), k); aimB(E, H, s.clone().addScaledVector(dir, d), k);
     },
   };
 }

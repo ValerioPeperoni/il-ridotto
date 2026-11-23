@@ -5,7 +5,7 @@ let lastTap = 0; document.addEventListener('touchend', e => { const n = Date.now
 // se lo zoom è comunque scattato, si rimette a posto da solo
 if (window.visualViewport) visualViewport.addEventListener('resize', () => { if (visualViewport.scale > 1.01) { const m = document.querySelector('meta[name=viewport]'); const c = m.content; m.content = c + ',minimum-scale=1'; setTimeout(() => { m.content = c; }, 50); } });
 // versione: se il telefono ha in memoria file vecchi, si ricarica da solo con quelli nuovi
-const BUILD = '202611221325';
+const BUILD = '202611230126';
 fetch('build.txt?' + Date.now(), { cache: 'no-store' }).then(r => r.ok ? r.text() : '').then(v => { v = (v || '').trim(); if (v && v !== BUILD && sessionStorage.getItem('ridotto-reload') !== v) { sessionStorage.setItem('ridotto-reload', v); const u = new URL(location.href); u.searchParams.set('_v', v); location.replace(u.href); } }).catch(() => { });
 // Telefono come controller di movimento (bowling; in futuro ping pong).
 import { joinRoom } from './net.js';

@@ -7,6 +7,7 @@ const Q = new URLSearchParams(location.search);
 const r = new THREE.WebGLRenderer({ canvas: document.getElementById('c'), antialias: true }); r.setSize(innerWidth, innerHeight); r.outputColorSpace = THREE.SRGBColorSpace; r.toneMapping = THREE.ACESFilmicToneMapping; r.shadowMap.enabled = true;
 const s = new THREE.Scene(); s.background = new THREE.Color(0xdfeaff);
 const cam = new THREE.PerspectiveCamera(35, innerWidth / innerHeight, 0.1, 50); cam.position.set(0, 1.4, 6.5); cam.lookAt(0, 0.95, 0);
+if (Q.get('cam')) { const c = Q.get('cam').split(',').map(Number); cam.position.set(c[0], c[1], c[2]); cam.lookAt(c[3], c[4], c[5]); }
 s.add(new THREE.HemisphereLight(0xffffff, 0x8899bb, 1.2)); const d = new THREE.DirectionalLight(0xfff2e0, 2.2); d.position.set(2, 5, 4); d.castShadow = true; s.add(d);
 const fl = new THREE.Mesh(new THREE.PlaneGeometry(20, 20), new THREE.MeshStandardMaterial({ color: 0xf2f4fa })); fl.rotation.x = -Math.PI / 2; fl.receiveShadow = true; s.add(fl);
 await loadSportLibrary();
@@ -17,6 +18,6 @@ const times = Q.get('times') ? Q.get('times').split(',').map(Number) : null;
 const list = times ? times.map(() => clips[0]) : clips;
 list.forEach((c, i) => { const a = makeSportsmate(i === 0 ? {} : randomSport(rnd), { height: 1.75 }); a.root.position.x = (i - (list.length - 1) / 2) * 1.2; a.root.rotation.y = +(Q.get('ry') || 0); s.add(a.root); a.play(c); avs.push(a); });
 const t0 = +(Q.get('t') || 0.4); avs.forEach((a, i) => a.update(times ? times[i] : t0));
-window.__ready = true;
+window.__ready = true; window.__avs = avs; window.__THREE = THREE;
 const clock = new THREE.Clock(); (function f() { requestAnimationFrame(f); r.render(s, cam); })();
 </script></body></html>
