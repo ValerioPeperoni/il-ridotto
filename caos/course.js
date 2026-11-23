@@ -53,12 +53,16 @@ function build() {
       const td = Math.max(Math.abs(x - hole.tee[0]), Math.abs(z - hole.tee[1]));
       if (td < 6) { const th = teeH(hole), k = Math.min(1, (6 - td) / 2.5); h = h * (1 - k) + th * k; if (td < 3.5) s = S.TEE; }
       for (const [bx, bz, br] of hole.bunkers) { const d = Math.hypot(x - bx, z - bz) / br; if (d < 1.25) { h -= Math.max(0, 1 - d * d) * 0.7; if (d < 1) s = S.SAND; } }
-      for (const [px, pz, pr] of hole.ponds) { const d = Math.hypot(x - px, z - pz) / pr + (fbm(x * 0.15, z * 0.15, 2) - 0.5) * 0.3; if (d < 1.5) { const k = Math.min(1, (1.5 - d) / 0.55), e = k * k * (3 - 2 * k); h = h * (1 - e) + (-1.0) * e; } }
+      // laghetti: riva larga e dolce che scende quasi al pelo dell'acqua, poi una sponda corta (niente crateri)
+      for (const [px, pz, pr] of hole.ponds) { const d = pondD(x, z, px, pz, pr); if (d < 2.6) { const e = sstep(2.6, 1.05, d); h = h * (1 - e) + Math.min(h, WATER + 0.4) * e; const e2 = sstep(1.12, 0.72, d); h = h * (1 - e2) + (-1.1) * e2; } }
     }
     if (h < WATER + 0.05) s = S.WATER;
     HGT[j * NX + i] = h; SURF[j * NX + i] = s;
   }
 }
+function sstep(a, b, x) { const t = Math.max(0, Math.min(1, (x - a) / (b - a))); return t * t * (3 - 2 * t); }
+function pondD(x, z, px, pz, pr) { return Math.hypot(x - px, z - pz) / pr + (fbm(x * 0.15, z * 0.15, 2) - 0.5) * 0.3; }
+export function nearPond(x, z) { let m = 9; for (const h of HOLES) for (const [px, pz, pr] of h.ponds) m = Math.min(m, pondD(x, z, px, pz, pr)); return m; }
 const _gh = new Map();
 function greenH(h) { if (!_gh.has(h)) _gh.set(h, Math.max(1.6, rawHeightSmooth(...h.green) + 0.3)); return _gh.get(h); }
 function teeH(h) { return Math.max(1.8, rawHeightSmooth(...h.tee) + 0.4); }
@@ -109,32 +113,39 @@ export function terrainTexture(compute) {
   const cw = Math.min(2048, W * PX), ch = Math.round(cw * D / W), sx = cw / W;
   const c = document.createElement('canvas'); c.width = cw; c.height = ch; const g = c.getContext('2d');
   const img = g.createImageData(cw, ch), d = img.data;
-  const col = { [S.ROUGH]: [86, 136, 58], [S.FAIR]: [118, 178, 72], [S.GREEN]: [130, 196, 84], [S.FRINGE]: [104, 164, 64], [S.SAND]: [232, 214, 160], [S.WATER]: [70, 110, 60], [S.TEE]: [124, 186, 78], [S.OUT]: [70, 110, 60] };
+  const col = { [S.ROUGH]: [78, 132, 56], [S.FAIR]: [116, 176, 70], [S.GREEN]: [126, 194, 80], [S.FRINGE]: [100, 160, 62], [S.SAND]: [236, 218, 166], [S.WATER]: [70, 110, 60], [S.TEE]: [122, 184, 76], [S.OUT]: [70, 110, 60] };
+  // direzione di gioco più vicina (per le strisce del taglio, che seguono la buca)
+  const lane = (x, z) => { let best = 1e9, c = 0, along = 0; for (const h of HOLES) for (const [a, b] of [[h.tee, h.mid], [h.mid, h.green]]) { const [d, t] = segDist(x, z, ...a, ...b); if (d < best) { best = d; const dx = b[0] - a[0], dz = b[1] - a[1], l = Math.hypot(dx, dz); c = ((x - a[0]) * -dz + (z - a[1]) * dx) / l; along = t * l; } } return [c, along, best]; };
+  const sq = v => Math.max(-1, Math.min(1, v * 3.5)); // onda quadra con bordi morbidi
   for (let py = 0; py < ch; py++) for (let px = 0; px < cw; px++) {
     const x = X0 + px / sx, z = Z0 + py / sx, s = surfExact(x, z), h = heightAt(x, z);
     let [r, gg, b] = col[s];
     const n = fbm(x * 0.15, z * 0.15, 3) - 0.5, n2 = fbm(x * 0.6 + 9, z * 0.6, 2) - 0.5;
     let k = 1 + n * 0.22 + n2 * 0.08;
     if (s === S.FAIR || s === S.TEE) {
-      // taglio dell'erba a scacchi, come sui campi veri
-      const a = Math.floor((x * 0.7 + z * 0.7) / 3.4) % 2 === 0, bb = Math.floor((x * 0.7 - z * 0.7) / 3.4) % 2 === 0;
-      k *= a !== bb ? 1.065 : 0.95;
-    } else if (s === S.GREEN) { const a = Math.floor((x * 0.7 + z * 0.7) / 1.4) % 2 === 0; k *= a ? 1.05 : 0.96; }
-    if (s === S.ROUGH) { const dry = fbm(x * 0.03 + 50, z * 0.03, 2); r += (dry - 0.45) * 50; gg += (dry - 0.45) * 15; }
+      // taglio dell'erba a corsie lungo la buca, come sui campi veri (chiaro/scuro alternati)
+      const [c] = lane(x, z); k = 1 + n * 0.1 + n2 * 0.04; k *= 1 + 0.05 * sq(Math.sin(c * Math.PI / 3.6));
+    } else if (s === S.GREEN || s === S.FRINGE) { const [c] = lane(x, z); k = 1 + n * 0.06 + n2 * 0.03; if (s === S.GREEN) k *= 1 + 0.04 * sq(Math.sin(c * Math.PI / 1.5)); }
     if (s === S.ROUGH) {
-      // sottobosco più scuro dove ci sono i boschetti (stessa mappa di densità degli alberi)
+      // "primo taglio": fascia di erba media attorno al corridoio, poi il rough vero
+      let fd = 1e9; for (const hole of HOLES) fd = Math.min(fd, fairDist(hole, x, z)); fd += (fbm(x * 0.08, z * 0.08, 2) - 0.5) * 2.5;
+      if (fd < FAIR_W + 2.4) { const t = Math.min(1, (FAIR_W + 2.4 - fd) / 0.6); r = r * (1 - t) + 98 * t; gg = gg * (1 - t) + 156 * t; b = b * (1 - t) + 62 * t; k = 1 + n * 0.1; }
+      const dry = fbm(x * 0.03 + 50, z * 0.03, 2); r += (dry - 0.45) * 22; gg += (dry - 0.45) * 8;
+      // sottobosco: verde più scuro e muschioso dove ci sono i boschetti (stessa mappa di densità degli alberi)
       const dens = fbm(x * 0.03 + 11, z * 0.03 - 4, 3);
-      if (dens > 0.46) { const t = Math.min(1, (dens - 0.46) / 0.12); r = r * (1 - t * 0.35) + 30 * t; gg = gg * (1 - t * 0.3); b = b * (1 - t * 0.3); k *= 1 + (n2 * 0.25) * t; }
+      if (dens > 0.46) { const t = Math.min(1, (dens - 0.46) / 0.14); r *= 1 - t * 0.3; gg *= 1 - t * 0.18; b *= 1 - t * 0.12; k *= 1 + (n2 * 0.2) * t; }
     }
     if (s === S.SAND) k = 1 + n2 * 0.12;
     // pendii ripidi: roccia a strati
-    if (s === S.ROUGH) { const ny = normalAt(x, z, _nrm).y; if (ny < 0.9) { const t = Math.min(1, (0.9 - ny) / 0.18), band = 0.9 + 0.1 * Math.sin(h * 5 + n * 3); r = r * (1 - t) + 128 * band * t; gg = gg * (1 - t) + 116 * band * t; b = b * (1 - t) + 98 * band * t; } }
-    if (h < 0.8 && s !== S.SAND) { const t = Math.max(0, Math.min(1, (0.8 - h) / 1.2)); r = r * (1 - t) + 196 * t; gg = gg * (1 - t) + 180 * t; b = b * (1 - t) + 130 * t; } // spiaggia
+    const pd = nearPond(x, z);
+    if (s === S.ROUGH && pd > 1.4) { const ny = normalAt(x, z, _nrm).y; if (ny < 0.9) { const t = Math.min(1, (0.9 - ny) / 0.18), band = 0.9 + 0.1 * Math.sin(h * 5 + n * 3); r = r * (1 - t) + 128 * band * t; gg = gg * (1 - t) + 116 * band * t; b = b * (1 - t) + 98 * band * t; } }
+    if (pd < 1.4) { const t = sstep(1.25, 0.95, pd); r = r * (1 - t) + 214 * t; gg = gg * (1 - t) + 200 * t; b = b * (1 - t) + 150 * t; k = 1 + n2 * 0.1; } // riva del laghetto: erba scura, poi fango
+    else if (h < 0.8 && s !== S.SAND && Math.max(Math.abs((x - X0) / W * 2 - 1), Math.abs((z - Z0) / D * 2 - 1)) > 0.6) { const t = Math.max(0, Math.min(1, (0.8 - h) / 1.2)); r = r * (1 - t) + 196 * t; gg = gg * (1 - t) + 180 * t; b = b * (1 - t) + 130 * t; } // spiaggia
     if (h < WATER + 0.35 && h > WATER - 0.3) { const t = 1 - Math.abs(h - WATER - 0.02) / 0.33; r = r * (1 - t * 0.35); gg = gg * (1 - t * 0.3); b = b * (1 - t * 0.2); } // sabbia bagnata
     // bordo erboso più scuro attorno ai bunker
     if (s !== S.SAND) for (const hole of HOLES) for (const [bx, bz, br] of hole.bunkers) { const dd = Math.hypot(x - bx, z - bz) / br; if (dd > 0.95 && dd < 1.25) k *= 0.9 + (dd - 0.95) * 0.33; }
     // ombra delle conche, luce sui dossi (occlusione finta dal terreno)
-    { const avg = (heightAt(x + 3, z) + heightAt(x - 3, z) + heightAt(x, z + 3) + heightAt(x, z - 3)) / 4; k *= 1 - Math.max(-0.08, Math.min(0.16, (avg - h) * 0.22)); }
+    if (pd > 1.6) { const avg = (heightAt(x + 3, z) + heightAt(x - 3, z) + heightAt(x, z + 3) + heightAt(x, z - 3)) / 4; k *= 1 - Math.max(-0.08, Math.min(0.16, (avg - h) * 0.22)); }
     const o = (py * cw + px) * 4; d[o] = r * k; d[o + 1] = gg * k; d[o + 2] = b * k; d[o + 3] = 255;
   }
   g.putImageData(img, 0, 0);

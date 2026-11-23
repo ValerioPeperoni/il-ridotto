@@ -1,7 +1,7 @@
 // Alberi, cespugli, rocce, fiori ed erba (Stylized Nature MegaKit, CC0) sparsi sull'isola con istanze.
 import * as THREE from 'three';
 import { GLTFLoader } from 'three/addons/loaders/GLTFLoader.js';
-import { HOLES, X0, Z0, W, D, S, surfAt, heightAt, fairDist, rng, fbm, GREEN_R, WATER } from './course.js';
+import { HOLES, X0, Z0, W, D, S, surfAt, heightAt, fairDist, rng, fbm, GREEN_R, WATER, FAIR_W } from './course.js';
 
 export const wind = { value: 0 };
 export const trunks = []; // {x, z, r} per le collisioni
@@ -52,17 +52,35 @@ export async function loadNature(scene, { mobile = false, plants = 1, trees = 1,
     else if (fd > 10 && R() < 0.04) place[pick(['Bush_Common', 'Bush_Common_Flowers'])].push([x, z]);
     else if (fd > 9 && R() < 0.02) place[pick(['Rock_Medium_1', 'Rock_Medium_2', 'Rock_Medium_3'])].push([x, z]);
   }
-  // fiori, felci, funghi ed erba alta ai bordi dei corridoi (dove si gioca e si guarda)
-  for (let i = 0; i < 3600 * plants; i++) {
+  // filari di alberi che disegnano i lati delle buche (come sui campi veri), con buchi e variazioni
+  for (const h of HOLES) for (const [a, b] of [[h.tee, h.mid], [h.mid, h.green]]) {
+    const dx = b[0] - a[0], dz = b[1] - a[1], l = Math.hypot(dx, dz);
+    for (const sd of [-1, 1]) for (let u = 0; u < l; u += 6 + R() * 5) {
+      if (R() < 0.3) continue;
+      const off = sd * (FAIR_W + 8 + R() * 7), x = a[0] + dx * u / l + (-dz / l) * off + (R() - 0.5) * 3, z = a[1] + dz * u / l + (dx / l) * off + (R() - 0.5) * 3;
+      if (!land(x, z) || nearGreenOrTee(x, z, 6) || nearHole(x, z, FAIR_W + 6)) continue;
+      place[pick(['CommonTree_1', 'CommonTree_2', 'CommonTree_5', 'CommonTree_3'])].push([x, z]);
+      if (R() < 0.5) { const bx = x + (R() - 0.5) * 4, bz = z + (R() - 0.5) * 4; if (land(bx, bz) && !nearHole(bx, bz, FAIR_W + 4)) place[pick(['Bush_Common', 'Bush_Common_Flowers'])].push([bx, bz]); }
+    }
+  }
+  // fiori, felci, funghi ed erba alta a ciuffi (macchie raccolte, non sparse a caso) ai bordi dei corridoi
+  for (let i = 0; i < 260 * plants; i++) {
     const h = pick(HOLES), t = R(), a = t < 0.5 ? h.tee : h.mid, b = t < 0.5 ? h.mid : h.green, u = R();
-    const side = (R() < 0.5 ? -1 : 1) * (9.5 + R() * 18), dx = b[0] - a[0], dz = b[1] - a[1], l = Math.hypot(dx, dz);
-    const x = a[0] + dx * u + (-dz / l) * side, z = a[1] + dz * u + (dx / l) * side;
-    if (!land(x, z) || nearGreenOrTee(x, z, 3) || nearHole(x, z, 9.3)) continue;
-    const r = R();
-    if (r < 0.76) place[pick(['Grass_Common_Short', 'Grass_Wispy_Short'])].push([x, z]);
-    else if (r < 0.9) place[pick(['Flower_3_Group', 'Flower_4_Group'])].push([x, z]);
-    else if (r < 0.97) place.Fern_1.push([x, z]);
-    else place.Mushroom_Common.push([x, z]);
+    const side = (R() < 0.5 ? -1 : 1) * (FAIR_W + 3.5 + R() * 16), dx = b[0] - a[0], dz = b[1] - a[1], l = Math.hypot(dx, dz);
+    const cx = a[0] + dx * u + (-dz / l) * side, cz = a[1] + dz * u + (dx / l) * side;
+    const r = R(), kind = r < 0.55 ? ['Grass_Common_Short', 'Grass_Wispy_Short'] : r < 0.85 ? ['Flower_3_Group', 'Flower_4_Group'] : r < 0.95 ? ['Fern_1'] : ['Mushroom_Common'];
+    const n = kind[0] === 'Mushroom_Common' ? 2 + Math.floor(R() * 3) : 5 + Math.floor(R() * 9), rad = 0.8 + R() * 1.6;
+    for (let j = 0; j < n; j++) {
+      const an = R() * Math.PI * 2, rr = Math.sqrt(R()) * rad, x = cx + Math.cos(an) * rr, z = cz + Math.sin(an) * rr;
+      if (!land(x, z) || nearGreenOrTee(x, z, 3) || nearHole(x, z, FAIR_W + 3)) continue;
+      place[pick(kind)].push([x, z]);
+    }
+  }
+  // canne e ciuffi lungo le rive dei laghetti
+  for (const h of HOLES) for (const [px, pz, pr] of h.ponds) for (let i = 0; i < 22; i++) {
+    const an = R() * Math.PI * 2, cx = px + Math.cos(an) * pr * (1.12 + R() * 0.15), cz = pz + Math.sin(an) * pr * (1.12 + R() * 0.15);
+    if (nearHole(cx, cz, FAIR_W + 1) || nearGreenOrTee(cx, cz, 3)) continue;
+    for (let j = 0, n = 3 + Math.floor(R() * 5); j < n; j++) { const x = cx + (R() - 0.5) * 1.6, z = cz + (R() - 0.5) * 1.6; if (heightAt(x, z) > WATER + 0.12) place[R() < 0.8 ? 'Grass_Wispy_Short' : 'Fern_1'].push([x, z]); }
   }
   // istanze, divise a blocchi di 48 m: così si disegna solo quello che la telecamera vede
   const dummy = new THREE.Object3D();
