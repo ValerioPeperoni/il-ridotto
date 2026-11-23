@@ -277,6 +277,8 @@ function animateAvatars(dt) {
     a.av.root.position.set(a.x, 0, s * a.z);
     // animazioni: gambe e busto dall'animazione, braccio della racchetta guidato (vedi arm.js)
     let anim = 'Idle_Loop';
+    const reacting = G.phase === 'point' && a.react;
+    if (reacting) anim = a.react; else a.react = null;
     if (a.pend) { a.pend.wait -= dt; if (a.pend.wait <= 0) { const pd = a.pend; a.pend = null; a.swingT = 0; a.swingDir = pd.side; a.up = pd.up; snd('swish', pd.p); a.hitT = pd.hitT; a.hitPt = pd.pt; } }
     if (a.swingT >= 0) { a.swingT += dt; if (a.swingT > 0.9) a.swingT = -1; }
     if (anim !== a.anim) { a.anim = anim; a.av.play(anim, { fade: 0.2 }); }
@@ -284,8 +286,7 @@ function animateAvatars(dt) {
     // piedi a terra con passi laterali, braccio libero pronto, poi il braccio della racchetta
     const fwd = new THREE.Vector3(0, 0, i === 0 ? -1 : 1);
     a.legs.update(fwd, new THREE.Vector3(a.vx, 0, (a.vz || 0) * s), dt);
-    a.larm.apply(toWorld(a, i, new THREE.Vector3(0.2, 1.08, 0.3)), toWorld(a, i, new THREE.Vector3(0.6, -0.6, -0.4), true), 0.85);
-    strokeArm(a, i);
+    if (!reacting) { a.larm.apply(toWorld(a, i, new THREE.Vector3(0.2, 1.08, 0.3)), toWorld(a, i, new THREE.Vector3(0.6, -0.6, -0.4), true), 0.85); strokeArm(a, i); }
     if (DEBUG && G.hitInfo && G.hitInfo.who === i && !G.hitInfo.done && a.hitT != null && Math.abs(G.time - G.hitInfo.t) < 0.05) {
       const H = G.hitInfo; H.done = true; a.av.mixer.update(0); strokeArm(a, i, H.t - a.hitT); const rp = a.racket.localToWorld(new THREE.Vector3(0, 0.08, 0)); a.av.mixer.update(0); strokeArm(a, i);
       (G.log = G.log || []).push(`${G.time.toFixed(2)} CONTACT ${i} dt=${(G.time - H.t).toFixed(3)} dist=${rp.distanceTo(new THREE.Vector3(...H.p)).toFixed(2)} racket=${[rp.x, rp.y, rp.z].map(v => v.toFixed(2))} ball=${H.p.map(v => v.toFixed(2))}`);
@@ -652,7 +653,8 @@ function point(w, why) {
   if (G.let && why !== 'Fuori!') { G.let = false; }
   G.phase = 'point'; G.ideal = null; G.pendingHit = null; G.cpuSwing = null; G.fire = false;
   G.score[w]++; updateScore();
-  { const aw = avatars[w]; if (aw && aw.av.mood) aw.av.mood('happy', 2.2); }
+  { const aw = avatars[w], al = avatars[1 - w]; if (aw && aw.av.mood) aw.av.mood('happy', 2.2);
+    if (aw) aw.react = Math.random() < 0.5 ? 'Yes' : 'Dance_Loop'; if (al) al.react = Math.random() < 0.6 ? 'Idle_No_Loop' : 'Hit_Chest'; }
   const hum = G.players[w].kind !== 'cpu';
   big(`${why}`, 1400); tip(`Punto a ${G.players[w].name}`);
   snd(hum || G.view === 'tv' ? 'cheer' : 'aww');

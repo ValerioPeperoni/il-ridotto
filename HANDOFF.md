@@ -72,6 +72,28 @@ Valerio ha provato tutto: meglio di prima, ma ancora "da beta". Le sue richieste
 - **Birilli:** tolto lo sheen dal materiale (pesante).
 - **Da fare:** grafica della sala, animazioni del lancio, lancio che a volte non parte.
 
+## 1e. 23/11 notte: personaggi nuovi, ping pong, bowling
+- **Personaggi (tutti i giochi):** costruiti da zero con `sviluppo/charbuild/build.py` (Python + numpy + scikit-image + bpy).
+  - **Forme:** capsule ed ellissoidi uniti in modo morbido (SDF), marching cubes, decimazione e lisciatura in Blender.
+  - **Pesi:** calcolati sulle ossa dello scheletro Quaternius (`rig.py` legge il gltf), con la spalla che segue in parte la clavicola.
+  - **Uscita:** `assets/sport/sportsmates.json` (base64): corpo, scarpe, mani (dita vere), testa con UV per la faccia, 7 capigliature (`short`, `spiky`, `bob`, `ponytail`, `buns`, `afro`, `long`) + barba, varianti M e F.
+  - **In `avatar/sport.js`:** `makeStylized()` clona sempre lo scheletro M e lega le mesh alla sua `Skeleton`, quindi tutte le animazioni UAL e i JSON Mixamo funzionano.
+  - **Colori:** materiale `smMaterial` per zone. Pelle, maglia, pantaloncini, scarpe e suola sono pesi per vertice (`aR1`, `aR2`); gli orli di maniche, pantaloncini, girovita e colletto sono decisi pixel per pixel dall'attributo `aLim` (tipo di parte + posizione lungo l'osso), con bordino `uTrim`. C'è una luce di contorno morbida (`uRim`).
+  - **Faccia:** disegnata su tela per ogni personaggio (occhi grandi con riflessi, sopracciglia del colore dei capelli, guance, bocca), con tre tele: aperta, chiusa (sbatte le palpebre) e `happy` (`av.mood('happy', sec)`).
+  - **Compatibilità:** i vecchi nomi dei capelli sono tradotti con `OLD_HAIR`; `opts.classic` riporta ai personaggi Quaternius.
+- **Ping pong:**
+  - **Gambe:** guidate da `makeLegs` in `pong/arm.js`. I piedi restano appoggiati e fanno passi laterali quando il corpo scivola, con il ginocchio in avanti.
+  - **Braccio sinistro:** in posa pronta (`makeFreeArm`).
+  - **Animazione di base:** `Idle_Loop`.
+  - **Dopo il punto:** reazioni `Yes`/`Dance_Loop` (vincitore, faccia felice) e `Idle_No_Loop`/`Hit_Chest` (chi perde).
+  - **Prima persona:** telecamera più vicina al tavolo, fov 50.
+  - **Palazzetto:** listelli di legno, fasce colorate, festoni, stendardi.
+- **Bowling:**
+  - **Sala:** diurna, luminosa e sportiva (pareti a listelli con finestre, plafoniere, festoni, murale col cielo, moquette blu).
+  - **Riflessi:** veri sulla pista principale con `Reflector` + shader `LANE_REFL` (fresnel, trasparente). Si spengono con `?norefl` e sui telefoni.
+  - **Lancio:** procedurale in `deliveryPose()`: piedi con IK (`makeLegs`), rincorsa da z 1.25 a 0.3, scivolata sul piede sinistro con la destra indietro, busto in avanti, braccio da `G.swingFrom` a 1.9 rad, ritorno in piedi dopo 1.7 s. Il personaggio diventa semitrasparente (0.45) solo dopo il rilascio.
+  - **Registrazione:** `?rec` come negli altri giochi.
+
 ## 2. Che cos'è il progetto
 Una raccolta di giochi da festa nel browser. Il **PC o la TV** è lo schermo comune, i **telefoni** fanno da controller e si collegano inquadrando un QR. Niente account, niente installazioni.
 - Sito: https://valeriopeperoni.github.io/il-ridotto/

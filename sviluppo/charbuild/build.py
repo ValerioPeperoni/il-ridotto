@@ -49,8 +49,8 @@ def body_parts(female=False):
         th, ca, ft, bl = P['thigh_' + sd], P['calf_' + sd], P['foot_' + sd], P['ball_' + sd]
         sh = 1 if sd == 'l' else -1
         arm = 'arm_' + sd; leg = 'leg_' + sd
-        L.append(Part('shoulder', 'shirt', 'torso', (lambda ua: lambda p: sd_ellipsoid(p, ua + V(sh * 0.02, 0.0, 0.0), V(0.058, 0.058, 0.058)))(ua), 0.08))
-        L.append(Part('sleeve', 'shirt', arm, (lambda ua, la: lambda p: np.maximum(sd_roundcone(p, ua, lerp(ua, la, 0.6), 0.066, 0.06), (p - lerp(ua, la, 0.48)) @ ((la - ua) / np.linalg.norm(la - ua))))(ua, la), 0.0, True))
+        # (niente 'spalline': si staccavano dal braccio alzato)
+        L.append(Part('sleeve', 'shirt', arm, (lambda ua, la: lambda p: np.maximum(sd_roundcone(p, ua + (la - ua) * 0.08, lerp(ua, la, 0.6), 0.06, 0.057), (p - lerp(ua, la, 0.48)) @ ((la - ua) / np.linalg.norm(la - ua))))(ua, la), 0.0, True))
         L.append(Part('uarm', 'skin', arm, (lambda ua, la: lambda p: sd_roundcone(p, ua, la, 0.056, 0.048))(ua, la), 0.02))
         L.append(Part('farm', 'skin', arm, (lambda la, ha: lambda p: sd_roundcone(p, la, ha + V(sh * 0.01, 0, 0), 0.049, 0.038))(la, ha), 0.02))
         L.append(Part('shortleg', 'shorts', leg, (lambda th, ca: lambda p: np.maximum(sd_roundcone(p, th + V(0, 0.03, 0), lerp(th, ca, 0.7), 0.1 if female else 0.096, 0.08), (p - lerp(th, ca, 0.6)) @ ((ca - th) / np.linalg.norm(ca - th))))(th, ca), 0.0, True))
@@ -248,6 +248,20 @@ def pack(v, f, parts, extra=None):
             if y > waist - 0.004: regions[k] = 'shorts'
             else: regions[k] = 'shorts' if t < 0.56 else ('trim' if t < 0.605 else 'skin')
     idx, w = weights(v, groups)
+    # spalla morbida: vicino all'attaccatura il braccio segue in parte la clavicola (niente "palle" quando si alza)
+    for k in range(len(v)):
+        g = groups[k]
+        if g.startswith('arm_'):
+            sd = g[-1]; t = seg_t(v[k], P['upperarm_' + sd], P['lowerarm_' + sd])
+            if t < 0.32:
+                wu = float(np.clip((t + 0.12) / 0.44, 0.25, 1.0))
+                ui = names.index('upperarm_' + sd); ci = names.index('clavicle_' + sd)
+                cur = {int(idx[k, j]): float(w[k, j]) for j in range(4) if w[k, j] > 0}
+                tot = sum(cur.values()); cur = {b: x / tot * wu for b, x in cur.items()}; cur[ci] = cur.get(ci, 0) + (1 - wu)
+                items = sorted(cur.items(), key=lambda x: -x[1])[:4]
+                idx[k] = 0; w[k] = 0
+                for j, (b, x) in enumerate(items): idx[k, j] = b; w[k, j] = x
+                w[k] /= w[k].sum()
     R = {'skin': 0, 'shirt': 1, 'shorts': 2, 'shoes': 3, 'sole': 4, 'face': 0, 'hair': 0, 'trim': 5}
     import base64
     b64 = lambda a: base64.b64encode(a.tobytes()).decode()
