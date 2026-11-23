@@ -78,9 +78,10 @@ export function makeLegs(av) {
   }
   return {
     // fwd: direzione in cui guarda il corpo (mondo), vel: velocità del corpo, dt
-    update(fwd, vel, dt) {
+    // pose (facoltativa): { k: 0..1, l: Vector3, r: Vector3 } posizioni dei piedi imposte (es. la scivolata del bowling)
+    update(fwd, vel, dt, pose) {
       const s = av.root.scale.x, left = new THREE.Vector3(fwd.z, 0, -fwd.x); // sinistra del personaggio
-      const base = av.root.position;
+      const base = av.root.position, floorY = 0;
       const neutral = sd => new THREE.Vector3(base.x, 0, base.z).addScaledVector(left, (sd === 'l' ? 0.17 : -0.17) * s).addScaledVector(fwd, (sd === 'l' ? 0.07 : -0.05) * s);
       const lead = vel.clone().multiplyScalar(0.13);
       for (const sd of ['l', 'r']) {
@@ -93,7 +94,8 @@ export function makeLegs(av) {
         if (S.t < 1) { S.t = Math.min(1, S.t + dt / 0.13); const e = S.t * S.t * (3 - 2 * S.t); S.p.copy(S.from).lerp(S.to, e); S.lift = Math.sin(S.t * Math.PI) * 0.07 * s; } else S.lift = 0;
         // caviglia: sopra il punto del piede; ginocchio in avanti e un po' in fuori
         const footQ = wq(S.F);
-        const ank = new THREE.Vector3(S.p.x, (0.086 * s) + S.lift, S.p.z); // il corpo è abbassato di 7 cm: le ginocchia si piegano un po'
+        let ank = new THREE.Vector3(S.p.x, (0.086 * s) + S.lift, S.p.z);
+        if (pose && pose.k > 0 && pose[sd]) { ank.lerp(pose[sd], pose.k); S.p.set(ank.x, 0, ank.z); }
         const hip = S.T.getWorldPosition(new THREE.Vector3());
         let d = ank.distanceTo(hip); const l1 = S.l1, l2 = S.l2;
         const dir = ank.clone().sub(hip).normalize(); d = Math.min(Math.max(d, Math.abs(l1 - l2) + 0.01), l1 + l2 - 0.002);
