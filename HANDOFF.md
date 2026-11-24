@@ -116,6 +116,32 @@ Valerio ha provato tutto: meglio di prima, ma ancora "da beta". Le sue richieste
     - canne lungo i laghetti.
   - **Etichette coi nomi:** si impilano invece di sovrapporsi (`updateTags`).
 
+## 1g. 24/11 notte: feedback di Valerio e cosa è cambiato
+- **Feedback di Valerio:**
+  - personaggi "bruttissimi" (vanno bene anche Mii o Fall Guys, purché belli);
+  - bowling il gioco migliore (si gioca bene);
+  - ping pong troppo veloce e mira dal telefono imprecisa; chiede battuta sempre incrociata. Nel singolo NON è una regola, vale solo nel doppio: non l'ho imposta, gliel'ho spiegato;
+  - golf: lag, piedi nel terreno, caduta e swing brutti, razzo "cosa rossa", terreno povero.
+- **Personaggi:** `sviluppo/charbuild/build2.py`.
+  - **Corpo:** dallo scheletro di punti con raggi, con modificatore Skin di Blender + Subsurf livello 2: superficie liscia, niente bozzi.
+  - **Testa:** quella di `build.py` scalata di 1.36 attorno a `HC`.
+  - **Mani:** a pallina con il pollice accennato (gruppo `mitt_*`, solo l'osso della mano).
+  - **Capelli:** frangia con riga di lato e nuca coperta.
+  - **Disegni della maglia** (`uPat` = `look.pattern`, oppure ricavato dal colore): fascia, righe, spalle colorate; riga laterale sui pantaloncini.
+  - **Faccia `ko`:** occhi a spirale.
+  - **Per tornare indietro:** `python3 build.py` (vecchi personaggi).
+- **Golf:**
+  - **Prestazioni:** alberi e piante semplificati con `gltfpack` (`-si 0.2..0.5 -noq -kn -km`, poi negli URI delle immagini rimessi i nomi originali). Gli originali sono in `/tmp/nature_orig` (non versionati: rigenerabili dal pacchetto MegaKit). Da 917k a circa 470k triangoli per fotogramma.
+  - **Piedi:** `groundUnder` prende il punto più alto tra centro e 4 punti attorno.
+  - **Mazzata:** `startTumble`, `landKO`, stelline (`p.stars`), `LayToIdle` per rialzarsi, faccia `ko`.
+  - **Swing:** `leftGrip` (IK della mano sinistra sul bastone) e busto raddrizzato del 30% verso la posa di riposo (`p.spRest`).
+  - **Razzo:** sul telefono si vede il modello vero (`makeRocket`, scala 1.6) invece della capsula rossa.
+  - **Erba 3D:** ciuffi di fili lungo i bordi del corridoio e attorno ai green (`GrassBlades` in `nature.js`).
+- **Ping pong:**
+  - `TEMPO` = 0.74 (anche `?tempo=`): tutto il tavolo va al 74% della velocità, con le stesse traiettorie;
+  - palle più lente (drive 3.6 + 4.6p m/s) e meno rumore sulla mira;
+  - tempo tra un colpo e l'altro da circa 0,5 s a circa 0,85 s reali.
+
 ## 2. Che cos'è il progetto
 Una raccolta di giochi da festa nel browser. Il **PC o la TV** è lo schermo comune, i **telefoni** fanno da controller e si collegano inquadrando un QR. Niente account, niente installazioni.
 - Sito: https://valeriopeperoni.github.io/il-ridotto/

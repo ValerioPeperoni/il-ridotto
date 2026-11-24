@@ -101,12 +101,12 @@ function smGeo(key, d) {
 }
 // materiale "da cartone curato": colori per zona (pelle, maglia, pantaloncini, scarpe, suola), luce di contorno morbida
 function smMaterial(look, opts = {}) {
-  const U = { uSkin: { value: new THREE.Color(SKINS[look.skin] || SKINS[1]) }, uShirt: { value: new THREE.Color(look.shirt) }, uShorts: { value: new THREE.Color(look.shorts) }, uShoes: { value: new THREE.Color(look.shoes) }, uSole: { value: new THREE.Color(0xf7f6f2) }, uTrim: { value: new THREE.Color(look.trim || '#ffffff') }, uRim: { value: opts.rim ?? 0.35 } };
+  const U = { uSkin: { value: new THREE.Color(SKINS[look.skin] || SKINS[1]) }, uShirt: { value: new THREE.Color(look.shirt) }, uShorts: { value: new THREE.Color(look.shorts) }, uShoes: { value: new THREE.Color(look.shoes) }, uSole: { value: new THREE.Color(0xf7f6f2) }, uTrim: { value: new THREE.Color(look.trim || '#ffffff') }, uRim: { value: opts.rim ?? 0.35 }, uPat: { value: look.pattern ?? (parseInt(String(look.shirt).replace('#', ''), 16) % 4) } };
   const m = new THREE.MeshStandardMaterial({ color: 0xffffff, roughness: 0.62, map: opts.map || null });
   m.onBeforeCompile = sh => {
     Object.assign(sh.uniforms, U);
     sh.vertexShader = sh.vertexShader.replace('#include <common>', '#include <common>\nattribute vec3 aR1; attribute vec2 aR2; attribute vec2 aLim; varying vec3 vR1; varying vec2 vR2; varying vec2 vLim; varying vec3 vRest;').replace('#include <begin_vertex>', '#include <begin_vertex>\nvR1 = aR1; vR2 = aR2; vLim = aLim; vRest = position;');
-    sh.fragmentShader = sh.fragmentShader.replace('#include <common>', '#include <common>\nvarying vec3 vR1; varying vec2 vR2; varying vec2 vLim; varying vec3 vRest; uniform vec3 uSkin, uShirt, uShorts, uShoes, uSole, uTrim; uniform float uRim;\nfloat aas(float e, float x) { float f = max(fwidth(x) * 0.7, 1e-5); return smoothstep(e - f, e + f, x); }')
+    sh.fragmentShader = sh.fragmentShader.replace('#include <common>', '#include <common>\nvarying vec3 vR1; varying vec2 vR2; varying vec2 vLim; varying vec3 vRest; uniform vec3 uSkin, uShirt, uShorts, uShoes, uSole, uTrim; uniform float uRim, uPat;\nfloat aas(float e, float x) { float f = max(fwidth(x) * 0.7, 1e-5); return smoothstep(e - f, e + f, x); }')
       .replace('#include <map_fragment>', `#include <map_fragment>
         vec3 w1 = step(0.5, vR1); vec2 w2 = step(0.5, vR2);
         // orli netti: maniche, pantaloncini, girovita e colletto decisi pixel per pixel lungo le ossa
@@ -119,7 +119,17 @@ function smMaterial(look, opts = {}) {
           if (q.y > 1.2 && ax > 0.235) { w1.x = 1.0 - aas(0.322, ax); w2.y = aas(0.322, ax) * (1.0 - aas(0.334, ax)); }
           else if (q.y > 1.38) { float r = length(vec2(q.x, q.z + 0.03)) + 0.6 * (1.48 - q.y); w1.x = aas(0.104, r); w2.y = aas(0.092, r) * (1.0 - aas(0.104, r)); }
           else { float y = q.y; w1.x = aas(1.0361, y); w2.y = aas(0.712, y) * (1.0 - aas(0.731, y));
-                 w1.y = aas(0.731, y) * (1.0 - aas(1.0361, y)); }
+                 w1.y = aas(0.731, y) * (1.0 - aas(1.0361, y));
+                 // riga laterale sui pantaloncini (fuori coscia)
+                 if (y < 1.0 && y > 0.735) { float sx = ax - 0.114; w2.y = max(w2.y, aas(0.088, sx) * w1.y); w1.y *= 1.0 - aas(0.088, sx); } }
+          // disegni della maglia, come le divise vere: 1 fascia sul petto, 2 righe, 3 spalle colorate
+          if (w1.x > 0.5 && q.y < 1.6) {
+            float pat = 0.0;
+            if (uPat > 0.5 && uPat < 1.5) pat = aas(1.21, q.y) * (1.0 - aas(1.29, q.y));
+            else if (uPat > 1.5 && uPat < 2.5) pat = step(0.55, fract(q.y * 9.0)) * aas(1.05, q.y) * (1.0 - aas(1.38, q.y)) * (1.0 - step(0.235, ax));
+            else if (uPat > 2.5) pat = aas(1.4, q.y + max(0.0, ax - 0.12) * 0.7);
+            w2.y = max(w2.y, pat * w1.x); w1.x *= 1.0 - pat;
+          }
         }
         else if (kind > 3.5 && kind < 4.5) { w1 = vec3(step(0.094, t), 0.0, 0.0); w2 = vec2(0.0, step(0.082, t) * step(t, 0.094)); }
         else if (kind < 1.5) { w1 = vec3(step(t, 0.44), 0.0, 0.0); w2 = vec2(0.0, step(0.44, t) * step(t, 0.485)); }
