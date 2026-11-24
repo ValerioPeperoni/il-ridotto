@@ -342,7 +342,7 @@ function onPhone(id, m) {
   if (m.t === 'sync') { const rtt = (performance.now() - m.h) / 1000; if (rtt < 1) p.lat = p.lat * 0.7 + (rtt / 2) * 0.3; return; }
   if (m.t === 'pq') { const i = G.players.indexOf(p); G.pq = G.pq || []; G.pq[i] = m.q; return; }
   if (m.t === 'toss') { const i = G.players.indexOf(p); if (G.phase === 'serve' && G.server === i && !G.toss) toss(); return; }
-  if (m.t === 'sw0') { const i = G.players.indexOf(p); swing(i, { time: G.time - (p.lat || 0.05) - (m.ago || 0) / 1000, dir: +m.dir || 0 }); return; }
+  if (m.t === 'sw0') { const i = G.players.indexOf(p); swing(i, { time: G.time - ((p.lat || 0.05) + (m.ago || 0) / 1000) * TEMPO, dir: +m.dir || 0 }); return; }
   if (m.t === 'sw1') { const i = G.players.indexOf(p); swing(i, { detail: true, p: clamp(+m.p || 0.5, 0.05, 1.4), vert: clamp(+m.vert || 0, -1, 1), twist: clamp(+m.twist || 0, -1, 1), dir: +m.dir || 0 }); return; }
   if (m.t === 'sw') { const i = G.players.indexOf(p); swing(i, { detail: true, p: clamp(+m.p || 0.5, 0.05, 1.4), vert: clamp(+m.vert || 0, -1, 1), twist: clamp(+m.twist || 0, -1, 1), dir: +m.dir || 0 }); }
 
@@ -522,7 +522,7 @@ function doHit(h) {
   else if (vert > 0.75 && p < 0.35) type = 'lob';
   else if (vert < -0.3 && p < 0.75) type = 'chop';
   else if (p < 0.15) type = 'drop';
-  const noise = 0.03 + (1 - q) * 0.3 + Math.max(0, p - 1.05) * 0.12 + (b.y < 0.85 && type === 'smash' ? 0.2 : 0);
+  const noise = 0.02 + (1 - q) * 0.16 + Math.max(0, p - 1.05) * 0.1 + (b.y < 0.85 && type === 'smash' ? 0.2 : 0);
   const u = clamp(h.d / (h.d < 0 ? 0.49 : 0.28), -1, 1), side = h.side || 1;
   let tx = sw.aim != null ? sw.aim : -u * 0.62 * left * side + b.x * 0.12 + (sw.yaw && Math.abs(sw.yaw) < 1 ? sw.yaw * 0.15 : 0);
   tx = clamp(tx + gauss() * noise, -0.78, 0.78);
@@ -530,11 +530,11 @@ function doHit(h) {
   if (type === 'serve') {
     // battuta: rimbalzo sul proprio campo e poi di là
     return doServe(i, p, tx, q, sw);
-  } else if (type === 'smash') { depth = 0.95; flight = -1 * (14 + 5 * Math.min(p, 1.3)); spin.wx = -s * 70; label = 'Schiacciata!'; }
+  } else if (type === 'smash') { depth = 0.95; flight = -1 * (9.5 + 3.5 * Math.min(p, 1.3)); spin.wx = -s * 70; label = 'Schiacciata!'; }
   else if (type === 'lob') { depth = 1.05; flight = 1.1 + (0.5 - p) * 0.4; spin.wx = -s * 30; label = 'Pallonetto'; }
-  else if (type === 'chop') { depth = 0.8; flight = -1 * (4.5 + 3 * p); spin.wx = s * 110; label = 'Taglio'; }
+  else if (type === 'chop') { depth = 0.8; flight = -1 * (3.4 + 1.8 * p); spin.wx = s * 110; label = 'Taglio'; }
   else if (type === 'drop') { depth = 0.35; flight = 0.8; spin.wx = s * 50; label = 'Smorzata'; }
-  else { depth = 0.5 + 0.72 * Math.min(1, p) + Math.max(0, p - 1.05) * 1.6; flight = -1 * (5.5 + 9 * Math.min(p, 1.3)); spin.wx = -s * (40 + 110 * Math.max(0, vert)); label = vert > 0.5 ? 'Colpo carico' : 'Dritto'; }
+  else { depth = 0.5 + 0.72 * Math.min(1, p) + Math.max(0, p - 1.05) * 1.6; flight = -1 * (3.6 + 4.6 * Math.min(p, 1.3)); spin.wx = -s * (30 + 80 * Math.max(0, vert)); label = vert > 0.5 ? 'Colpo carico' : 'Dritto'; }
   depth = Math.min(1.2, depth + gauss() * noise);
   if (sw.miss === 'long') depth = 1.45 + Math.random() * 0.3;
   if (sw.miss === 'wide') tx = (Math.random() < 0.5 ? -1 : 1) * (0.86 + Math.random() * 0.2);
@@ -581,7 +581,7 @@ function doServe(i, p, tx, q, sw = {}) {
     const v = solve({ x: b.x, y: b.y, z: b.z }, x1, s * z1, fl, spin);
     const pr = predict(mkBall(b.x, b.y, b.z, v.vx, v.vy, v.vz, spin.wx, spin.wy, spin.wz), 2.5), tb = pr.ev.filter(e => e.t === 'table');
     if (!(tb.length >= 2 && tb[0].side === s && tb[1].side === -s && !pr.ev.some(e => e.t === 'net' || e.t === 'cord'))) continue;
-    const sp = Math.hypot(v.vx, v.vy, v.vz), c = Math.abs(tb[1].x - want2.x) + Math.abs(tb[1].z - want2.z) + Math.abs(sp - (6 + 9 * fast)) * 0.12;
+    const sp = Math.hypot(v.vx, v.vy, v.vz), c = Math.abs(tb[1].x - want2.x) + Math.abs(tb[1].z - want2.z) + Math.abs(sp - (4.8 + 5 * fast)) * 0.12;
     if (!best || c < best.c) best = { c, v };
   }
   const v = best ? best.v : solve({ x: b.x, y: b.y, z: b.z }, 0, s * 0.7, 0.32, spin);
@@ -712,9 +712,11 @@ const REC = Q.has('rec'), timers = [];
 // in registrazione i ritardi seguono il tempo del gioco, non l'orologio
 function later(fn, ms) { if (!REC) return setTimeout(fn, ms); timers.push({ at: G.time + ms / 1000, fn }); }
 let last = REC ? 0 : performance.now(), acc = 0, simNow = 0;
+// ritmo del gioco: tutto il tavolo va un po' al rallentatore (traiettorie identiche, più tempo per rispondere col telefono)
+const TEMPO = +(Q.get('tempo') || 0.74);
 function frame(now) {
   if (!REC) requestAnimationFrame(frame);
-  let dt = Math.min(0.05, (now - last) / 1000); last = now; if (FAST) dt *= 2;
+  let dt = Math.min(0.05, (now - last) / 1000) * TEMPO; last = now; if (FAST) dt *= 2;
   G.time += dt;
   if (REC) for (let k = timers.length - 1; k >= 0; k--) if (G.time >= timers[k].at) { const f = timers[k].fn; timers.splice(k, 1); f(); }
   if (G.ball && (G.phase === 'serve' || G.phase === 'rally' || G.phase === 'point')) {
