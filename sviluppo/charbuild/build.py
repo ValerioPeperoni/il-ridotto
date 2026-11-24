@@ -114,10 +114,10 @@ def hair_parts(style):
         return np.minimum(-(p[..., 1] - yy), (p[..., 2] - (c[2] + zf)))
     if style == 'short':
         f = lambda p: np.maximum(cap(p), facecut(p, 0.035, -0.02))
-        L.append(Part('hair', 'hair', 'head', lambda p: np.maximum(f(p), -(p[..., 1] - (c[1] - 0.07))), 0.0, True))
+        L.append(Part('hair', 'hair', 'head', lambda p: np.maximum(f(p), -(p[..., 1] - (c[1] - 0.07 - 0.09 * np.clip((c[2] - p[..., 2]) / 0.12, 0, 1)))), 0.0, True))
     elif style == 'spiky':
         def f(p):
-            d = np.maximum(cap(p), facecut(p, 0.04, -0.02)); d = np.maximum(d, -(p[..., 1] - (c[1] - 0.06)))
+            d = np.maximum(cap(p), facecut(p, 0.04, -0.02)); d = np.maximum(d, -(p[..., 1] - (c[1] - 0.06 - 0.09 * np.clip((c[2] - p[..., 2]) / 0.12, 0, 1))))
             for k in range(7):
                 a = -1.2 + k * 0.4; tip = c + V(math.sin(a) * 0.1, 0.22, math.cos(a) * 0.065 - 0.02)
                 d = smin(d, sd_roundcone(p, c + V(math.sin(a) * 0.065, 0.09, math.cos(a) * 0.045 - 0.02), tip, 0.055, 0.012), 0.025)
@@ -130,13 +130,13 @@ def hair_parts(style):
         L.append(Part('hair', 'hair', 'head', f, 0.0, True))
     elif style == 'ponytail':
         def f(p):
-            d = np.maximum(cap(p), facecut(p, 0.04, -0.03)); d = np.maximum(d, -(p[..., 1] - (c[1] - 0.06)))
+            d = np.maximum(cap(p), facecut(p, 0.04, -0.03)); d = np.maximum(d, -(p[..., 1] - (c[1] - 0.06 - 0.09 * np.clip((c[2] - p[..., 2]) / 0.12, 0, 1))))
             d = smin(d, sd_roundcone(p, c + V(0, 0.06, -0.135), c + V(0, -0.15, -0.2), 0.048, 0.032), 0.03)
             return smin(d, sd_ellipsoid(p, c + V(0, 0.045, -0.155), V(0.038, 0.032, 0.032)), 0.02)
         L.append(Part('hair', 'hair', 'head', f, 0.0, True))
     elif style == 'buns':
         def f(p):
-            d = np.maximum(cap(p), facecut(p, 0.04, -0.03)); d = np.maximum(d, -(p[..., 1] - (c[1] - 0.06)))
+            d = np.maximum(cap(p), facecut(p, 0.04, -0.03)); d = np.maximum(d, -(p[..., 1] - (c[1] - 0.06 - 0.09 * np.clip((c[2] - p[..., 2]) / 0.12, 0, 1))))
             for s in (-1, 1): d = smin(d, sd_ellipsoid(p, c + V(0.095 * s, 0.145, -0.02), V(0.06, 0.06, 0.06)), 0.02)
             return d
         L.append(Part('hair', 'hair', 'head', f, 0.0, True))

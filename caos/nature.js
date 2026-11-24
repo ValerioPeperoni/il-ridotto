@@ -111,6 +111,40 @@ export async function loadNature(scene, { mobile = false, plants = 1, trees = 1,
       }
     }
   }
+  // erba vera in 3D lungo i bordi dei corridoi e attorno ai green: ciuffi di fili che si piegano col vento
+  if (plants > 0.2) {
+    const blades = 6, pos = [], col = [], nrm = [], idx = [];
+    const GR = rng(77);
+    for (let b = 0; b < blades; b++) {
+      const a = GR() * Math.PI * 2, r = GR() * 0.12, h = 0.16 + GR() * 0.16, w = 0.018 + GR() * 0.01, lean = 0.06 + GR() * 0.08, la = a + (GR() - 0.5);
+      const bx = Math.cos(a) * r, bz = Math.sin(a) * r, dx = Math.cos(la + Math.PI / 2) * w, dz = Math.sin(la + Math.PI / 2) * w, lx = Math.cos(la) * lean, lz = Math.sin(la) * lean;
+      const i0 = pos.length / 3;
+      pos.push(bx - dx, 0, bz - dz, bx + dx, 0, bz + dz, bx - dx * 0.6 + lx * 0.4, h * 0.55, bz - dz * 0.6 + lz * 0.4, bx + dx * 0.6 + lx * 0.4, h * 0.55, bz + dz * 0.6 + lz * 0.4, bx + lx, h, bz + lz);
+      const c0 = [0.2, 0.36, 0.13], c1 = [0.33, 0.52, 0.2], c2 = [0.52, 0.7, 0.3];
+      col.push(...c0, ...c0, ...c1, ...c1, ...c2);
+      for (let k = 0; k < 5; k++) nrm.push(0, 1, 0);
+      idx.push(i0, i0 + 1, i0 + 2, i0 + 1, i0 + 3, i0 + 2, i0 + 2, i0 + 3, i0 + 4);
+    }
+    const geo = new THREE.BufferGeometry(); geo.setAttribute('position', new THREE.Float32BufferAttribute(pos, 3)); geo.setAttribute('normal', new THREE.Float32BufferAttribute(nrm, 3)); geo.setAttribute('color', new THREE.Float32BufferAttribute(col, 3)); geo.setIndex(idx);
+    const gm = new THREE.MeshStandardMaterial({ vertexColors: true, roughness: 0.9, side: THREE.DoubleSide, name: 'GrassBlades' }); windify(gm, 0.35);
+    const spots = [];
+    const tryAdd = (x, z) => { if (surfAt(x, z) !== S.ROUGH || heightAt(x, z) < WATER + 0.3 || nearHole(x, z, FAIR_W + 0.6)) return; spots.push([x, z]); };
+    for (const h of HOLES) {
+      for (const [a, b] of [[h.tee, h.mid], [h.mid, h.green]]) {
+        const dx = b[0] - a[0], dz = b[1] - a[1], l = Math.hypot(dx, dz);
+        for (let u = 0; u < l; u += 0.75) for (const sd of [-1, 1]) for (let j = 0; j < 4; j++) {
+          if (R() > 0.75 * plants + 0.25) continue;
+          const off = sd * (FAIR_W + 0.8 + R() * 6.5), x = a[0] + dx * u / l + (-dz / l) * off + (R() - 0.5) * 0.7, z = a[1] + dz * u / l + (dx / l) * off + (R() - 0.5) * 0.7;
+          tryAdd(x, z);
+        }
+      }
+      for (let i = 0; i < 520 * plants; i++) { const an = R() * Math.PI * 2, rr = GREEN_R + 2 + R() * 6; tryAdd(h.green[0] + Math.cos(an) * rr, h.green[1] + Math.sin(an) * rr); }
+    }
+    const chunks = new Map();
+    for (const [x, z] of spots) { const s = 0.8 + R() * 0.7; dummy.position.set(x, heightAt(x, z) - 0.02, z); dummy.rotation.set(0, R() * 6.28, 0); dummy.scale.set(s, s * (0.8 + R() * 0.5), s); dummy.updateMatrix(); const key = Math.floor(x / 40) + ',' + Math.floor(z / 40); if (!chunks.has(key)) chunks.set(key, []); chunks.get(key).push(dummy.matrix.clone()); }
+    for (const mats of chunks.values()) { const im = new THREE.InstancedMesh(geo, gm, mats.length); mats.forEach((M, i) => im.setMatrixAt(i, M)); im.computeBoundingSphere(); im.receiveShadow = true; scene.add(im); }
+    place.GrassBlades = spots;
+  }
   const stats = {}; let verts = 0; for (const k of names) { stats[k] = place[k].length; src[k].traverse(o => { if (o.isMesh) verts += o.geometry.attributes.position.count * place[k].length; }); }
   stats.verts = verts; window.__nature = stats;
   return stats;

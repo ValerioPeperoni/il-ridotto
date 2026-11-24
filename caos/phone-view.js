@@ -5,7 +5,12 @@ import { heightAt } from './course.js';
 import { loadNature, wind } from './nature.js';
 import { propZones, loadProps } from './props.js';
 import * as FX from './fx.js';
-import { buildWorld, boxGeo, boxMat, makeClub } from './world.js';
+import { buildWorld, boxGeo, boxMat, makeClub, makeRocket } from './world.js';
+const _pd = new THREE.Vector3();
+function makeBomb() {
+  const m = new THREE.Mesh(new THREE.SphereGeometry(0.35, 16, 12), new THREE.MeshStandardMaterial({ color: 0x1d2030, roughness: 0.4, metalness: 0.3 }));
+  const fuse = new THREE.Mesh(new THREE.CylinderGeometry(0.04, 0.04, 0.2), new THREE.MeshStandardMaterial({ color: 0xc8a060 })); fuse.position.y = 0.4; m.add(fuse); return m;
+}
 import { loadSportLibrary as loadAvatarLibrary, makeSportsmate } from '../avatar/sport.js';
 
 const AV_H = 2.0;
@@ -84,7 +89,7 @@ export async function startPhoneView(canvas, ui, onProgress) {
       const want = [...(m.M || []).map(x => ['r', x]), ...(m.Bo || []).map(x => ['b', x])];
       while (projs.length > want.length) scene.remove(projs.pop().m);
       want.forEach(([k, x], i) => {
-        if (!projs[i] || projs[i].k !== k) { if (projs[i]) scene.remove(projs[i].m); const mm = k === 'r' ? new THREE.Mesh(new THREE.CapsuleGeometry(0.16, 0.7, 4, 10), new THREE.MeshStandardMaterial({ color: 0xe8243c })) : new THREE.Mesh(new THREE.SphereGeometry(0.35, 14, 10), new THREE.MeshStandardMaterial({ color: 0x1d2030 })); scene.add(mm); projs[i] = { k, m: mm, tgt: new THREE.Vector3(...x) }; mm.position.set(...x); }
+        if (!projs[i] || projs[i].k !== k) { if (projs[i]) scene.remove(projs[i].m); const mm = k === 'r' ? makeRocket(0xe8243c) : makeBomb(); scene.add(mm); projs[i] = { k, m: mm, tgt: new THREE.Vector3(...x) }; mm.position.set(...x); }
         projs[i].tgt.set(...x);
       });
       while (mines.length > (m.Mi || []).length) scene.remove(mines.pop());
@@ -137,7 +142,10 @@ export async function startPhoneView(canvas, ui, onProgress) {
       p.pBlob.position.set(p.pos.x, heightAt(p.pos.x, p.pos.z) + 0.03, p.pos.z);
     }
     for (const b of boxes) { b.m.rotation.y += dt * 1.2; b.m.position.y = heightAt(b.x, b.z) + 1.1 + Math.sin(t * 2 + b.x) * 0.15; }
-    for (const pr of projs) pr.m.position.lerp(pr.tgt, k);
+    for (const pr of projs) {
+      const d = _pd.copy(pr.tgt).sub(pr.m.position); pr.m.position.lerp(pr.tgt, k);
+      if (pr.k === 'r') { if (d.lengthSq() > 1e-4) pr.m.lookAt(_pd.add(pr.m.position)); pr.m.rotateZ(performance.now() * 0.006); const fl = pr.m.userData.flame; if (fl) { const q = 0.8 + Math.random() * 0.5; fl.scale.set(1, 1, q); } }
+    }
     const p = players[me];
     if (p) {
       // segnalino sulla mia palla

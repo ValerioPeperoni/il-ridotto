@@ -8,6 +8,7 @@ import { HOLES, S, W, D, X0, Z0, WATER, heightAt, normalAt, surfAt, terrainMesh,
 import { loadNature, trunks, wind } from './nature.js';
 import { propZones, loadProps } from './props.js';
 import * as FX from './fx.js';
+import { makeFreeArm } from '../pong/arm.js';
 import { buildWorld, ITEMS, boxGeo, boxMat, makeClub, makeRocket } from './world.js';
 import { hostRoom, randomCode } from '../net.js';
 import { savedProfile } from '../avatar/avatar.js';
@@ -68,7 +69,7 @@ function newPlayer(o) {
 }
 function ensureAvatar(p) {
   if (p.av) return;
-  p.av = makeSportsmate(p.sport || p.look, { height: AV_H }); p.baseScale = p.av.root.scale.x;
+  p.av = makeSportsmate(p.sport || p.look, { height: AV_H }); p.baseScale = p.av.root.scale.x; p.spRest = ['spine_01', 'spine_02', 'spine_03', 'neck_01'].map(n => [p.av.bones[n], p.av.bones[n].quaternion.clone()]); p.larm = null;
   { const play = p.av.play; p.clipN = 0; p.av.play = (n, o) => { p.clip = n; p.clipN++; return play(n, o); }; }
   p.av.root.traverse(o => { if (o.isMesh) o.castShadow = true; });
   const hand = p.av.bones.hand_r;
@@ -359,9 +360,20 @@ function updatePlayer(p, dt) {
   // volo dopo un'esplosione / mazzata
   if (p.fly) {
     p.fly.v.y -= 20 * dt; p.pos.addScaledVector(p.fly.v, dt);
-    const gh = heightAt(p.pos.x, p.pos.z); if (p.pos.y <= gh && p.fly.v.y < 0) { p.pos.y = gh; p.fly = null; FX.puff(p.pos.clone(), undefined, 6, 0.8); }
+    if (p.tumble) p.tumble.ang += p.tumble.rate * dt;
+    const gh = groundUnder(p); if (p.pos.y <= gh && p.fly.v.y < 0) { p.pos.y = gh; p.fly = null; landKO(p); }
   }
-  if (p.ko > 0) { p.ko -= dt; if (p.ko <= 0) { p.av.play('Idle', { fade: 0.3 }); p.anim = 'Idle'; p.state = p.done ? 'done' : 'walk'; p.immune = G.time + 2.5; } }
+  if (p.tumble && !p.fly) { // dopo l'atterraggio la capriola si chiude dolcemente
+    const tgt = Math.round(p.tumble.ang / (2 * Math.PI)) * 2 * Math.PI; p.tumble.ang += (tgt - p.tumble.ang) * Math.min(1, dt * 14);
+    if (Math.abs(tgt - p.tumble.ang) < 0.01) p.tumble = null;
+  }
+  if (p.squash > 0) p.squash = Math.max(0, p.squash - dt * 3.2);
+  if (p.ko > 0) {
+    p.ko -= dt;
+    if (!p.fly && p.koGetUp && p.ko <= p.koGetUp.t) { const a = p.av.play('LayToIdle', { once: true, fade: 0.15 }); if (a) a.timeScale = a.getClip().duration / Math.max(0.5, p.koGetUp.t) * 0.9; p.koGetUp = null; }
+    if (p.ko <= 0) { p.av.play('Idle', { fade: 0.3 }); p.anim = 'Idle'; p.state = p.done ? 'done' : 'walk'; p.immune = G.time + 2.5; p.av.mood('open', 0); }
+  }
+  if (p.stars) { const on = p.ko > 0 && !p.fly; p.stars.visible = on; if (on) { p.stars.rotation.y += dt * 5; const hb = p.av.bones && p.av.bones.Head; if (hb) { hb.getWorldPosition(p.stars.position); p.stars.position.y += 0.42 * p.baseScale / 1.11; } else p.stars.position.copy(p.pos).y += 2.1; } }
   // appena rialzato si è intoccabili per un attimo (si vede lampeggiare): niente mazzate a catena
   if (p.av) { const imm = (p.immune || 0) > G.time && p.ko <= 0; p.av.root.visible = !imm || Math.floor(G.time * 10) % 2 === 0; }
   if (p.giant > 0) { p.giant -= dt; const k = p.giant > 0 ? Math.min(2.2, p.av.root.scale.x / p.baseScale + dt * 4) : 1; p.av.root.scale.setScalar(p.baseScale * Math.max(1, k)); if (p.giant <= 0) p.av.root.scale.setScalar(p.baseScale); }
@@ -429,7 +441,7 @@ function updatePlayer(p, dt) {
   p.idleT = moveIn ? 0 : (p.idleT || 0) + dt;
   p.btnWas = inp.btn; inp.press = false;
   // terreno, alberi, bordi
-  if (!p.fly) p.pos.y = heightAt(p.pos.x, p.pos.z);
+  if (!p.fly) p.pos.y = groundUnder(p);
   for (const tr of trunksNear(p.pos.x, p.pos.z)) { const dx = p.pos.x - tr.x, dz = p.pos.z - tr.z, d = Math.hypot(dx, dz), r = tr.r + 0.35; if (d < r && d > 1e-4) { p.pos.x = tr.x + dx / d * r; p.pos.z = tr.z + dz / d * r; } }
   p.pos.x = clamp(p.pos.x, X0 + 4, X0 + W - 4); p.pos.z = clamp(p.pos.z, Z0 + 4, Z0 + D - 4);
   if (heightAt(p.pos.x, p.pos.z) < WATER - 1.5 && !p.fly) { // troppo profondo: torna indietro
@@ -439,7 +451,13 @@ function updatePlayer(p, dt) {
   if (!p.item) for (const bx of boxes) if (!bx.gone && Math.hypot(p.pos.x - bx.x, p.pos.z - bx.z) < 1.3) { bx.gone = 8; bx.m.visible = false; p.item = randomItem(p); FX.sound('item'); FX.sparkle(bx.m.position.clone(), new THREE.Color(1.6, 1.2, 0.3)); if (p.kind !== 'bot') tip(`${p.name} ha preso: ${ITEMS[p.item].icon} ${ITEMS[p.item].name}`); }
   // mine
   for (const mn of G.mines) if (mn.armed && mn.owner !== p && !mn.done && Math.hypot(p.pos.x - mn.x, p.pos.z - mn.z) < 1.2) { mn.done = true; scene.remove(mn.m); boom(new THREE.Vector3(mn.x, heightAt(mn.x, mn.z), mn.z), 4.5, mn.owner); }
-  p.av.root.position.copy(p.pos); p.av.root.rotation.y = p.yaw;
+  p.av.root.position.copy(p.pos); p.av.root.rotation.set(0, p.yaw, 0);
+  if (p.tumble) { // capriola attorno al centro del corpo
+    _tq.setFromAxisAngle(p.tumble.axis, p.tumble.ang); p.av.root.quaternion.premultiply(_tq);
+    _tc.set(0, 1.0 * p.av.root.scale.y, 0); _tc2.copy(_tc).applyQuaternion(_tq); p.av.root.position.add(_tc).sub(_tc2);
+  }
+  if (p.squash > 0) { const k = Math.sin(p.squash * Math.PI) * 0.22 * p.squash; p.av.root.scale.set(p.baseScale * (1 + k * 0.6), p.baseScale * (1 - k), p.baseScale * (1 + k * 0.6)); }
+  else if (!(p.giant > 0) && p.av.root.scale.y !== p.av.root.scale.x) p.av.root.scale.setScalar(p.baseScale);
   if (p.ice) p.ice.position.copy(p.pos).y += 0.9;
   sendState(p);
 }
@@ -455,6 +473,20 @@ function autoAim(p) {
 }
 // Swing vero (animazione Mixamo "Golf Drive" adattata): mentre carichi il personaggio va indietro col bastone
 // quanto la potenza; quando tiri la palla parte nell'istante dell'impatto.
+// la mano sinistra impugna il bastone sopra la destra (l'animazione da sola la lasciava staccata)
+const _g1 = new THREE.Vector3(), _g2 = new THREE.Vector3(), _g3 = new THREE.Vector3(), _pole = new THREE.Vector3();
+const _sq = new THREE.Quaternion();
+function leftGrip(p) {
+  if (!p.larm) p.larm = makeFreeArm(p.av);
+  // busto un po' meno piegato: con la testa grande la postura dell'animazione sembrava ingobbita
+  for (const [b, q0] of p.spRest) { _sq.copy(b.quaternion); b.quaternion.slerp(q0, 0.3); }
+  p.av.root.updateMatrixWorld(true);
+  p.club.localToWorld(_g1.set(0, 0.11, 0)); p.club.localToWorld(_g2.set(0, -0.93, 0));
+  const up = _g1.sub(_g2).normalize();
+  p.av.bones.hand_r.getWorldPosition(_g3).addScaledVector(up, 0.085 * p.av.root.scale.x / 1.11);
+  _pole.set(Math.cos(p.yaw), -1.2, -Math.sin(p.yaw)).normalize();
+  p.larm.apply(_g3, _pole, 1);
+}
 const SWING = { clip: 'Golf_Drive_B', address: 0.2, top: 0.95, impact: 1.17, speed: 1.7 };
 function golfPose(p) {
   if (p.anim !== 'golf' || !p.golfAct) { p.golfAct = p.av.play(SWING.clip, { once: true, fade: 0.2 }); p.anim = 'golf'; }
@@ -521,12 +553,39 @@ function updateBall(p, dt) {
 }
 
 // ---------- mazzate, oggetti ----------
+const _tq = new THREE.Quaternion(), _tc = new THREE.Vector3(), _tc2 = new THREE.Vector3();
+// terreno sotto i piedi: il più alto tra centro e quattro punti attorno (in salita i piedi non affondano)
+function groundUnder(p) {
+  const r = 0.2 * (p.av ? p.av.root.scale.x / (p.baseScale || 1) : 1) * 1.1; let h = heightAt(p.pos.x, p.pos.z);
+  h = Math.max(h, heightAt(p.pos.x + r, p.pos.z), heightAt(p.pos.x - r, p.pos.z), heightAt(p.pos.x, p.pos.z + r), heightAt(p.pos.x, p.pos.z - r));
+  return h - 0.02;
+}
+// mazzata da cartone: capriola in aria, botta a terra con schiacciamento, stelline, ci si rialza
+function startTumble(p, dir) {
+  const flight = Math.max(0.4, 2 * p.fly.v.y / 20), turns = flight > 0.9 ? 2 : 1;
+  p.tumble = { axis: new THREE.Vector3(dir.z, 0, -dir.x).normalize(), ang: 0, rate: turns * 2 * Math.PI / flight };
+  p.koLying = false; p.koGetUp = null;
+  if (!p.stars) {
+    const g = new THREE.Group(), sh = new THREE.Shape();
+    for (let i = 0; i < 10; i++) { const a = i / 10 * Math.PI * 2 - Math.PI / 2, r = i % 2 ? 0.05 : 0.12; i ? sh.lineTo(Math.cos(a) * r, Math.sin(a) * r) : sh.moveTo(Math.cos(a) * r, Math.sin(a) * r); }
+    const geo = new THREE.ExtrudeGeometry(sh, { depth: 0.04, bevelEnabled: true, bevelSize: 0.015, bevelThickness: 0.015, bevelSegments: 1 }); geo.center();
+    const mat = new THREE.MeshStandardMaterial({ color: 0xffd23a, emissive: 0xffb000, emissiveIntensity: 0.6, roughness: 0.4 });
+    for (let i = 0; i < 4; i++) { const m = new THREE.Mesh(geo, mat), a = i / 4 * Math.PI * 2; m.position.set(Math.cos(a) * 0.42, Math.sin(a * 2) * 0.06, Math.sin(a) * 0.42); m.rotation.y = -a; g.add(m); }
+    g.visible = false; scene.add(g); p.stars = g;
+  }
+}
+function landKO(p) {
+  FX.puff(p.pos.clone(), undefined, 10, 1.0); FX.sound('whack', 0.5); p.squash = 1;
+  // giù a terra (supino), poi si rialza con l'animazione apposta, nel tempo che resta
+  p.koLying = true; const a = p.av.play('Death01', { once: true, fade: 0.08 }); if (a) a.time = a.getClip().duration * 0.75;
+  p.koGetUp = { t: Math.max(0.9, Math.min(1.6, p.ko - 0.6)) };
+}
 function knock(p, from, force, ko = 2.4) {
   if (p.ko > 0 || p.giant > 0 || (p.immune || 0) > G.time) return false;
   if (DEBUG) console.log('knock', p.name, new Error().stack.split('\n')[2]);
   const d = p.pos.clone().sub(from); d.y = 0; const l = d.length() || 1; d.multiplyScalar(1 / l);
-  p.fly = { v: new THREE.Vector3(d.x * force, 5 + force * 0.5, d.z * force) }; p.ko = ko; p.state = 'ko';
-  p.av.play(Math.random() < 0.5 ? 'Death_A' : 'Death_B', { once: true, fade: 0.1 }); p.anim = 'ko';
+  p.fly = { v: new THREE.Vector3(d.x * force, 5 + force * 0.5, d.z * force) }; p.ko = Math.max(ko, 2.2); p.state = 'ko';
+  startTumble(p, d); p.av.play('Hit_Knockback', { once: true, fade: 0.05 }); p.anim = 'ko'; p.av.mood('ko', p.ko);
   FX.sparkle(p.pos.clone().setY(p.pos.y + 1.4), new THREE.Color(2, 2, 0.6), 10);
   return true;
 }
@@ -613,8 +672,8 @@ function useItem(p) {
 }
 function slip(q) {
   FX.sound('whack'); FX.puff(q.pos.clone(), new THREE.Color(1, 0.95, 0.4), 8, 0.6);
-  q.fly = { v: new THREE.Vector3(Math.sin(q.yaw) * 3, 6, Math.cos(q.yaw) * 3) }; q.ko = 1.6; q.state = 'ko'; q.spin = 2.4;
-  q.av.play('Death01', { once: true, fade: 0.1 }); q.anim = 'ko';
+  q.fly = { v: new THREE.Vector3(Math.sin(q.yaw) * 3, 6, Math.cos(q.yaw) * 3) }; q.ko = 2.0; q.state = 'ko';
+  startTumble(q, new THREE.Vector3(Math.sin(q.yaw), 0, Math.cos(q.yaw))); q.av.play('Hit_Knockback', { once: true, fade: 0.05 }); q.anim = 'ko'; q.av.mood('ko', q.ko);
 }
 function makeBanana() {
   const g = new THREE.Group(), y = new THREE.MeshStandardMaterial({ color: 0xffd23a, roughness: 0.5 }), br = new THREE.MeshStandardMaterial({ color: 0x6b4a1e, roughness: 0.8 });
@@ -796,7 +855,7 @@ function frame(now) {
   W_.update(G.time);
   for (const bx of boxes) { bx.m.rotation.y += dt * 1.2; bx.m.position.y = heightAt(bx.x, bx.z) + 1.1 + Math.sin(G.time * 2 + bx.x) * 0.15; if (bx.gone > 0) { bx.gone -= dt; if (bx.gone <= 0) { bx.gone = 0; bx.m.visible = true; } } }
   for (let sub = 0; sub < SPEED; sub++) simStep(dt);
-  for (const p of G.players) if (p.av) p.av.update(dt * SPEED);
+  for (const p of G.players) if (p.av) { p.av.update(dt * SPEED); if (p.anim === 'golf' && p.club) leftGrip(p); }
   FX.updateFx(dt, camera);
   updateCamera(dt);
   updateTags();
@@ -862,7 +921,7 @@ if (!REC) requestAnimationFrame(frame); else window.__adv = (n = 1, dt = 1 / 30)
   { const pre = [makeRocket(0xff3355), makeBanana()]; pre.forEach((o, k) => { o.position.set(k * 3, -300, 0); scene.add(o); }); setTimeout(() => pre.forEach(o => scene.remove(o)), 4000); }
   { const far = new THREE.Vector3(0, -300, 0); FX.explosion(far, 5); FX.splash(far); FX.confetti(far); FX.beam(far, far.clone().add(new THREE.Vector3(1, 0, 0))); FX.lightning(far); }
   $('#load').classList.add('hide'); $('#lobby').classList.remove('hide'); G.phase = 'lobby';
-  if (DEBUG) { window.__G = G; window.__cam = camera; window.__sim = simulate; window.__setCam = (a) => { camPos.set(a[0], a[1], a[2]); camLook.set(a[3], a[4], a[5]); }; window.__HOLES = HOLES; window.__use = (i, it) => { const p = G.players[i]; p.item = it; useItem(p); }; window.__sunk = i => playerSunk(G.players[i]); window.__boom = (x, z) => boom(new THREE.Vector3(x, heightAt(x, z), z), 5, null); }
+  if (DEBUG) { window.__renderer = renderer; window.__scene = scene; window.__G = G; window.__cam = camera; window.__sim = simulate; window.__setCam = (a) => { camPos.set(a[0], a[1], a[2]); camLook.set(a[3], a[4], a[5]); }; window.__HOLES = HOLES; window.__use = (i, it) => { const p = G.players[i]; p.item = it; useItem(p); }; window.__sunk = i => playerSunk(G.players[i]); window.__boom = (x, z) => boom(new THREE.Vector3(x, heightAt(x, z), z), 5, null); }
   if (Q.has('cam')) { $('#lobby').classList.add('hide'); const c = Q.get('cam').split(',').map(Number); G.phase = 'still'; camPos.set(c[0], c[1], c[2]); camLook.set(c[3], c[4], c[5]); updateCamera = () => { camera.position.copy(camPos); camera.lookAt(camLook); sky.position.copy(camera.position); placeSun(camLook, 60); }; }
   if (Q.has('auto')) {
     const n = +(Q.get('bots') || 3);

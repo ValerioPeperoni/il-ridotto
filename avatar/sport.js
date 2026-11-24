@@ -145,7 +145,11 @@ function faceCanvas(look, mode = 'open') {
   for (const s of [-1, 1]) {
     const [x, y] = P(0.5 + s * 0.056, 0.48);
     g.save(); g.translate(x, y); g.scale(1.28, 1.28); g.translate(-x, -y);
-    if (mode === 'open') {
+    if (mode === 'ko') { // occhi a spirale: stordito
+      g.strokeStyle = '#1b1420'; g.lineWidth = 5; g.lineCap = 'round'; g.beginPath();
+      for (let k = 0; k <= 60; k++) { const a = k / 60 * Math.PI * 5 * s, r = 2 + k / 60 * 24; k ? g.lineTo(x + Math.cos(a) * r, y + Math.sin(a) * r * 1.2) : g.moveTo(x + Math.cos(a) * r, y + Math.sin(a) * r * 1.2); }
+      g.stroke();
+    } else if (mode === 'open') {
       g.fillStyle = '#1b1420'; g.beginPath(); g.ellipse(x, y, 25, 37, 0, 0, Math.PI * 2); g.fill();
       g.fillStyle = '#4b3b63'; g.beginPath(); g.ellipse(x, y + 11, 18, 19, 0, 0, Math.PI * 2); g.fill();
       g.fillStyle = '#fff'; g.beginPath(); g.ellipse(x - 7 * s, y - 14, 9, 11.5, 0, 0, Math.PI * 2); g.fill();
@@ -157,7 +161,8 @@ function faceCanvas(look, mode = 'open') {
   }
   // bocca: sorriso morbido
   const [mx, my] = P(0.5, 0.34); g.strokeStyle = dark ? '#3a1a1a' : '#8a3a3a'; g.lineWidth = 7; g.lineCap = 'round';
-  if (mode === 'happy') { g.fillStyle = '#7a2a2a'; g.beginPath(); g.arc(mx, my - 6, 24, 0.02 * Math.PI, 0.98 * Math.PI); g.closePath(); g.fill(); g.fillStyle = '#ff8a8a'; g.beginPath(); g.ellipse(mx, my + 10, 11, 6, 0, 0, Math.PI * 2); g.fill(); }
+  if (mode === 'ko') { g.fillStyle = '#7a2a2a'; g.beginPath(); g.ellipse(mx, my - 4, 12, 15, 0, 0, Math.PI * 2); g.fill(); }
+  else if (mode === 'happy') { g.fillStyle = '#7a2a2a'; g.beginPath(); g.arc(mx, my - 6, 24, 0.02 * Math.PI, 0.98 * Math.PI); g.closePath(); g.fill(); g.fillStyle = '#ff8a8a'; g.beginPath(); g.ellipse(mx, my + 10, 11, 6, 0, 0, Math.PI * 2); g.fill(); }
   else { g.beginPath(); g.arc(mx, my - 14, 22, 0.22 * Math.PI, 0.78 * Math.PI); g.stroke(); }
   return c;
 }
@@ -171,7 +176,7 @@ function buildStylized(rig, bones, look, opts) {
   const B = look.body === 'F' ? 'F' : 'M';
   add(B + 'body', D.body, mat); add(B + 'shoes', D.shoes, mat); add(B + 'hR', D.handR, mat); add(B + 'hL', D.handL, mat);
   // testa con la faccia: tre tele (aperti, chiusi, felice) per sbattere le palpebre ed esultare
-  const faces = { open: new THREE.CanvasTexture(faceCanvas(look, 'open')), closed: new THREE.CanvasTexture(faceCanvas(look, 'closed')), happy: new THREE.CanvasTexture(faceCanvas(look, 'happy')) };
+  const faces = { open: new THREE.CanvasTexture(faceCanvas(look, 'open')), closed: new THREE.CanvasTexture(faceCanvas(look, 'closed')), happy: new THREE.CanvasTexture(faceCanvas(look, 'happy')), ko: new THREE.CanvasTexture(faceCanvas(look, 'ko')) };
   for (const t of Object.values(faces)) { t.colorSpace = THREE.SRGBColorSpace; t.anisotropy = 4; }
   const hm = smMaterial(look, { map: faces.open, rim: 0.25 }); hm.roughness = 0.55;
   add(B + 'head', D.head, hm);

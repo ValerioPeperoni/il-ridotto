@@ -141,6 +141,6 @@ export function makeRocket(color = 0xe8243c) {
   const core = new THREE.Mesh(flameG, new THREE.MeshBasicMaterial({ color: new THREE.Color(2.5, 2.4, 1.6), transparent: true, opacity: 0.9, blending: THREE.AdditiveBlending, depthWrite: false, toneMapped: false })); core.scale.set(0.5, 0.5, 0.7); core.position.z = -0.25;
   g.add(flame, core); g.userData.flame = flame; g.userData.core = core;
   g.traverse(o => { if (o.isMesh && o !== flame && o !== core) o.castShadow = true; });
-  g.scale.setScalar(1.25);
+  g.scale.setScalar(1.6);
   return g;
 }

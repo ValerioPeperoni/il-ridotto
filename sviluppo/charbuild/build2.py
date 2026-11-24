@@ -39,7 +39,7 @@ def skin_body(female=False):
     sm = ob.modifiers.new('skin', 'SKIN'); sm.branch_smoothing = 0.6; sm.use_smooth_shade = True
     for i, r in enumerate(radii):
         sv = me.skin_vertices[0].data[i]; sv.radius = r; sv.use_root = (i == 0)
-    ss = ob.modifiers.new('sub', 'SUBSURF'); ss.levels = 3; ss.render_levels = 3
+    ss = ob.modifiers.new('sub', 'SUBSURF'); ss.levels = 2; ss.render_levels = 2
     dg = bpy.context.evaluated_depsgraph_get(); e = ob.evaluated_get(dg); em = e.to_mesh()
     bm = bmesh.new(); bm.from_mesh(em); bmesh.ops.triangulate(bm, faces=bm.faces)
     v = np.array([x.co[:] for x in bm.verts]); f = np.array([[x.index for x in fa.verts] for fa in bm.faces])
