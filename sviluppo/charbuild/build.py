@@ -109,7 +109,9 @@ def hair_parts(style):
         return np.maximum(d, -face) if False else np.maximum(d, np.minimum(-(p[..., 1] - (c[1] + y0)), face * -1) * -1 if False else d)
     def facecut(p, y0, zf=0.05):
         # tiene solo dove (y > y0) oppure (z < zf): niente capelli su occhi e guance
-        return np.minimum(-(p[..., 1] - (c[1] + y0)), (p[..., 2] - (c[2] + zf)))
+        # frangia con riga di lato: più alta da una parte, curva sulla fronte
+        yy = c[1] + y0 + 0.22 * (p[..., 0] - c[0]) - 0.9 * (p[..., 0] - c[0]) ** 2
+        return np.minimum(-(p[..., 1] - yy), (p[..., 2] - (c[2] + zf)))
     if style == 'short':
         f = lambda p: np.maximum(cap(p), facecut(p, 0.035, -0.02))
         L.append(Part('hair', 'hair', 'head', lambda p: np.maximum(f(p), -(p[..., 1] - (c[1] - 0.07))), 0.0, True))

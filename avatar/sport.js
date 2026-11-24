@@ -117,7 +117,7 @@ function smMaterial(look, opts = {}) {
           // corpo: tagli dei vestiti decisi sulla posa di riposo (a T), uguali su tutte le parti -> linee pulite e continue
           vec3 q = vRest; float ax = abs(q.x); w1 = vec3(0.0); w2 = vec2(0.0);
           if (q.y > 1.2 && ax > 0.235) { w1.x = 1.0 - aas(0.322, ax); w2.y = aas(0.322, ax) * (1.0 - aas(0.334, ax)); }
-          else if (q.y > 1.38) { float r = length(vec2(q.x, q.z + 0.03)) + 0.6 * (1.48 - q.y); w1.x = aas(0.094, r); w2.y = aas(0.082, r) * (1.0 - aas(0.094, r)); }
+          else if (q.y > 1.38) { float r = length(vec2(q.x, q.z + 0.03)) + 0.6 * (1.48 - q.y); w1.x = aas(0.104, r); w2.y = aas(0.092, r) * (1.0 - aas(0.104, r)); }
           else { float y = q.y; w1.x = aas(1.0361, y); w2.y = aas(0.712, y) * (1.0 - aas(0.731, y));
                  w1.y = aas(0.731, y) * (1.0 - aas(1.0361, y)); }
         }
